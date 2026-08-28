@@ -1,0 +1,112 @@
+/**
+ * The state of a melee combo: which step comes next, and whether the player
+ * pressed in time to keep the chain alive.
+ *
+ * Phaser-free on purpose, like CombatSystem — the only clock it knows about is
+ * the `now` its owner passes in.
+ */
+export interface ComboStep {
+  /** Damage as a multiple of the character's attack stat. */
+  damageMultiplier: number;
+  /** Frost stacks this step leaves on whatever it hits. */
+  frost: number;
+  /** How far in front of the character the hit lands, in px. */
+  reach: number;
+  /** Radius of the hit around that point, in px. */
+  radius: number;
+  /** Knockback applied to the target, in px. */
+  knockback: number;
+}
+
+export interface ComboHit {
+  /** 0-based index into the step list. */
+  index: number;
+  step: ComboStep;
+  /** True when this hit closed the chain — the next press restarts at 0. */
+  final: boolean;
+}
+
+export class ComboChain {
+  /** Step the next press will play. */
+  private next = 0;
+  /** After this moment the chain has lapsed and the next press restarts it. */
+  private windowEndsAt = 0;
+
+  constructor(
+    private readonly steps: readonly ComboStep[],
+    /** Grace period after a swing ends in which the next press still chains. */
+    private readonly windowMs: number,
+  ) {
+    if (steps.length === 0) throw new Error('ComboChain needs at least one step');
+  }
+
+  get length(): number {
+    return this.steps.length;
+  }
+
+  /** Index the next press would play — for the HUD's combo pips. */
+  get pending(): number {
+    return this.next;
+  }
+
+  /**
+   * Advances the chain. Never refuses — deciding whether the character is free
+   * to swing at all is the caller's job, because it is the one that knows an
+   * animation is still playing. Two independent "too soon" gates is one too
+   * many: whichever is stricter silently eats presses the other would allow.
+   *
+   * `swingMsFor` is asked how long the chosen step runs, so the window can stay
+   * open until `windowMs` after the swing ends. It is a callback rather than a
+   * number because which step plays is decided in here.
+   */
+  press(now: number, swingMsFor: (index: number) => number): ComboHit {
+    // the window lapsed while we were idle, so this press starts a new chain
+    const index = now < this.windowEndsAt ? this.next : 0;
+    const step = this.steps[index];
+
+    const final = index >= this.steps.length - 1;
+    this.next = final ? 0 : index + 1;
+    // a finisher ends the chain outright, so the next press starts from the top
+    this.windowEndsAt = final ? 0 : now + swingMsFor(index) + this.windowMs;
+
+    return { index, step, final };
+  }
+
+  /** Drops the chain — used when Như Yên is staggered, dashes or casts. */
+  reset(): void {
+    this.next = 0;
+    this.windowEndsAt = 0;
+  }
+
+  /**
+   * Clears a lapsed chain so `pending` stops pointing mid-combo.
+   * Returns true on the frame the chain actually lapsed, so the HUD can refresh.
+   */
+  update(now: number): boolean {
+    if (this.next === 0 || now < this.windowEndsAt) return false;
+    this.next = 0;
+    this.windowEndsAt = 0;
+    return true;
+  }
+}
+
+/**
+ * Hàn Băng Tam Thức — Như Yên's basic chain. Damage is back-loaded so landing
+ * the third hit matters, and the finisher carries two Frost stacks, which is
+ * exactly enough to freeze a target the first two hits already marked.
+ *
+ * `reach` and `radius` are set against how far the qi crescent is actually
+ * *drawn*. At the impact frame the arc reaches roughly 111px, 122px and 130px
+ * past her feet (measured post-scale by `npm run frames:nhuyen -- --report`), so
+ * each step covers out to about that far and the swing connects with what the
+ * art visibly touches. Inner edges stay near her body — `reach - radius` is a
+ * few px — so a target she is standing on top of is still hit.
+ */
+export const HAN_BANG_TAM_THUC: readonly ComboStep[] = [
+  { damageMultiplier: 0.9, frost: 1, reach: 58, radius: 52, knockback: 0 },
+  { damageMultiplier: 1.1, frost: 1, reach: 72, radius: 56, knockback: 4 },
+  { damageMultiplier: 1.8, frost: 2, reach: 90, radius: 64, knockback: 14 },
+];
+
+/** Grace period for chaining, in ms. Long enough to feel forgiving. */
+export const COMBO_WINDOW = 620;

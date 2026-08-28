@@ -1,0 +1,38 @@
+{
+  "name": "thien-menh-nghich-do",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "build:lamuyen": "node tools/build-lamuyen-atlas.mjs",
+    "inspect:lamuyen": "node tools/extract-lamuyen.mjs --report",
+    "dump:lamuyen": "node tools/extract-lamuyen.mjs --dump .tmp/lamuyen-frames",
+    "build:nhuyen": "node tools/build-nhuyen-atlas.mjs",
+    "inspect:nhuyen": "node tools/extract-nhuyen.mjs --report",
+    "measure:nhuyen": "node tools/extract-nhuyen.mjs --measure",
+    "dump:nhuyen": "node tools/extract-nhuyen.mjs --dump .tmp/nhuyen-frames",
+    "gen:placeholder": "node tools/generate-lin-yuan-sprites.mjs",
+    "measure:stride": "node tools/measure-stride.mjs walk_side run_side walk_down walk_up",
+    "analyse:cycle": "node tools/analyse-cycle.mjs walk_side run_side walk_down walk_up",
+    "build:boss": "node tools/build-boss-atlas.mjs",
+    "inspect:boss": "node tools/extract-boss.mjs --report",
+    "dump:boss": "node tools/extract-boss.mjs --dump .tmp/boss-frames",
+    "check:ai": "node tools/check-enemy-ai.mjs"
+  },
+  "dependencies": {
+    "phaser": "^3.87.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
