@@ -49,7 +49,7 @@ export const SHEETS = {
     note: 'r0 walk down, r1 walk up, r2 walk right, r3 RUN right',
   },
   attack: {
-    file: 'nhuyen-attack (1).png',
+    file: 'nhuyen_attack.png',
     cols: [6, 6, 6],
     scale: 1.65,
     note: 'r0 side slash c0-c5, r1 c0-c1 follow-through / c2-c4 overhead chop / c5 FX, r2 front poses + c5 FX shards',
