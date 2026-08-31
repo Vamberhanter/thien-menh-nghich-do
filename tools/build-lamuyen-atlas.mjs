@@ -16,6 +16,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Surface } from './pixel.mjs';
 import { encodePNG } from './png.mjs';
+import { packFrames } from './atlas-pack.mjs';
 import { analyseSheet, cutFrame } from './extract-lamuyen.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -116,17 +117,21 @@ const textures = [];
 
 for (const spec of SHEETS) {
   const animations = ANIMATIONS.filter((a) => spec.match.test(a.name));
-  const cols = Math.max(...animations.map((a) => a.frames.length));
-  const surface = new Surface(cols * FRAME.w, animations.length * FRAME.h);
-  const frames = [];
+  const entries = [];
 
-  animations.forEach((animation, row) => {
+  animations.forEach((animation) => {
     animation.frames.forEach((id, col) => {
-      const cut = cutFrame(sheet, lookup(id), FRAME, ANCHOR, { mirror: animation.mirror });
-      surface.blit(cut, col * FRAME.w, row * FRAME.h);
-      frames.push(entry(`${animation.name}_${col}`, col * FRAME.w, row * FRAME.h, FRAME));
+      entries.push({
+        name: `${animation.name}_${col}`,
+        surface: cutFrame(sheet, lookup(id), FRAME, ANCHOR, { mirror: animation.mirror }),
+      });
     });
   });
+
+  // No per-frame anchor here: LinYuan keeps a plain centred origin and reads
+  // the standing point from STANDING_POINT, which is a position inside the
+  // untrimmed box — and trimming leaves that box's size reported unchanged.
+  const { surface, frames } = packFrames(entries);
 
   writeFileSync(join(OUT_DIR, spec.file), encodePNG(surface));
   textures.push({
@@ -148,15 +153,13 @@ const FX = { w: 96, h: 96 };
   const rows = EFFECTS.map((effect) =>
     effect.frames.map((id) => beamCrop(lookup(id))),
   );
-  const cols = Math.max(...rows.map((r) => r.length));
-  const surface = new Surface(cols * FX.w, rows.length * FX.h);
-  const frames = [];
+  const entries = [];
   rows.forEach((cuts, row) => {
     cuts.forEach((cut, col) => {
-      surface.blit(cut, col * FX.w, row * FX.h);
-      frames.push(entry(`${EFFECTS[row].name}_${col}`, col * FX.w, row * FX.h, FX));
+      entries.push({ name: `${EFFECTS[row].name}_${col}`, surface: cut });
     });
   });
+  const { surface, frames } = packFrames(entries);
   writeFileSync(join(OUT_DIR, 'lamuyen-fx.png'), encodePNG(surface));
   textures.push({
     image: 'lamuyen-fx.png',
@@ -184,17 +187,6 @@ writeFileSync(join(OUT_DIR, 'lamuyen.json'), JSON.stringify(atlas, null, 2));
 console.log(`lamuyen.json         ${textures.length} textures`);
 
 /* -------------------------------------------------------------- helpers */
-
-function entry(filename, x, y, size) {
-  return {
-    filename,
-    rotated: false,
-    trimmed: false,
-    sourceSize: { w: size.w, h: size.h },
-    spriteSourceSize: { x: 0, y: 0, w: size.w, h: size.h },
-    frame: { x, y, w: size.w, h: size.h },
-  };
-}
 
 /**
  * Crops the qi effect that reaches past the character: everything to the right

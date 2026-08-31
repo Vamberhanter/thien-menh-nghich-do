@@ -24,6 +24,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Surface } from './pixel.mjs';
 import { encodePNG } from './png.mjs';
+import { packFrames } from './atlas-pack.mjs';
 import { SHEET_DIR, SHEETS, analyseSheet, cutFrame, frameExtent } from './extract-boss.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -138,31 +139,26 @@ for (const spec of FILES) {
   if (clips.length === 0) throw new Error(`${spec.file} matched no clips`);
 
   const { frame: FRAME, at: AT } = boxFor(clips);
-  const cols = Math.max(...clips.map((c) => c.frames.length));
-  const surface = new Surface(cols * FRAME.w, clips.length * FRAME.h);
-  const frames = [];
+  const entries = [];
 
-  clips.forEach((clip, row) => {
+  clips.forEach((clip) => {
     clip.frames.forEach((id, col) => {
       const sheet = sheets[clip.sheet];
-      const cut = cutFrame(sheet, lookup(clip, id), FRAME, AT, {
-        anchor: clip.anchor ?? 'feet',
-        scale: sheet.spec.scale,
-      });
-      surface.blit(cut, col * FRAME.w, row * FRAME.h);
-      frames.push({
-        filename: `${clip.name}_${col}`,
-        rotated: false,
-        trimmed: false,
-        sourceSize: { w: FRAME.w, h: FRAME.h },
-        spriteSourceSize: { x: 0, y: 0, w: FRAME.w, h: FRAME.h },
-        frame: { x: col * FRAME.w, y: row * FRAME.h, w: FRAME.w, h: FRAME.h },
-        // normalised pivot — Phaser turns this into the sprite's origin
+      entries.push({
+        name: `${clip.name}_${col}`,
+        surface: cutFrame(sheet, lookup(clip, id), FRAME, AT, {
+          anchor: clip.anchor ?? 'feet',
+          scale: sheet.spec.scale,
+        }),
+        // normalised pivot inside the untrimmed box — Phaser turns this into
+        // the sprite's origin, and trimming does not move it
         anchor: { x: AT.x / FRAME.w, y: AT.y / FRAME.h },
       });
     });
     manifest.push({ clip: clip.name, count: clip.frames.length, file: spec.file });
   });
+
+  const { surface, frames } = packFrames(entries);
 
   writeFileSync(assertNotSource(join(OUT_DIR, spec.file)), encodePNG(surface));
   textures.push({
@@ -174,7 +170,7 @@ for (const spec of FILES) {
   });
   console.log(
     `${spec.file.padEnd(20)} ${String(surface.width).padStart(5)}x${String(surface.height).padEnd(5)}` +
-      ` frame ${FRAME.w}x${FRAME.h} anchor ${AT.x},${AT.y}  ${frames.length} frames` +
+      ` box ${FRAME.w}x${FRAME.h} anchor ${AT.x},${AT.y}  ${frames.length} frames trimmed` +
       `  [${clips.map((c) => c.name).join(', ')}]`,
   );
 }
@@ -185,7 +181,7 @@ const atlas = {
     app: 'thien-menh-nghich-do/tools/build-boss-atlas.mjs',
     version: '1.0',
     source: 'boss1/{idle2,walk2,attack2,skill2,hurt & death2}.png',
-    note: 'per-file frame boxes; each frame carries a normalised anchor (feet, or centre/base for effects)',
+    note: 'trimmed + shelf-packed; sourceSize/spriteSourceSize restore the original box, anchor is the feet pivot inside it',
   },
 };
 writeFileSync(assertNotSource(join(OUT_DIR, 'boss1.json')), JSON.stringify(atlas, null, 2));

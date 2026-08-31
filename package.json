@@ -20,7 +20,8 @@
     "build:boss": "node tools/build-boss-atlas.mjs",
     "inspect:boss": "node tools/extract-boss.mjs --report",
     "dump:boss": "node tools/extract-boss.mjs --dump .tmp/boss-frames",
-    "check:ai": "node tools/check-enemy-ai.mjs"
+    "check:ai": "node tools/check-enemy-ai.mjs",
+    "check:atlas": "node tools/check-atlas.mjs public/assets/characters/lamuyen/lamuyen.json && node tools/check-atlas.mjs public/assets/characters/nhuyen/atlas/nhuyen.json && node tools/check-atlas.mjs public/assets/boss/boss1/atlas/boss1.json"
   },
   "dependencies": {
     "phaser": "^3.87.0",
