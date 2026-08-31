@@ -34,6 +34,7 @@ npm run build:boss       # bóc tách 5 sheet Boss 1 -> atlas/
 npm run inspect:boss     # báo cáo segmentation từng hàng
 npm run dump:boss        # xuất strip từng sheet để kiểm tra pose
 npm run check:ai         # 25 check cho hệ AI bằng clock giả (không cần browser)
+npm run check:atlas      # dựng lại từng frame từ metadata, so với bản trước (phải Δ = 0)
 ```
 
 ## Điều khiển
@@ -246,6 +247,61 @@ Atlas: 8 texture, 14 clip, 6.04 Mpx (~24MB VRAM).
 Engine segmentation giờ **dùng chung** cho Như Yên và boss
 (`tools/sheet-frames.mjs`): inventory + luật màu là phần riêng của từng nhân vật
 (`extract-nhuyen.mjs`, `extract-boss.mjs`).
+
+---
+
+# Dung lượng: 41 → 23MB VRAM, dist 22 → 9.4MB
+
+Ba khoản phí riêng biệt, đo trước/sau. **Không đổi một pixel nào** — mọi atlas
+dựng lại vẫn khớp tuyệt đối, kiểm bằng `npm run check:atlas`.
+
+| | Trước | Sau | |
+| --- | --- | --- | --- |
+| File atlas | 10.67 MB | **7.59 MB** | −29% |
+| VRAM (w×h×4) | 41 MB | **23 MB** | −45% |
+| `dist` ship cho người chơi | 22 MB | **9.4 MB** | −57% |
+
+### 1. Encoder PNG ghi filter 0 cho mọi dòng
+
+PNG cho phép mỗi scanline chọn 1 trong 5 bộ lọc, và chính nó quyết định phần
+lớn dung lượng vì deflate nén delta nhỏ tốt hơn pixel thô. Encoder tự viết
+trước đây ghi filter 0 (None) cho tất cả. Chọn bộ lọc rẻ nhất từng dòng
+(heuristic của libpng) + deflate với `Z_FILTERED`: **10.67 → 7.85 MB**, lossless.
+
+### 2. 65% diện tích mỗi atlas là pixel rỗng
+
+Mỗi file là một lưới ô **cùng kích thước với frame lớn nhất trong nhóm**, nên
+frame nhỏ vẫn chiếm ô to. Trả giá hai lần: một lần khi tải, một lần trong VRAM —
+texture tốn `w × h × 4` bất kể vẽ gì trên đó.
+
+Giờ mỗi frame được **cắt sát nội dung rồi xếp lại** (`tools/atlas-pack.mjs`),
+metadata `sourceSize` / `spriteSourceSize` giữ nguyên ô gốc để Phaser đặt lại
+đúng chỗ cũ. Sprite vẫn **báo kích thước chưa cắt** (`Frame.realWidth`), nên
+origin, pivot chân từng frame và mọi thứ suy từ `displayOrigin` không đổi.
+
+Packer thử nhiều bề rộng rồi chọn cái phí ít nhất: luôn nhồi tới 2048px sẽ ra
+những dải dài một tầng (1924×162) mà tầng cuối gần như trống.
+
+### 3. Build vẫn ship sheet gốc
+
+`stripSourceSheets` giữ **danh sách cứng** các sheet cần loại khỏi `dist`, và nó
+mục hai lần: không hề biết 5 sheet boss thêm sau, và vẫn gọi tên một sheet Như
+Yên đã bị đổi tên. Kết quả: **22.8MB art không ai fetch** vẫn nằm trong bản
+build.
+
+Giờ danh sách được **suy ra** từ chính các atlas JSON: ảnh nào không được atlas
+nào tham chiếu thì không thể với tới được, nên bị bỏ. Đổi tên hay thêm nhân vật
+mới cũng không làm nó mục lại.
+
+### Còn có thể làm nữa
+
+* **WebP lossless** cho atlas: thêm ~20–30% nữa, nhưng cần thêm `sharp` vào
+  devDependencies (máy hiện chưa có encoder WebP nào).
+* **Bỏ frame lật được**: boss có `walk_left` vẽ riêng (8 frame) mà lật
+  `walk_right` là ra; Như Yên có `idle_left`/`idle_right`. Đổi lấy việc mất nét
+  vẽ tay riêng cho từng hướng.
+* Packer hiện phí ~8% so với trần lý thuyết (5.53 Mpx). MaxRects sẽ ép sát hơn,
+  nhưng phần lớn miếng ngon đã lấy rồi.
 
 ---
 
