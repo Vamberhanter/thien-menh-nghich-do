@@ -148,15 +148,17 @@ export function TouchPad() {
           </div>
 
           <div className="pad__skills">
-            <button type="button" className="pad__util" onPointerDown={tap('bag')}>
-              Túi
-            </button>
-            <button type="button" className={`pad__util${loot ? ' is-hot' : ''}`} onPointerDown={tap('pick')}>
-              Nhặt
-            </button>
-            <button type="button" className="pad__util" onPointerDown={tap('envArt')}>
-              Cảnh
-            </button>
+            <div className="pad__utilities">
+              <button type="button" className="pad__util" onPointerDown={tap('bag')}>
+                Túi
+              </button>
+              <button type="button" className={`pad__util${loot ? ' is-hot' : ''}`} onPointerDown={tap('pick')}>
+                Nhặt
+              </button>
+              <button type="button" className="pad__util" onPointerDown={tap('envArt')}>
+                Cảnh
+              </button>
+            </div>
 
             <button type="button" className="pad__atk" onPointerDown={tap('attack')}>
               Đánh
