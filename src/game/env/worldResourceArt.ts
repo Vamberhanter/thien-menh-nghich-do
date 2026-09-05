@@ -1,3 +1,5 @@
+import { gameAssetUrl } from '../../net/assets';
+
 export const WorldResourceTexture = {
   PlantBloodBerry: 'resource-plant-blood-berry',
   PlantSpiritHerb: 'resource-plant-spirit-herb',
@@ -17,15 +19,15 @@ export const WorldResourceTexture = {
  * every generated image.
  */
 export const WORLD_RESOURCE_TEXTURES = [
-  { key: WorldResourceTexture.PlantBloodBerry, url: 'assets/items/plant-blood-berry.png' },
-  { key: WorldResourceTexture.PlantSpiritHerb, url: 'assets/items/plant-spirit-herb.png' },
-  { key: WorldResourceTexture.PlantEssenceRoot, url: 'assets/items/plant-essence-root.png' },
-  { key: WorldResourceTexture.PlantEarthFruit, url: 'assets/items/plant-earth-fruit.png' },
-  { key: WorldResourceTexture.ChestCommon, url: 'assets/resources/chest-common.png' },
-  { key: WorldResourceTexture.ChestRare, url: 'assets/resources/chest-rare.png' },
-  { key: WorldResourceTexture.ChestEpic, url: 'assets/resources/chest-epic.png' },
-  { key: WorldResourceTexture.ChestLegendary, url: 'assets/resources/chest-legendary.png' },
-  { key: WorldResourceTexture.ChestMythic, url: 'assets/resources/chest-mythic.png' },
-  { key: WorldResourceTexture.RespawnShrine, url: 'assets/resources/respawn-shrine.png' },
-  { key: WorldResourceTexture.WarpShrine, url: 'assets/resources/warp-shrine.png' },
+  { key: WorldResourceTexture.PlantBloodBerry, url: gameAssetUrl('items/plant-blood-berry.png') },
+  { key: WorldResourceTexture.PlantSpiritHerb, url: gameAssetUrl('items/plant-spirit-herb.png') },
+  { key: WorldResourceTexture.PlantEssenceRoot, url: gameAssetUrl('items/plant-essence-root.png') },
+  { key: WorldResourceTexture.PlantEarthFruit, url: gameAssetUrl('items/plant-earth-fruit.png') },
+  { key: WorldResourceTexture.ChestCommon, url: gameAssetUrl('resources/chest-common.png') },
+  { key: WorldResourceTexture.ChestRare, url: gameAssetUrl('resources/chest-rare.png') },
+  { key: WorldResourceTexture.ChestEpic, url: gameAssetUrl('resources/chest-epic.png') },
+  { key: WorldResourceTexture.ChestLegendary, url: gameAssetUrl('resources/chest-legendary.png') },
+  { key: WorldResourceTexture.ChestMythic, url: gameAssetUrl('resources/chest-mythic.png') },
+  { key: WorldResourceTexture.RespawnShrine, url: gameAssetUrl('resources/respawn-shrine.png') },
+  { key: WorldResourceTexture.WarpShrine, url: gameAssetUrl('resources/warp-shrine.png') },
 ] as const;

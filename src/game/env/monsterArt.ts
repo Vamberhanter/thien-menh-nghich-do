@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { gameAssetUrl } from '../../net/assets';
 import { MobTexture, paint } from './textures';
 
 /**
@@ -31,63 +32,63 @@ export interface MonsterArt {
 export const MONSTER_ART = {
   [MobTexture.Toad]: {
     key: MobTexture.Toad,
-    url: 'assets/monsters/toad.png',
+    url: gameAssetUrl('monsters/toad.png'),
     width: 50,
     height: 45,
     fallback: '#4a7a3c',
   },
   [MobTexture.Crab]: {
     key: MobTexture.Crab,
-    url: 'assets/monsters/crab.png',
+    url: gameAssetUrl('monsters/crab.png'),
     width: 50,
     height: 44,
     fallback: '#3c6a8a',
   },
   [MobTexture.Serpent]: {
     key: MobTexture.Serpent,
-    url: 'assets/monsters/serpent.png',
+    url: gameAssetUrl('monsters/serpent.png'),
     width: 60,
     height: 61,
     fallback: '#5a6a34',
   },
   [MobTexture.Drake]: {
     key: MobTexture.Drake,
-    url: 'assets/monsters/drake.png',
+    url: gameAssetUrl('monsters/drake.png'),
     width: 71,
     height: 62,
     fallback: '#6a7a30',
   },
   [MobTexture.Golem]: {
     key: MobTexture.Golem,
-    url: 'assets/monsters/golem.png',
+    url: gameAssetUrl('monsters/golem.png'),
     width: 64,
     height: 70,
     fallback: '#6a5238',
   },
   [MobTexture.Troll]: {
     key: MobTexture.Troll,
-    url: 'assets/monsters/troll.png',
+    url: gameAssetUrl('monsters/troll.png'),
     width: 78,
     height: 74,
     fallback: '#8a7040',
   },
   [MobTexture.BloodSerpent]: {
     key: MobTexture.BloodSerpent,
-    url: 'assets/monsters/blood-serpent.png',
+    url: gameAssetUrl('monsters/blood-serpent.png'),
     width: 71,
     height: 67,
     fallback: '#a04028',
   },
   [MobTexture.EmberGolem]: {
     key: MobTexture.EmberGolem,
-    url: 'assets/monsters/ember-golem.png',
+    url: gameAssetUrl('monsters/ember-golem.png'),
     width: 64,
     height: 71,
     fallback: '#4a4048',
   },
   [MobTexture.FireDrake]: {
     key: MobTexture.FireDrake,
-    url: 'assets/monsters/fire-drake.png',
+    url: gameAssetUrl('monsters/fire-drake.png'),
     width: 71,
     height: 62,
     fallback: '#a05430',

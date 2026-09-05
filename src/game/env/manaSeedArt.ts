@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { gameAssetUrl } from '../../net/assets';
 import { KitRole, kitKey } from './textures';
 import type { EnvKit } from './kit';
 
@@ -15,7 +16,9 @@ const MS = (role: string) => kitKey('manaseed', role);
  * complete: ground, tree, bushes, rocks, wall and the cave mouth.
  */
 export const MANA_SEED_SOURCE = 'manaseed-summer';
-export const MANA_SEED_SOURCE_URL = 'assets/environment/manaseed/seasonal-sample-summer.png';
+export const MANA_SEED_SOURCE_URL = gameAssetUrl(
+  'environment/manaseed/seasonal-sample-summer.png',
+);
 
 /** The sheet this slice table was measured against. */
 export const MANA_SEED_SHEET = { width: 256, height: 256, tile: 16 } as const;

@@ -1,4 +1,5 @@
 import type { CharacterStats } from '../types';
+import { gameAssetUrl } from '../../net/assets';
 
 export type EquipSlot = 'weapon' | 'armor' | 'accessory' | 'relic';
 
@@ -42,7 +43,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'equip',
     slot: 'weapon',
     bonuses: { attack: 4 },
-    icon: 'assets/weapons/iron-sword.png',
+    icon: gameAssetUrl('weapons/iron-sword.png'),
   },
   'bronze-sword': {
     id: 'bronze-sword',
@@ -50,7 +51,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'equip',
     slot: 'weapon',
     bonuses: { attack: 7 },
-    icon: 'assets/weapons/bronze-sword.png',
+    icon: gameAssetUrl('weapons/bronze-sword.png'),
   },
   'jade-sword': {
     id: 'jade-sword',
@@ -58,7 +59,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'equip',
     slot: 'weapon',
     bonuses: { attack: 9, maxSpiritualPower: 5 },
-    icon: 'assets/weapons/jade-sword.png',
+    icon: gameAssetUrl('weapons/jade-sword.png'),
   },
   'gale-sword': {
     id: 'gale-sword',
@@ -66,7 +67,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'equip',
     slot: 'weapon',
     bonuses: { attack: 11, speed: 12 },
-    icon: 'assets/weapons/gale-sword.png',
+    icon: gameAssetUrl('weapons/gale-sword.png'),
   },
   'frost-sword': {
     id: 'frost-sword',
@@ -74,7 +75,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'equip',
     slot: 'weapon',
     bonuses: { attack: 14, maxSpiritualPower: 6 },
-    icon: 'assets/weapons/frost-sword.png',
+    icon: gameAssetUrl('weapons/frost-sword.png'),
   },
   'thunder-sword': {
     id: 'thunder-sword',
@@ -82,7 +83,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'equip',
     slot: 'weapon',
     bonuses: { attack: 17, speed: 10 },
-    icon: 'assets/weapons/thunder-sword.png',
+    icon: gameAssetUrl('weapons/thunder-sword.png'),
   },
   'venom-sword': {
     id: 'venom-sword',
@@ -90,7 +91,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'equip',
     slot: 'weapon',
     bonuses: { attack: 20, defense: 3 },
-    icon: 'assets/weapons/venom-sword.png',
+    icon: gameAssetUrl('weapons/venom-sword.png'),
   },
   'flame-sword': {
     id: 'flame-sword',
@@ -98,7 +99,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'equip',
     slot: 'weapon',
     bonuses: { attack: 23, maxHp: 20 },
-    icon: 'assets/weapons/flame-sword.png',
+    icon: gameAssetUrl('weapons/flame-sword.png'),
   },
   'blood-sword': {
     id: 'blood-sword',
@@ -106,7 +107,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'equip',
     slot: 'weapon',
     bonuses: { attack: 27, maxHp: 30 },
-    icon: 'assets/weapons/blood-sword.png',
+    icon: gameAssetUrl('weapons/blood-sword.png'),
   },
   'demon-sword': {
     id: 'demon-sword',
@@ -114,7 +115,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'equip',
     slot: 'weapon',
     bonuses: { attack: 32, maxHp: 40, maxSpiritualPower: 10 },
-    icon: 'assets/weapons/demon-sword.png',
+    icon: gameAssetUrl('weapons/demon-sword.png'),
   },
   'outer-robe': {
     id: 'outer-robe',
@@ -150,7 +151,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'consumable',
     cultivationXp: 18,
     sellValue: 15,
-    icon: 'assets/resources/stone-wood.png',
+    icon: gameAssetUrl('resources/stone-wood.png'),
   },
   'water-stone': {
     id: 'water-stone',
@@ -158,7 +159,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'consumable',
     cultivationXp: 28,
     sellValue: 24,
-    icon: 'assets/resources/stone-water.png',
+    icon: gameAssetUrl('resources/stone-water.png'),
   },
   'fire-stone': {
     id: 'fire-stone',
@@ -166,7 +167,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'consumable',
     cultivationXp: 42,
     sellValue: 38,
-    icon: 'assets/resources/stone-fire.png',
+    icon: gameAssetUrl('resources/stone-fire.png'),
   },
   'earth-stone': {
     id: 'earth-stone',
@@ -174,7 +175,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'consumable',
     cultivationXp: 58,
     sellValue: 55,
-    icon: 'assets/resources/stone-earth.png',
+    icon: gameAssetUrl('resources/stone-earth.png'),
   },
   'void-stone': {
     id: 'void-stone',
@@ -182,21 +183,21 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'consumable',
     cultivationXp: 85,
     sellValue: 80,
-    icon: 'assets/resources/stone-void.png',
+    icon: gameAssetUrl('resources/stone-void.png'),
   },
   'spirit-herb': {
     id: 'spirit-herb',
     name: 'Thanh linh thảo',
     kind: 'consumable',
     restoreSp: 16,
-    icon: 'assets/items/spirit-herb.png',
+    icon: gameAssetUrl('items/spirit-herb.png'),
   },
   'blood-berry': {
     id: 'blood-berry',
     name: 'Huyết quả',
     kind: 'consumable',
     restoreHp: 30,
-    icon: 'assets/items/blood-berry.png',
+    icon: gameAssetUrl('items/blood-berry.png'),
   },
   'earth-fruit': {
     id: 'earth-fruit',
@@ -204,14 +205,14 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'consumable',
     restoreHp: 22,
     restoreSp: 8,
-    icon: 'assets/items/earth-fruit.png',
+    icon: gameAssetUrl('items/earth-fruit.png'),
   },
   'essence-root': {
     id: 'essence-root',
     name: 'Hoàng tinh căn',
     kind: 'consumable',
     restoreHp: 65,
-    icon: 'assets/items/essence-root.png',
+    icon: gameAssetUrl('items/essence-root.png'),
   },
 };
 

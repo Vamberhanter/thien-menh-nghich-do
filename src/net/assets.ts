@@ -6,6 +6,14 @@ function storageRoot(): string | null {
   return `${url.replace(/\/$/, '')}/storage/v1/object/public/${BUCKET}`;
 }
 
+/** Local asset in development, public Storage object in production. */
+export function gameAssetUrl(path: string): string {
+  const objectPath = path.replace(/^\/?assets\//, '');
+  const localUrl = `assets/${objectPath}`;
+  const root = storageRoot();
+  return root && !import.meta.env.DEV ? `${root}/${objectPath}` : localUrl;
+}
+
 export type AtlasLoc = {
   url: string;
   path: string;

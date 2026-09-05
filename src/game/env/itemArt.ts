@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { gameAssetUrl } from '../../net/assets';
 import { ITEM_CATALOG } from '../systems/Inventory';
 import { magnify, WorldTexture } from './textures';
 
@@ -10,7 +11,7 @@ import { magnify, WorldTexture } from './textures';
  * the chest is magnified to land near the size of the pile it replaces.
  */
 export const CHEST_SOURCE = 'farm-chest';
-export const CHEST_SOURCE_URL = 'assets/items/chest.png';
+export const CHEST_SOURCE_URL = gameAssetUrl('items/chest.png');
 
 const CHEST_SCALE = 3;
 
