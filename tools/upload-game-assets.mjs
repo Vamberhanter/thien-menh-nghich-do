@@ -13,6 +13,11 @@ const SETS = {
     'public/assets/characters/miku/atlas',
   ],
   boss: ['public/assets/boss/boss1/atlas'],
+  environment: ['public/assets/environment/manaseed'],
+  monsters: ['public/assets/monsters'],
+  items: ['public/assets/items'],
+  weapons: ['public/assets/weapons'],
+  resources: ['public/assets/resources'],
 };
 
 function loadEnv() {
@@ -73,9 +78,11 @@ const dirs = keys.flatMap((key) => {
 
 const env = loadEnv();
 const url = (env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
-const key = env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const key = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_PUBLISHABLE_KEY;
 if (!url || !key) {
-  throw new Error('Missing VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY in .env');
+  throw new Error(
+    'Missing VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in .env',
+  );
 }
 
 const files = dirs.flatMap(collect);
