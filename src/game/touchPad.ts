@@ -52,6 +52,14 @@ export function isPhoneUi(): boolean {
   return window.matchMedia('(hover: none) and (pointer: coarse)').matches;
 }
 
+/** Phone-sized portrait or short landscape viewport, including browser emulation. */
+export function isCompactScreen(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia(
+    '(max-width: 720px), (max-width: 960px) and (max-height: 520px)',
+  ).matches;
+}
+
 export function readTouchPadForced(): boolean | null {
   const value = localStorage.getItem(FORCE_KEY);
   if (value === '1') return true;
@@ -64,5 +72,6 @@ export function writeTouchPadForced(on: boolean): void {
 }
 
 export function prefersTouchUi(): boolean {
+  if (isCompactScreen()) return true;
   return readTouchPadForced() ?? isPhoneUi();
 }
