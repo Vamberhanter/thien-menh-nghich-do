@@ -68,6 +68,18 @@ export async function leaveWorld(): Promise<void> {
   GameBus.emit(GameEvent.NetRoster, { world: '', selfName: '', nearby: [] });
 }
 
+/**
+ * Leaves the multiplayer room (if any) and hands the keyboard back to the
+ * lobby overlay. Works for solo play too — there is no session to tear down,
+ * but NetSession(null) still tells Lobby to reopen.
+ */
+export async function returnToLobby(): Promise<void> {
+  await leaveWorld();
+  inputGated = true;
+  GameBus.emit(GameEvent.NetSession, null);
+  GameBus.emit(GameEvent.NetRoster, { world: '', selfName: '', nearby: [] });
+}
+
 export function flushLeave(): void {
   stopBeat();
   if (!current) return;

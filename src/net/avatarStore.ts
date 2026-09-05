@@ -214,6 +214,38 @@ export async function createAvatar(input: { name: string; character: NetCharacte
   return record;
 }
 
+/** Deletes a hero owned by the signed-in user (remote + local cache). */
+export async function deleteAvatar(id: string): Promise<void> {
+  const user = await currentUser();
+  if (!user) throw new Error('Cần đăng nhập trước');
+  const { error } = await getSupabase().from('avatars').delete().eq('id', id).eq('user_id', user.id);
+  if (error) throw new Error(error.message);
+
+  try {
+    const raw = localStorage.getItem(LOCAL_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { id?: string };
+      if (parsed.id === id) localStorage.removeItem(LOCAL_KEY);
+    }
+  } catch {
+    /* ignore corrupt local cache */
+  }
+  if (localStorage.getItem('tmnd.pid') === id) localStorage.removeItem('tmnd.pid');
+
+  try {
+    const raw = localStorage.getItem('tmnd.gender');
+    if (raw) {
+      const map = JSON.parse(raw) as Record<string, unknown>;
+      if (id in map) {
+        delete map[id];
+        localStorage.setItem('tmnd.gender', JSON.stringify(map));
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 export function pickAvatar(record: AvatarRecord): void {
   localStorage.setItem('tmnd.pid', record.id);
   localStorage.setItem('tmnd.name', record.name);

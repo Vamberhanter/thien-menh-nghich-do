@@ -6,6 +6,7 @@ import {
   itemOf,
   type EquipSlot,
   type InventoryState,
+  type ItemDef,
   emptyInventory,
 } from '../game/systems/Inventory';
 
@@ -15,6 +16,15 @@ const SLOT_LABEL: Record<EquipSlot, string> = {
   accessory: 'Phụ kiện',
   relic: 'Pháp bảo',
 };
+
+/**
+ * Sprite for the items the art pack covers, and the item's initial for the rest,
+ * so a mixed bag still reads as an even grid.
+ */
+function ItemIcon({ item }: { item: ItemDef }) {
+  if (item.icon) return <img className="bag__icon" src={item.icon} alt="" draggable={false} />;
+  return <span className="bag__icon bag__icon--mono">{[...item.name][0]}</span>;
+}
 
 export function InventoryUI() {
   const [open, setOpen] = useState(false);
@@ -37,7 +47,10 @@ export function InventoryUI() {
 
   return (
     <div className="bag">
-      <div className="bag__title">Túi đồ · I đóng</div>
+      <div className="bag__title">
+        <span>Túi đồ · I đóng</span>
+        <strong>{inv.coins ?? 0} tiền đồng</strong>
+      </div>
       <div className="bag__equip">
         {EQUIP_SLOTS.map((slot) => {
           const item = itemOf(inv.equipped[slot]);
@@ -49,6 +62,7 @@ export function InventoryUI() {
               onClick={() => GameBus.emit(GameEvent.InventoryCommand, { action: 'unequip', slot })}
             >
               <em>{SLOT_LABEL[slot]}</em>
+              {item ? <ItemIcon item={item} /> : null}
               <span>{item?.name ?? '—'}</span>
             </button>
           );
@@ -62,6 +76,13 @@ export function InventoryUI() {
               key={i}
               type="button"
               className="bag__slot"
+              title={item?.name ?? ''}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                if (item?.sellValue) {
+                  GameBus.emit(GameEvent.InventoryCommand, { action: 'sell', index: i });
+                }
+              }}
               onClick={() => {
                 if (!item) return;
                 if (item.kind === 'consumable') {
@@ -71,12 +92,20 @@ export function InventoryUI() {
                 GameBus.emit(GameEvent.InventoryCommand, { action: 'equip', index: i });
               }}
             >
-              {item?.name ?? ''}
+              {item ? (
+                <>
+                  <ItemIcon item={item} />
+                  <span>{item.name}</span>
+                  {item.sellValue ? <small>Bán {item.sellValue}</small> : null}
+                </>
+              ) : null}
             </button>
           );
         })}
       </div>
-      <div className="bag__hint">Bấm ô túi để mặc / dùng · bấm ô trang bị để tháo</div>
+      <div className="bag__hint">
+        Chuột trái: mặc / dùng · chuột phải: bán · bấm trang bị để tháo
+      </div>
     </div>
   );
 }

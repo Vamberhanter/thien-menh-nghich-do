@@ -23,14 +23,22 @@ import { parseNetCharacter, POSE_INTERVAL_MS } from './types';
 interface CellSub {
   cell: Cell;
   channel: RealtimeChannel;
-  ready: boolean;
+}
+
+/** How long a dropped topic waits before it is rebuilt, and the ceiling on that. */
+const REOPEN_MS = 800;
+const REOPEN_MAX_MS = 6000;
+
+function reopenDelay(attempt: number): number {
+  return Math.min(REOPEN_MS * 2 ** Math.min(attempt - 1, 4), REOPEN_MAX_MS);
 }
 
 /**
  * One player's live connection to a world.
  *
- * Presence lives per cell (who is nearby). Broadcast carries poses at 12 Hz
- * and one-shot actions. Rooms, occupancy and zone snapshots live in Supabase.
+ * Presence lives per cell (who is nearby). The zone topic carries poses,
+ * one-shot actions and the host's PvE traffic. Rooms, occupancy and zone
+ * snapshots live in Supabase.
  */
 export class WorldSession {
   readonly profile: SessionProfile;
@@ -44,7 +52,6 @@ export class WorldSession {
   private alive = true;
   private zoneId: string | null = null;
   private zoneChannel: RealtimeChannel | null = null;
-  private zoneReady = false;
   private hostId: string | null = null;
   private lastActAt = new Map<string, number>();
   private readonly seen = new Map<string, { peer: PeerInfo; at: number }>();
@@ -121,13 +128,7 @@ export class WorldSession {
 
   publishWorld(event: WorldNetEvent): void {
     if (!this.alive) return;
-    if (this.zoneReady && this.zoneChannel) {
-      void this.zoneChannel.send({ type: 'broadcast', event: 'world', payload: event });
-    }
-    const home = this.homeSub();
-    if (home?.ready) {
-      void home.channel.send({ type: 'broadcast', event: 'world', payload: event });
-    }
+    this.send('world', event);
   }
 
   /**
@@ -183,8 +184,9 @@ export class WorldSession {
     this.refreshPresenceNow();
   }
 
-  private openCell(cell: Cell): CellSub {
-    const sub: CellSub = { cell, channel: null as unknown as RealtimeChannel, ready: false };
+  private openCell(cell: Cell, attempt = 0): CellSub {
+    const sub: CellSub = { cell, channel: null as unknown as RealtimeChannel };
+    let tries = attempt;
     const channel = getSupabase().channel(channelName(this.world, cell), {
       config: {
         presence: { key: this.id },
@@ -202,17 +204,13 @@ export class WorldSession {
 
     channel.subscribe((status) => {
       if (!this.alive) return;
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        sub.ready = false;
-        window.setTimeout(() => {
-          if (this.alive && this.cells.get(cellKey(cell)) === sub) {
-            channel.subscribe();
-          }
-        }, 800);
+      // CLOSED counts too: a channel that quietly closed still accepts sends,
+      // it just reroutes them over REST instead of the socket.
+      if (status !== 'SUBSCRIBED') {
+        this.reopenCell(cell, sub, tries + 1);
         return;
       }
-      if (status !== 'SUBSCRIBED') return;
-      sub.ready = true;
+      tries = 0;
       if (this.home && sameCell(this.home, cell)) {
         void channel.track(this.presenceBody());
       }
@@ -222,22 +220,47 @@ export class WorldSession {
     return sub;
   }
 
+  /**
+   * A topic that has joined once can never rejoin — realtime-js throws on a
+   * second join — so recovery means dropping it and building a fresh one.
+   */
+  private reopenCell(cell: Cell, sub: CellSub, attempt: number): void {
+    const key = cellKey(cell);
+    if (this.cells.get(key) !== sub) return;
+    this.cells.delete(key);
+    void getSupabase().removeChannel(sub.channel);
+
+    window.setTimeout(() => {
+      if (!this.alive || !this.home || this.cells.has(key)) return;
+      if (!neighbourhood(this.home).some((want) => cellKey(want) === key)) return;
+      this.cells.set(key, this.openCell(cell, attempt));
+    }, reopenDelay(attempt));
+  }
+
   private homeSub(): CellSub | undefined {
     if (!this.home) return undefined;
     return this.cells.get(cellKey(this.home));
   }
 
-  private send(event: 'pose' | 'act', payload: NetPose | NetAction): void {
-    if (this.zoneReady && this.zoneChannel) {
-      void this.zoneChannel.send({ type: 'broadcast', event, payload });
+  /**
+   * One copy per message. The zone topic already reaches everyone standing on
+   * the map, so also pushing down the cell topic doubled the rate-limit cost
+   * and delivered every swing twice.
+   */
+  private send(event: 'pose' | 'act' | 'world', payload: NetPose | NetAction | WorldNetEvent): void {
+    const zone = this.zoneChannel;
+    if (joined(zone)) {
+      void zone.send({ type: 'broadcast', event, payload });
+      return;
     }
-    const home = this.homeSub();
-    if (home?.ready) {
-      void home.channel.send({ type: 'broadcast', event, payload });
+    const home = this.homeSub()?.channel;
+    if (joined(home)) {
+      void home.send({ type: 'broadcast', event, payload });
     }
   }
 
-  private openZone(zone: string): void {
+  private openZone(zone: string, attempt = 0): void {
+    let tries = attempt;
     const channel = getSupabase().channel(`tmnd-${this.world}-z-${zone}`, {
       config: {
         presence: { key: this.id },
@@ -245,7 +268,6 @@ export class WorldSession {
       },
     });
     this.zoneChannel = channel;
-    this.zoneReady = false;
 
     channel
       .on('presence', { event: 'sync' }, () => {
@@ -266,19 +288,25 @@ export class WorldSession {
 
     channel.subscribe((status) => {
       if (!this.alive || this.zoneChannel !== channel) return;
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        this.zoneReady = false;
-        window.setTimeout(() => {
-          if (this.alive && this.zoneChannel === channel) channel.subscribe();
-        }, 800);
+      if (status !== 'SUBSCRIBED') {
+        this.reopenZone(zone, tries + 1);
         return;
       }
-      if (status !== 'SUBSCRIBED') return;
-      this.zoneReady = true;
+      tries = 0;
       void channel.track(this.presenceBody());
       this.rebuildPeers();
       if (this.lastPose?.zone === zone) this.send('pose', this.lastPose);
     });
+  }
+
+  private reopenZone(zone: string, attempt: number): void {
+    const dead = this.zoneChannel;
+    this.zoneChannel = null;
+    if (dead) void getSupabase().removeChannel(dead);
+
+    window.setTimeout(() => {
+      if (this.alive && this.zoneId === zone && !this.zoneChannel) this.openZone(zone, attempt);
+    }, reopenDelay(attempt));
   }
 
   private dropZone(): void {
@@ -286,7 +314,6 @@ export class WorldSession {
       void getSupabase().removeChannel(this.zoneChannel);
     }
     this.zoneChannel = null;
-    this.zoneReady = false;
     this.zoneId = null;
     this.hostId = null;
   }
@@ -328,9 +355,9 @@ export class WorldSession {
   private maybeRefreshPresence(state: PlayerNetState, now: number): void {
     if (now - this.lastPresenceAt < 2000) return;
     this.lastPresenceAt = now;
-    const home = this.homeSub();
-    if (!home?.ready) return;
-    void home.channel.track({
+    const home = this.homeSub()?.channel;
+    if (!joined(home)) return;
+    void home.track({
       id: this.id,
       name: this.profile.name,
       character: state.character,
@@ -338,7 +365,7 @@ export class WorldSession {
       y: Math.round(state.y),
       zone: state.zone ?? this.zoneId,
     });
-    if (this.zoneReady && this.zoneChannel) {
+    if (joined(this.zoneChannel)) {
       void this.zoneChannel.track(this.presenceBody());
     }
   }
@@ -346,9 +373,9 @@ export class WorldSession {
   private refreshPresenceNow(): void {
     this.lastPresenceAt = 0;
     const body = this.presenceBody();
-    const home = this.homeSub();
-    if (home?.ready) void home.channel.track(body);
-    if (this.zoneReady && this.zoneChannel) void this.zoneChannel.track(body);
+    const home = this.homeSub()?.channel;
+    if (joined(home)) void home.track(body);
+    if (joined(this.zoneChannel)) void this.zoneChannel.track(body);
   }
 
   private rebuildPeers(): void {
@@ -429,6 +456,17 @@ export class WorldSession {
     if (stamp) this.lastActAt.set(action.id, stamp);
     GameBus.emit(GameEvent.NetAction, action);
   }
+}
+
+/**
+ * Only a joined channel can carry broadcast over the socket. Ask the channel
+ * rather than a flag of our own: a topic can close under us — a throttled tab
+ * that misses heartbeats is enough — and supabase-js answers a send on a dead
+ * channel by quietly reposting it over REST, which turns every pose and every
+ * swing into an HTTP round trip.
+ */
+function joined(channel: RealtimeChannel | null | undefined): channel is RealtimeChannel {
+  return channel?.state === 'joined';
 }
 
 function roundAim(n: number): number {

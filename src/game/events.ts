@@ -58,6 +58,8 @@ export const GameEvent = {
   WarpState: 'warp-state',
   /** HUD asked to open, close, or travel. */
   WarpCommand: 'warp-command',
+  /** Player / peers / landmarks for the HUD minimap. */
+  Minimap: 'minimap-update',
 } as const;
 
 export interface WarpStatePayload {
@@ -191,6 +193,25 @@ export interface ProgressionPayload {
 export interface ZonePayload {
   id: string;
   name: string;
+}
+
+export interface MinimapMark {
+  x: number;
+  y: number;
+  label?: string;
+}
+
+export interface MinimapPayload {
+  zoneId: string;
+  zoneName: string;
+  width: number;
+  height: number;
+  player: MinimapMark;
+  shrine: MinimapMark;
+  waypoint: MinimapMark;
+  portals: readonly MinimapMark[];
+  boss: MinimapMark | null;
+  peers: readonly MinimapMark[];
 }
 
 export interface LootPromptPayload {

@@ -52,9 +52,9 @@ export class Multiplayer {
     return !this.session || this.session.isHost;
   }
 
-  /** Who is currently resolving a swing — remote id while replaying, else local. */
-  actorId(): string {
-    return this.incomingId ?? this.session?.id ?? 'local';
+  /** The peer whose swing is being replayed right now, or null for our own. */
+  remoteActor(): string | null {
+    return this.incomingId;
   }
 
   footOf(id: string): Vector2Like | null {

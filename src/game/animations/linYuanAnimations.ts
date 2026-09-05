@@ -13,6 +13,8 @@ export const LIN_YUAN_TEXTURE = 'lamuyen';
 const lamuyenAtlas = remoteAtlas('characters/lamuyen/lamuyen.json', 'characters/lamuyen');
 export const LIN_YUAN_ATLAS_URL = lamuyenAtlas.url;
 export const LIN_YUAN_ATLAS_PATH = lamuyenAtlas.path;
+export const LIN_YUAN_ATLAS_LOCAL_URL = lamuyenAtlas.localUrl;
+export const LIN_YUAN_ATLAS_LOCAL_PATH = lamuyenAtlas.localPath;
 
 /** Frame geometry, needed by the entity to place its physics body. */
 export const FRAME_WIDTH = 160;

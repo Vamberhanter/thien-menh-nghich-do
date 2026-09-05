@@ -22,7 +22,12 @@ import {
   createMikuAnimations,
 } from '../animations/mikuAnimations';
 import type { CharacterState, Direction } from '../types';
-import { BANG_PHACH_TRAM, BANG_TINH_TRAN, HUYET_DIEM_TRAM, TINH_MANG_TRAM } from '../systems/CombatSystem';
+import {
+  BANG_PHACH_TRAM,
+  BANG_TINH_TRAN,
+  HUYET_DIEM_TRAM,
+  TINH_MANG_TRAM,
+} from '../systems/CombatSystem';
 import type { NetAction, NetPose } from '../../net/types';
 
 const LABEL_LIFT = 92;
@@ -231,7 +236,9 @@ export class RemoteAvatar {
   }
 
   private displayY(): number {
-    if (this.character === 'nhuyen' || this.character === 'huyetlang' || this.character === 'miku') return this.sprite.y;
+    if (this.character === 'nhuyen' || this.character === 'huyetlang' || this.character === 'miku') {
+      return this.sprite.y;
+    }
     return this.sprite.y + FEET_OFFSET_Y;
   }
 }
@@ -303,6 +310,7 @@ function huyetLangClip(
     case 'attack':
       return HuyetLangClip.attack(facing, atk);
     case 'skill':
+      // an unnamed skill is the roar, whose charge is the safest thing to show
       return skillName === HUYET_DIEM_TRAM.name
         ? HuyetLangClip.magmaSlash(facing)
         : HuyetLangClip.roar(facing);

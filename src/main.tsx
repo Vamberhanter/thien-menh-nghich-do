@@ -2,6 +2,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { startAuth } from './net/auth';
 import './index.css';
+import './styles/lobby.css';
 
 startAuth();
 

@@ -15,7 +15,19 @@ import type {
   SkillPayload,
   WarpCommandPayload,
 } from '../events';
-import { WorldTexture } from './BootScene';
+import {
+  dropTexture,
+  ENV_ART_ORDER,
+  envArt,
+  envKit,
+  envKitFor,
+  groundTexture,
+  nextEnvArt,
+  repaintEnvironment,
+  WorldResourceTexture,
+} from '../env';
+import type { EnvKit } from '../env';
+import type { PropArt } from '../env';
 import { LIN_YUAN_TEXTURE, QI_SLASH_FRAME } from '../animations/linYuanAnimations';
 import { NhuYenEffects } from '../systems/NhuYenEffects';
 import { HuyetLangEffects } from '../systems/HuyetLangEffects';
@@ -37,8 +49,8 @@ import { Multiplayer } from '../systems/Multiplayer';
 import { isInputGated, loadSavedJoin, peekSession } from '../../net/bind';
 import { newPlayerId } from '../../net/supabase';
 import type { WorldSession } from '../../net/WorldSession';
-import type { WorldNetEvent, WorldSnap } from '../../net/types';
-import { WORLD_SNAP_MS } from '../../net/types';
+import type { NetHitRow, WorldNetEvent, WorldSnap } from '../../net/types';
+import { HIT_ECHO_MS, WORLD_SNAP_MS } from '../../net/types';
 import { defaultAvatar, loadAvatar, saveAvatar } from '../../net/avatarStore';
 import { loadZoneSnap, saveZoneSnap } from '../../net/zoneStore';
 import { Progression, writeDerived } from '../systems/Progression';
@@ -57,11 +69,21 @@ import {
   warpStand,
   zoneOf,
 } from '../zones';
-import type { PortalDef, ZoneDef, ZoneId } from '../zones';
+import type {
+  ChestDef,
+  ChestTier,
+  PlantDef,
+  PlantKind,
+  PortalDef,
+  ZoneDef,
+  ZoneId,
+} from '../zones';
 import { setCurrentZone } from '../worldState';
 import { consumePad } from '../touchPad';
 
 const HIT_RADIUS = 64;
+/** Muted grey-blue so your own numbers stay readable in a four-player pile-on. */
+const ALLY_DAMAGE_TINT = 0xa9b6cf;
 const QI_SLASH_RADIUS = 72;
 const ICE_ARRAY_CENTRE_RADIUS = 150;
 const ICE_ARRAY_PILLAR_RADIUS = 130;
@@ -82,6 +104,9 @@ const RESPAWN_MS = 5000;
 const SHRINE_RADIUS = 80;
 const PORTAL_RADIUS = 48;
 const LOOT_RADIUS = 42;
+const RESOURCE_RADIUS = 64;
+const PLANT_RESPAWN_MS = 30000;
+const CHEST_RESPAWN_MS = 90000;
 const MOB_RESPAWN_MS = 12000;
 const ROSTER: readonly PlayerId[] = ['nhuyen', 'lamuyen', 'huyetlang', 'miku'];
 
@@ -95,7 +120,52 @@ interface LootPile {
   id: string;
   sprite: Phaser.Physics.Arcade.Sprite;
   items: string[];
+  /**
+   * Ground the pile rests on. `sprite.y` bobs, so proximity checks and saves read
+   * this instead — otherwise a pile would drift a few pixels every time it was
+   * written out and read back.
+   */
+  ground: number;
 }
+
+interface HarvestNode {
+  kind: 'plant';
+  def: PlantDef;
+  sprite: Phaser.GameObjects.Image;
+  readyAt: number;
+}
+
+interface TreasureNode {
+  kind: 'chest';
+  def: ChestDef;
+  sprite: Phaser.GameObjects.Image;
+  readyAt: number;
+}
+
+type WorldResource = HarvestNode | TreasureNode;
+
+const PLANT_TEXTURE: Record<PlantKind, string> = {
+  'blood-berry': WorldResourceTexture.PlantBloodBerry,
+  'spirit-herb': WorldResourceTexture.PlantSpiritHerb,
+  'earth-fruit': WorldResourceTexture.PlantEarthFruit,
+  'essence-root': WorldResourceTexture.PlantEssenceRoot,
+};
+
+const CHEST_TEXTURE: Record<ChestTier, string> = {
+  common: WorldResourceTexture.ChestCommon,
+  rare: WorldResourceTexture.ChestRare,
+  epic: WorldResourceTexture.ChestEpic,
+  legendary: WorldResourceTexture.ChestLegendary,
+  mythic: WorldResourceTexture.ChestMythic,
+};
+
+const CHEST_REWARD: Record<ChestTier, { stone: string; xp: number; label: string }> = {
+  common: { stone: 'wood-stone', xp: 6, label: 'rương thường' },
+  rare: { stone: 'water-stone', xp: 10, label: 'rương hiếm' },
+  epic: { stone: 'fire-stone', xp: 16, label: 'rương sử thi' },
+  legendary: { stone: 'earth-stone', xp: 24, label: 'rương huyền thoại' },
+  mythic: { stone: 'void-stone', xp: 36, label: 'rương thần thoại' },
+};
 
 interface MobPack {
   index: number;
@@ -137,14 +207,19 @@ export class WorldScene extends Phaser.Scene {
   private targets: Damageable[] = [];
   private packs: MobPack[] = [];
   private loot: LootPile[] = [];
+  private resources: WorldResource[] = [];
   private portals: Array<{
     def: PortalDef;
     sprite: Phaser.GameObjects.Sprite;
     label: Phaser.GameObjects.Text;
   }> = [];
+  private decals: Phaser.GameObjects.Image[] = [];
   private shrineSprite?: Phaser.GameObjects.Sprite;
   private shrineLabel?: Phaser.GameObjects.Text;
   private shrineRing?: Phaser.GameObjects.Graphics;
+  private waypointSprite?: Phaser.GameObjects.Sprite;
+  private waypointLabel?: Phaser.GameObjects.Text;
+  private waypointRing?: Phaser.GameObjects.Graphics;
   private arenaRing?: Phaser.GameObjects.Graphics;
   private arenaLabel?: Phaser.GameObjects.Text;
   private spawn: { zone: ZoneId; x: number; y: number } | null = null;
@@ -158,6 +233,7 @@ export class WorldScene extends Phaser.Scene {
     bag: Phaser.Input.Keyboard.Key;
     pick: Phaser.Input.Keyboard.Key;
     warp: Phaser.Input.Keyboard.Key;
+    envArt: Phaser.Input.Keyboard.Key;
     hurt?: Phaser.Input.Keyboard.Key;
     respawn?: Phaser.Input.Keyboard.Key;
     boss?: Phaser.Input.Keyboard.Key;
@@ -177,9 +253,15 @@ export class WorldScene extends Phaser.Scene {
   private lootSeq = 0;
   private worldTimer = 0;
   private zoneSaveTimer = 0;
+  private hitEcho: NetHitRow[] = [];
+  private hitTimer = 0;
   private readonly lastHit = new WeakMap<object, string>();
   private warps = new Set<ZoneId>([DEFAULT_ZONE]);
   private warpOpen = false;
+  private minimapTimer = 0;
+  /** Lobby pick waiting to be applied on enter (id + kit + name). */
+  private pendingAvatar: AvatarChosenPayload | null = null;
+  private applyingAvatar = false;
 
   constructor() {
     super('WorldScene');
@@ -242,10 +324,12 @@ export class WorldScene extends Phaser.Scene {
       this.tickBoss(time, delta);
       this.tickPortals();
     }
+    this.tickResources(time);
     this.tickLootPrompt();
     this.tickFrost(time);
     this.tickKeys();
     this.tickWorld(delta);
+    this.tickMinimap(delta);
     this.saveTimer += delta;
     if (this.saveTimer > 5000) {
       this.saveTimer = 0;
@@ -261,23 +345,24 @@ export class WorldScene extends Phaser.Scene {
     setCurrentZone(this.zone.id);
     this.physics.world.setBounds(0, 0, this.zone.width, this.zone.height);
 
-    const ground =
-      this.zone.ground === 'forest'
-        ? WorldTexture.Forest
-        : this.zone.ground === 'ash'
-          ? WorldTexture.Ash
-          : WorldTexture.Grass;
-    this.ground = this.add.tileSprite(0, 0, this.zone.width, this.zone.height, ground).setOrigin(0, 0).setDepth(-1000);
+    const kit = envKitFor(this.zone.ground);
+    this.ground = this.add
+      .tileSprite(0, 0, this.zone.width, this.zone.height, groundTexture(kit, this.zone.ground))
+      .setOrigin(0, 0)
+      .setDepth(-1000);
 
     this.props = this.physics.add.staticGroup();
-    for (const [x, y] of this.zone.trees) this.addProp(WorldTexture.Tree, x, y, 30, 20, 38);
-    for (const [x, y] of this.zone.rocks) this.addProp(WorldTexture.Rock, x, y, 40, 20, 0);
+    this.scatterDecals(kit);
+    for (const [x, y] of this.zone.trees) this.addProp(kit.tree, x, y);
+    for (const [x, y] of this.zone.rocks) this.addProp(kit.rock, x, y);
 
     this.placeShrine();
+    this.placeWaypoint();
     this.placeArena();
+    this.placeResources();
 
     for (const [x, y] of this.zone.stones) {
-      const sprite = this.addProp(WorldTexture.TrainingStone, x, y, 40, 24, 16);
+      const sprite = this.addProp(kit.stone, x, y);
       const stone: TrainingStone = { sprite, hp: STONE_HP, frost: new FrostMark() };
       this.stones.push(stone);
       this.targets.push(this.stoneTarget(stone));
@@ -287,9 +372,9 @@ export class WorldScene extends Phaser.Scene {
     if (this.zone.boss) this.spawnBoss(this.zone.boss.x, this.zone.boss.y);
 
     for (const def of this.zone.portals) {
-      const sprite = this.add.sprite(def.x, def.y, WorldTexture.Portal).setDepth(def.y);
+      const sprite = this.add.sprite(def.x, def.y, kit.portal.texture).setOrigin(0.5, kit.portal.originY).setDepth(def.y);
       const label = this.add
-        .text(def.x, def.y - 36, def.label, {
+        .text(def.x, def.y - kit.portal.labelLift, def.label, {
           fontFamily: 'monospace',
           fontSize: '11px',
           color: '#e8c48a',
@@ -317,7 +402,6 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.setRoundPixels(true);
     this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
     GameBus.emit(GameEvent.ZoneChanged, { id: this.zone.id, name: this.zone.name });
-    this.discoverWarp(this.zone.id);
     peekSession()?.followZone(this.zone.id);
     this.hosting = this.net ? this.net.hosting : !peekSession() || Boolean(peekSession()?.isHost);
     if (!this.spawn) this.spawn = { zone: this.zone.id, x: this.zone.shrine.x, y: this.zone.shrine.y };
@@ -327,14 +411,18 @@ export class WorldScene extends Phaser.Scene {
 
   private placeShrine(): void {
     const { x, y } = this.zone.shrine;
-    this.shrineSprite = this.add.sprite(x, y, WorldTexture.Shrine).setDepth(y).setScale(1.4);
+    this.shrineSprite = this.add
+      .sprite(x, y, WorldResourceTexture.RespawnShrine)
+      .setOrigin(0.5, 1)
+      .setDepth(y)
+      .setDisplaySize(119, 180);
     this.shrineRing = this.add.graphics().setDepth(y - 2);
     this.shrineRing.lineStyle(2, 0x6fd8ff, 0.7);
-    this.shrineRing.strokeCircle(x, y + 10, 22);
+    this.shrineRing.strokeEllipse(x, y - 4, 96, 36);
     this.shrineRing.lineStyle(1, 0x9fe8ff, 0.35);
-    this.shrineRing.strokeCircle(x, y + 10, 34);
+    this.shrineRing.strokeEllipse(x, y - 4, 116, 46);
     this.shrineLabel = this.add
-      .text(x, y - 44, 'Huyết mạch', {
+      .text(x, y - 184, 'Trụ hồi sinh', {
         fontFamily: 'monospace',
         fontSize: '11px',
         color: '#9fe8ff',
@@ -350,6 +438,61 @@ export class WorldScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
     });
+  }
+
+  private placeWaypoint(): void {
+    const { x, y } = this.zone.waypoint;
+    this.waypointSprite = this.add
+      .sprite(x, y, WorldResourceTexture.WarpShrine)
+      .setOrigin(0.5, 1)
+      .setDepth(y)
+      .setDisplaySize(107, 160);
+    this.waypointRing = this.add.graphics().setDepth(y - 2);
+    this.waypointRing.lineStyle(2, 0xb46cff, 0.75);
+    this.waypointRing.strokeEllipse(x, y - 3, 90, 32);
+    this.waypointRing.lineStyle(1, 0xe0b4ff, 0.4);
+    this.waypointRing.strokeEllipse(x, y - 3, 110, 42);
+    this.waypointLabel = this.add
+      .text(x, y - 164, 'Trụ dịch chuyển', {
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        color: '#deb5ff',
+        stroke: '#05070d',
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(y + 2);
+    this.tweens.add({
+      targets: [this.waypointRing, this.waypointLabel],
+      alpha: { from: 0.5, to: 1 },
+      duration: 1050,
+      yoyo: true,
+      repeat: -1,
+    });
+  }
+
+  /**
+   * Plants and treasure are personal nodes: in a multiplayer room, harvesting
+   * one does not make another player's copy disappear. That avoids one player
+   * exhausting a whole zone for everyone else.
+   */
+  private placeResources(): void {
+    for (const def of this.zone.plants) {
+      const sprite = this.add
+        .image(def.x, def.y, PLANT_TEXTURE[def.kind])
+        .setOrigin(0.5, 1)
+        .setDisplaySize(48, 48)
+        .setDepth(def.y);
+      this.resources.push({ kind: 'plant', def, sprite, readyAt: 0 });
+    }
+    for (const def of this.zone.chests) {
+      const sprite = this.add
+        .image(def.x, def.y, CHEST_TEXTURE[def.tier])
+        .setOrigin(0.5, 1)
+        .setDisplaySize(124, 82)
+        .setDepth(def.y);
+      this.resources.push({ kind: 'chest', def, sprite, readyAt: 0 });
+    }
   }
 
   private placeArena(): void {
@@ -393,6 +536,11 @@ export class WorldScene extends Phaser.Scene {
     return Phaser.Math.Distance.Between(foot.x, foot.y, this.zone.shrine.x, this.zone.shrine.y) <= SHRINE_RADIUS;
   }
 
+  private nearWaypoint(): boolean {
+    const foot = this.player.hitPoint();
+    return Phaser.Math.Distance.Between(foot.x, foot.y, this.zone.waypoint.x, this.zone.waypoint.y) <= SHRINE_RADIUS;
+  }
+
   private isBoundHere(): boolean {
     const point = this.spawn;
     return !!point && point.zone === this.zone.id
@@ -403,7 +551,6 @@ export class WorldScene extends Phaser.Scene {
   private bindSpawn(): void {
     if (!this.nearShrine()) return;
     this.spawn = { zone: this.zone.id, x: this.zone.shrine.x, y: this.zone.shrine.y };
-    this.discoverWarp(this.zone.id);
     GameBus.emit(GameEvent.Notice, `Đã đặt điểm hồi sinh · ${this.zone.name}`);
     void this.persist();
   }
@@ -421,10 +568,11 @@ export class WorldScene extends Phaser.Scene {
 
   private toggleWarp(): void {
     if (!this.player.alive) return;
-    if (!this.nearShrine()) {
-      GameBus.emit(GameEvent.Notice, 'Đến huyết mạch để dịch chuyển');
+    if (!this.nearWaypoint()) {
+      GameBus.emit(GameEvent.Notice, 'Đến trụ dịch chuyển');
       return;
     }
+    this.discoverWarp(this.zone.id);
     this.warpOpen = !this.warpOpen;
     this.emitWarpState();
   }
@@ -459,8 +607,8 @@ export class WorldScene extends Phaser.Scene {
 
   private async travelWarp(id: string): Promise<void> {
     if (this.crossing || !this.player.alive) return;
-    if (!this.nearShrine()) {
-      GameBus.emit(GameEvent.Notice, 'Đến huyết mạch để dịch chuyển');
+    if (!this.nearWaypoint()) {
+      GameBus.emit(GameEvent.Notice, 'Đến trụ dịch chuyển');
       return;
     }
     const zone = id as ZoneId;
@@ -489,8 +637,10 @@ export class WorldScene extends Phaser.Scene {
     this.boss?.destroy();
     this.boss = undefined;
     this.bossAi = undefined;
-    for (const pile of this.loot) pile.sprite.destroy();
+    for (const pile of this.loot) this.destroyPile(pile);
     this.loot = [];
+    for (const resource of this.resources) resource.sprite.destroy();
+    this.resources = [];
     for (const portal of this.portals) {
       portal.sprite.destroy();
       portal.label.destroy();
@@ -498,16 +648,26 @@ export class WorldScene extends Phaser.Scene {
     this.portals = [];
     this.stones = [];
     this.targets = [];
+    // Mob indices belong to the zone that produced them.
+    this.hitEcho = [];
     this.shrineSprite?.destroy();
     this.shrineSprite = undefined;
     this.shrineLabel?.destroy();
     this.shrineLabel = undefined;
     this.shrineRing?.destroy();
     this.shrineRing = undefined;
+    this.waypointSprite?.destroy();
+    this.waypointSprite = undefined;
+    this.waypointLabel?.destroy();
+    this.waypointLabel = undefined;
+    this.waypointRing?.destroy();
+    this.waypointRing = undefined;
     this.arenaRing?.destroy();
     this.arenaRing = undefined;
     this.arenaLabel?.destroy();
     this.arenaLabel = undefined;
+    for (const decal of this.decals) decal.destroy();
+    this.decals = [];
     this.ground?.destroy();
     this.ground = undefined;
     try {
@@ -592,7 +752,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private grantXp(amount: number, x: number, y: number, toId?: string): void {
-    const who = toId ?? this.net?.actorId() ?? this.selfId();
+    const who = toId ?? this.actorId();
     if (who !== this.selfId()) {
       peekSession()?.publishWorld({ kind: 'reward', playerId: who, xp: amount, x, y });
       return;
@@ -659,7 +819,7 @@ export class WorldScene extends Phaser.Scene {
         pack.ai.anchorHere();
         pack.respawnAt = null;
       }
-      pack.mob.tick(time);
+      pack.mob.tick(time, delta);
       if (!this.hosting || !pack.mob.alive || pack.mob.frozen) continue;
       pack.ai.update(time, delta, this.nearestPrey(pack.mob.hitPoint()));
     }
@@ -681,9 +841,14 @@ export class WorldScene extends Phaser.Scene {
   private spawnBoss(x: number, y: number): void {
     const boss = new Boss1(this, x, y, {
       onStrike: (strike) => this.onBossStrike(strike),
+      onAct: (act, aim) => {
+        if (this.hosting) peekSession()?.publishWorld({ kind: 'boss-act', act, ax: aim.x, ay: aim.y });
+      },
       onDeath: () => {
-        if (!this.hosting) return;
+        // Everyone in the arena earned the banner, even though only the host
+        // hands out the kill.
         this.floatingNumber(x, y - 120, 0, 0xffd070, true, 'HẠ GỤC');
+        if (!this.hosting) return;
         this.grantXp(BOSS_XP, x, y - 40, this.boss ? this.lastHit.get(this.boss) : undefined);
         const drops = rollDrops(BOSS_DROPS);
         if (drops.length) this.dropLoot(x, y, drops);
@@ -816,11 +981,80 @@ export class WorldScene extends Phaser.Scene {
   private dropLoot(x: number, y: number, items: string[], id?: string): void {
     const pileId = id ?? `loot-${this.lootSeq++}`;
     if (this.loot.some((p) => p.id === pileId)) return;
-    const sprite = this.physics.add.sprite(x, y + 10, WorldTexture.Loot);
-    sprite.setDepth(y + 10);
+    const ground = y + 10;
+    const sprite = this.physics.add.sprite(x, ground, dropTexture(this, items[0]));
+    // Anchored at the foot, so a tall sword and a small herb rest on the same
+    // ground line and both sort against props by where they touch down.
+    sprite.setOrigin(0.5, 1);
+    sprite.setDepth(ground);
     sprite.setImmovable(true);
-    (sprite.body as Phaser.Physics.Arcade.Body | null)?.setSize(16, 12);
-    this.loot.push({ id: pileId, sprite, items });
+    (sprite.body as Phaser.Physics.Arcade.Body | null)?.setSize(20, 12);
+    // A drop in tall grass is easy to walk past, so it hovers.
+    this.tweens.add({
+      targets: sprite,
+      y: ground - 6,
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.InOut',
+    });
+    this.loot.push({ id: pileId, sprite, items, ground });
+  }
+
+  private destroyPile(pile: LootPile): void {
+    this.tweens.killTweensOf(pile.sprite);
+    pile.sprite.destroy();
+  }
+
+  private tickResources(time: number): void {
+    for (const resource of this.resources) {
+      if (resource.sprite.active || time < resource.readyAt) continue;
+      resource.readyAt = 0;
+      resource.sprite.setActive(true).setVisible(true).setAlpha(0);
+      this.tweens.add({ targets: resource.sprite, alpha: 1, duration: 320 });
+    }
+  }
+
+  private nearestResource(): { resource: WorldResource; distance: number } | null {
+    const foot = this.player.hitPoint();
+    let best: { resource: WorldResource; distance: number } | null = null;
+    for (const resource of this.resources) {
+      if (!resource.sprite.active) continue;
+      const distance = Phaser.Math.Distance.Between(
+        foot.x,
+        foot.y,
+        resource.sprite.x,
+        resource.sprite.y,
+      );
+      if (distance > RESOURCE_RADIUS) continue;
+      if (!best || distance < best.distance) best = { resource, distance };
+    }
+    return best;
+  }
+
+  private gatherResource(resource: WorldResource): void {
+    if (resource.kind === 'plant') {
+      if (!this.bag.add(resource.def.kind)) {
+        GameBus.emit(GameEvent.Notice, 'Túi đã đầy — chưa thể hái');
+        return;
+      }
+      resource.readyAt = this.time.now + PLANT_RESPAWN_MS;
+      resource.sprite.setActive(false).setVisible(false);
+      GameBus.emit(GameEvent.Notice, `Đã hái · ${itemOf(resource.def.kind)?.name ?? resource.def.kind}`);
+      this.emitInventory();
+      void this.persist();
+      return;
+    }
+
+    const reward = CHEST_REWARD[resource.def.tier];
+    resource.readyAt = this.time.now + CHEST_RESPAWN_MS;
+    resource.sprite.setActive(false).setVisible(false);
+    this.dropLoot(resource.def.x, resource.def.y, [reward.stone]);
+    this.grantXp(reward.xp, resource.def.x, resource.def.y);
+    GameBus.emit(
+      GameEvent.Notice,
+      `Đã mở ${reward.label} · linh thạch rơi dưới đất (+${reward.xp} KN)`,
+    );
   }
 
   private tickLootPrompt(): void {
@@ -829,16 +1063,29 @@ export class WorldScene extends Phaser.Scene {
       GameBus.emit(GameEvent.LootPrompt, { label: `F · nhặt (${near.pile.items.length})` });
       return;
     }
+    const resource = this.nearestResource();
+    if (resource) {
+      GameBus.emit(GameEvent.LootPrompt, {
+        label:
+          resource.resource.kind === 'plant'
+            ? `F · hái ${itemOf(resource.resource.def.kind)?.name ?? 'linh dược'}`
+            : `F · mở ${CHEST_REWARD[resource.resource.def.tier].label}`,
+      });
+      return;
+    }
     if (this.nearShrine()) {
       GameBus.emit(GameEvent.LootPrompt, {
-        label: this.isBoundHere()
-          ? 'T / F · dịch chuyển · đã khóa hồi sinh'
-          : 'F · đặt hồi sinh · T dịch chuyển',
+        label: this.isBoundHere() ? 'Đã khóa điểm hồi sinh' : 'F · đặt điểm hồi sinh',
       });
+      return;
+    }
+    if (this.nearWaypoint()) {
+      if (!this.warps.has(this.zone.id)) this.discoverWarp(this.zone.id);
+      GameBus.emit(GameEvent.LootPrompt, { label: 'F / T · mở dịch chuyển' });
       if (this.warpOpen) this.emitWarpState();
       return;
     }
-    if (this.warpOpen) this.closeWarp();
+    if (this.warpOpen && !this.nearWaypoint()) this.closeWarp();
     GameBus.emit(GameEvent.LootPrompt, { label: null });
   }
 
@@ -847,7 +1094,7 @@ export class WorldScene extends Phaser.Scene {
     let best: { pile: LootPile; distance: number } | null = null;
     for (const pile of this.loot) {
       if (!pile.sprite.active) continue;
-      const distance = Phaser.Math.Distance.Between(foot.x, foot.y, pile.sprite.x, pile.sprite.y);
+      const distance = Phaser.Math.Distance.Between(foot.x, foot.y, pile.sprite.x, pile.ground);
       if (distance > LOOT_RADIUS) continue;
       if (!best || distance < best.distance) best = { pile, distance };
     }
@@ -857,8 +1104,13 @@ export class WorldScene extends Phaser.Scene {
   private pickLoot(): void {
     const near = this.nearestLoot();
     if (!near) {
-      if (this.nearShrine() && this.isBoundHere()) this.toggleWarp();
-      else this.bindSpawn();
+      const resource = this.nearestResource();
+      if (resource) {
+        this.gatherResource(resource.resource);
+        return;
+      }
+      if (this.nearShrine()) this.bindSpawn();
+      else if (this.nearWaypoint()) this.toggleWarp();
       return;
     }
     if (!this.hosting) {
@@ -894,10 +1146,10 @@ export class WorldScene extends Phaser.Scene {
         playerId,
         items: pile.items,
         x: pile.sprite.x,
-        y: pile.sprite.y,
+        y: pile.ground,
       });
     }
-    pile.sprite.destroy();
+    this.destroyPile(pile);
     this.loot = this.loot.filter((p) => p !== pile);
   }
 
@@ -912,6 +1164,7 @@ export class WorldScene extends Phaser.Scene {
       bag: keyboard.addKey(K.I, false),
       pick: keyboard.addKey(K.F, false),
       warp: keyboard.addKey(K.T, false),
+      envArt: keyboard.addKey(K.G, false),
     };
     if (import.meta.env.DEV) {
       this.keys.hurt = keyboard.addKey(K.H, false);
@@ -927,6 +1180,7 @@ export class WorldScene extends Phaser.Scene {
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.pick) || consumePad('pick')) this.pickLoot();
     if (Phaser.Input.Keyboard.JustDown(this.keys.warp)) this.toggleWarp();
+    if (Phaser.Input.Keyboard.JustDown(this.keys.envArt)) this.swapEnvArt();
     if (Phaser.Input.Keyboard.JustDown(this.keys.swap)) this.trySwap();
     if (this.keys.hurt && Phaser.Input.Keyboard.JustDown(this.keys.hurt)) this.player.hurt(25);
     if (this.keys.respawn && Phaser.Input.Keyboard.JustDown(this.keys.respawn)) {
@@ -943,14 +1197,63 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Cycles the environment art without disturbing the run. Repaint and rebuild
+   * must land in the same tick: the old textures are dropped the moment the kit
+   * swaps, and the standing props still hold frames from them until `loadZone`
+   * tears them down.
+   */
+  private swapEnvArt(): void {
+    const wanted = nextEnvArt();
+    const foot = this.player.hitPoint();
+    repaintEnvironment(this, wanted);
+    this.loadZone(this.zone.id, { x: foot.x, y: foot.y });
+    if (envArt() !== wanted) {
+      GameBus.emit(GameEvent.Notice, 'Thiếu sheet Mana Seed — chạy `npm run env:manaseed`');
+      return;
+    }
+    const step = ENV_ART_ORDER.indexOf(wanted) + 1;
+    GameBus.emit(GameEvent.Notice, `Môi trường ${step}/${ENV_ART_ORDER.length} · ${envKit().label}`);
+  }
+
   private applyLobbyPick(): void {
-    if (this.lobbyApplied) return;
+    if (this.lobbyApplied || this.applyingAvatar) return;
+    void this.applyChosenAvatar();
+  }
+
+  /**
+   * Loads the avatar the lobby picked (or the live session profile): kit, level,
+   * xp, inventory, and last position. Re-runs every time the player leaves and
+   * re-enters so switching characters always brings the right save.
+   */
+  private async applyChosenAvatar(): Promise<void> {
+    if (this.applyingAvatar) return;
+    this.applyingAvatar = true;
     this.lobbyApplied = true;
-    const wanted = peekSession()?.profile.character ?? loadSavedJoin().character;
-    const index = ROSTER.indexOf(wanted);
-    if (index >= 0 && ROSTER[this.playerIndex] !== wanted) {
-      this.playerIndex = index;
-      this.replacePlayer(wanted);
+    try {
+      const id =
+        this.pendingAvatar?.id ??
+        peekSession()?.profile.id ??
+        localStorage.getItem('tmnd.pid') ??
+        this.avatarId;
+      const character =
+        (this.pendingAvatar?.character as PlayerId | undefined) ??
+        peekSession()?.profile.character ??
+        loadSavedJoin().character;
+
+      this.avatarId = id;
+
+      const index = ROSTER.indexOf(character as PlayerId);
+      if (index >= 0) {
+        this.playerIndex = index;
+        if (this.player.profile.id !== character) {
+          this.replacePlayer(character as PlayerId);
+        }
+      }
+
+      await this.restoreAvatar();
+    } finally {
+      this.applyingAvatar = false;
     }
   }
 
@@ -991,7 +1294,7 @@ export class WorldScene extends Phaser.Scene {
     this.bag = new Inventory(saved.inventory);
     const wanted = saved.character;
     const index = ROSTER.indexOf(wanted);
-    if (!this.lobbyApplied && index >= 0 && ROSTER[this.playerIndex] !== wanted) {
+    if (index >= 0 && ROSTER[this.playerIndex] !== wanted) {
       this.playerIndex = index;
       this.replacePlayer(wanted);
     }
@@ -1002,7 +1305,6 @@ export class WorldScene extends Phaser.Scene {
       this.placePlayer(saved.x, saved.y);
     }
     if (saved.spawn) this.spawn = saved.spawn;
-    this.discoverWarp(this.zone.id);
     this.applyGrowth(false);
     if (saved.hp != null && saved.hp > 0) {
       this.player.stats.hp = Math.min(saved.hp, this.player.stats.maxHp);
@@ -1024,13 +1326,21 @@ export class WorldScene extends Phaser.Scene {
     if (document.visibilityState === 'hidden') void this.persist(true);
   };
 
-  private persist(keepalive = false): Promise<void> {
+  private persist(keepalive = false, force = false): Promise<void> {
     if (!this.player) return Promise.resolve();
+    // While the lobby owns the screen, skip autosave so picking another avatar
+    // cannot write the previous run's level onto the newly selected id.
+    // Also skip while a load is in flight (progress may still be the old run).
+    if (!force && (isInputGated() || this.applyingAvatar)) return Promise.resolve();
     const foot = this.player.hitPoint();
     return saveAvatar(
       defaultAvatar({
         id: this.avatarId,
-        name: peekSession()?.profile.name ?? localStorage.getItem('tmnd.name') ?? 'Vô Danh',
+        name:
+          this.pendingAvatar?.name ??
+          peekSession()?.profile.name ??
+          localStorage.getItem('tmnd.name') ??
+          'Vô Danh',
         character: ROSTER[this.playerIndex],
         level: this.progress.level,
         xp: this.progress.xp,
@@ -1055,13 +1365,34 @@ export class WorldScene extends Phaser.Scene {
     if (payload.action === 'equip' && payload.index !== undefined) this.bag.equip(payload.index);
     if (payload.action === 'unequip' && payload.slot) this.bag.unequip(payload.slot);
     if (payload.action === 'use' && payload.index !== undefined) {
+      const chosen = itemOf(this.bag.bag[payload.index]);
+      if (chosen?.cultivationXp && this.progress.atCap) {
+        GameBus.emit(GameEvent.Notice, 'Đã đạt đỉnh Luyện Khí — hãy bán linh thạch');
+        return;
+      }
       const used = this.bag.use(payload.index);
+      const stats = this.player.stats;
       if (used?.restoreSp) {
-        this.player.stats.spiritualPower = Math.min(
-          this.player.stats.maxSpiritualPower,
-          this.player.stats.spiritualPower + used.restoreSp,
+        stats.spiritualPower = Math.min(
+          stats.maxSpiritualPower,
+          stats.spiritualPower + used.restoreSp,
         );
-        emitStats(this.player.stats);
+      }
+      // Herbs are for a fight in progress, so a corpse does not get to eat one.
+      if (used?.restoreHp && this.player.alive) {
+        stats.hp = Math.min(stats.maxHp, stats.hp + used.restoreHp);
+      }
+      if (used?.restoreSp || used?.restoreHp) emitStats(stats);
+      if (used?.cultivationXp) {
+        const foot = this.player.hitPoint();
+        this.grantXp(used.cultivationXp, foot.x, foot.y);
+        GameBus.emit(GameEvent.Notice, `Đã luyện hóa ${used.name} · +${used.cultivationXp} KN`);
+      }
+    }
+    if (payload.action === 'sell' && payload.index !== undefined) {
+      const sold = this.bag.sell(payload.index);
+      if (sold?.sellValue) {
+        GameBus.emit(GameEvent.Notice, `Đã bán ${sold.name} · +${sold.sellValue} tiền đồng`);
       }
     }
     this.applyGrowth(false);
@@ -1089,8 +1420,50 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
+  private tickMinimap(delta: number): void {
+    this.minimapTimer += delta;
+    if (this.minimapTimer < 200) return;
+    this.minimapTimer = 0;
+    if (!this.player) return;
+
+    GameBus.emit(GameEvent.Minimap, {
+      zoneId: this.zone.id,
+      zoneName: this.zone.name,
+      width: this.zone.width,
+      height: this.zone.height,
+      player: { x: this.player.sprite.x, y: this.player.footY() },
+      shrine: { x: this.zone.shrine.x, y: this.zone.shrine.y, label: 'Trụ hồi sinh' },
+      waypoint: {
+        x: this.zone.waypoint.x,
+        y: this.zone.waypoint.y,
+        label: 'Trụ dịch chuyển',
+      },
+      portals: this.zone.portals.map((portal) => ({
+        x: portal.x,
+        y: portal.y,
+        label: portal.label,
+      })),
+      boss: this.zone.boss
+        ? { x: this.zone.boss.x, y: this.zone.boss.y, label: 'Boss' }
+        : this.zone.arena
+          ? { x: this.zone.arena.x, y: this.zone.arena.y, label: this.zone.arena.label ?? 'Boss' }
+          : null,
+      peers: this.net
+        ? this.net.prey().map((peer) => ({
+            x: peer.position.x,
+            y: peer.position.y,
+          }))
+        : [],
+    });
+  }
+
   private selfId(): string {
     return peekSession()?.id ?? this.avatarId;
+  }
+
+  /** Who is landing the hit being resolved — a replaying peer, otherwise us. */
+  private actorId(): string {
+    return this.net?.remoteActor() ?? this.selfId();
   }
 
   private preyList(): Array<{
@@ -1150,6 +1523,7 @@ export class WorldScene extends Phaser.Scene {
 
   private tickWorld(delta: number): void {
     if (!this.hosting || !peekSession()) return;
+    this.flushHits(delta);
     this.worldTimer += delta;
     if (this.worldTimer < WORLD_SNAP_MS) return;
     this.worldTimer = 0;
@@ -1188,13 +1562,15 @@ export class WorldScene extends Phaser.Scene {
             y: Math.round(this.boss.y),
             hp: Math.max(0, Math.round(this.boss.stats.hp)),
             a: this.boss.alive ? 1 : 0,
+            w: this.boss.bossState === 'walk' ? 1 : 0,
+            f: this.boss.bossFacing,
           }
         : undefined,
       stones: this.stones.map((stone, i) => ({ i, hp: Math.max(0, Math.round(stone.hp)) })),
       loot: this.loot.map((pile) => ({
         id: pile.id,
         x: Math.round(pile.sprite.x),
-        y: Math.round(pile.sprite.y),
+        y: Math.round(pile.ground),
         items: pile.items,
       })),
     };
@@ -1207,7 +1583,14 @@ export class WorldScene extends Phaser.Scene {
       pack?.mob.syncFromHost(row.x, row.y, row.hp, row.a === 1);
     }
     if (this.boss && snap.boss) {
-      this.boss.syncFromHost(snap.boss.x, snap.boss.y, snap.boss.hp, snap.boss.a === 1);
+      this.boss.syncFromHost({
+        x: snap.boss.x,
+        y: snap.boss.y,
+        hp: snap.boss.hp,
+        alive: snap.boss.a === 1,
+        walking: snap.boss.w === 1,
+        facing: snap.boss.f,
+      });
     }
     for (const row of snap.stones) {
       const stone = this.stones[row.i];
@@ -1222,7 +1605,7 @@ export class WorldScene extends Phaser.Scene {
     const keep = new Set(snap.loot.map((row) => row.id));
     for (const pile of [...this.loot]) {
       if (keep.has(pile.id)) continue;
-      pile.sprite.destroy();
+      this.destroyPile(pile);
       this.loot = this.loot.filter((p) => p !== pile);
     }
     for (const row of snap.loot) this.dropLoot(row.x, row.y - 10, row.items, row.id);
@@ -1232,6 +1615,14 @@ export class WorldScene extends Phaser.Scene {
     if (!event?.kind) return;
     if (event.kind === 'snap') {
       this.applySnap(event.snap);
+      return;
+    }
+    if (event.kind === 'hit') {
+      if (!this.hosting) for (const row of event.rows) this.takeHit(row);
+      return;
+    }
+    if (event.kind === 'boss-act') {
+      if (!this.hosting) this.boss?.replicateAct(event.act, { x: event.ax, y: event.ay });
       return;
     }
     if (event.kind === 'hurt' && event.playerId === this.selfId()) {
@@ -1255,7 +1646,7 @@ export class WorldScene extends Phaser.Scene {
       if (!pile) return;
       const foot =
         event.playerId === this.selfId() ? this.player.hitPoint() : this.net.footOf(event.playerId);
-      if (foot && Phaser.Math.Distance.Between(foot.x, foot.y, pile.sprite.x, pile.sprite.y) > LOOT_RADIUS + 24) {
+      if (foot && Phaser.Math.Distance.Between(foot.x, foot.y, pile.sprite.x, pile.ground) > LOOT_RADIUS + 24) {
         return;
       }
       this.giveLoot(pile, event.playerId);
@@ -1263,56 +1654,97 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private onHostChanged(payload: { hostId?: string; host?: boolean }): void {
+    const was = this.hosting;
     this.hosting = payload.host ?? this.net.hosting;
+    if (this.hosting === was) return;
+    if (this.hosting) this.takeOverSim();
+    else this.hitEcho = [];
+  }
+
+  /** Freshly promoted: drop the old host's targets and drive the mobs ourselves. */
+  private takeOverSim(): void {
+    for (const pack of this.packs) pack.mob.releaseNet();
+    this.boss?.releaseNet();
   }
 
   private onAvatarChosen(payload: AvatarChosenPayload): void {
     if (!payload?.id) return;
+    this.pendingAvatar = payload;
     this.avatarId = payload.id;
-    const index = ROSTER.indexOf(payload.character as PlayerId);
-    if (index >= 0 && ROSTER[this.playerIndex] !== payload.character) {
-      this.playerIndex = index;
-      this.replacePlayer(payload.character as PlayerId);
-    }
-    void this.restoreAvatar();
+    this.lobbyApplied = false;
+    // Lobby is picking — wait until enter (ungate / NetSession) to load saves.
+    if (!isInputGated()) void this.applyChosenAvatar();
   }
 
   private onNetSession(session: WorldSession | null): void {
     if (!session) {
+      // Flush the run we just left (solo path may already be gated).
+      void this.persist(false, true);
       this.hosting = true;
+      this.lobbyApplied = false;
       return;
     }
+    this.pendingAvatar = {
+      id: session.profile.id,
+      character: session.profile.character,
+      name: session.profile.name,
+    };
     this.avatarId = session.profile.id;
     session.followZone(this.zone.id);
     this.hosting = session.isHost;
-    const id = session.profile.character;
-    if (this.player.profile.id !== id) {
-      const index = ROSTER.indexOf(id);
-      if (index >= 0) {
-        this.playerIndex = index;
-        this.replacePlayer(id);
-      }
-    }
-    void this.restoreAvatar();
+    this.lobbyApplied = false;
+    void this.applyChosenAvatar();
   }
 
   /* -------------------------------------------------------------- scenery */
 
-  private addProp(
-    texture: string,
-    x: number,
-    y: number,
-    boxWidth: number,
-    boxHeight: number,
-    boxOffsetY: number,
-  ): Phaser.Physics.Arcade.Sprite {
-    const sprite = this.props.create(x, y, texture) as Phaser.Physics.Arcade.Sprite;
-    sprite.setDepth(y);
-    const body = sprite.body as Phaser.Physics.Arcade.StaticBody;
-    body.setSize(boxWidth, boxHeight);
-    body.position.set(x - boxWidth / 2, y + boxOffsetY);
-    body.updateCenter();
+  private addProp(art: PropArt, x: number, y: number): Phaser.Physics.Arcade.Sprite {
+    const sprite = this.props.create(x, y, art.texture) as Phaser.Physics.Arcade.Sprite;
+    sprite.setOrigin(0.5, art.originY).setDepth(y);
+    const box = art.box;
+    if (box) {
+      const body = sprite.body as Phaser.Physics.Arcade.StaticBody;
+      body.setSize(box.width, box.height);
+      body.position.set(x - box.width / 2, y + box.offsetY);
+      body.updateCenter();
+    }
     return sprite;
+  }
+
+  /**
+   * Ground clutter for kits that ship decals. Seeded off the zone id so the
+   * layout is stable across repaints — otherwise comparing two magnifications
+   * would also be comparing two different forests.
+   */
+  private scatterDecals(kit: EnvKit): void {
+    const decals = kit.decals;
+    if (decals.length === 0) return;
+
+    const rng = new Phaser.Math.RandomDataGenerator([this.zone.id]);
+    const total = decals.reduce((sum, d) => sum + d.weight, 0);
+    const pick = () => {
+      let roll = rng.frac() * total;
+      for (const decal of decals) {
+        roll -= decal.weight;
+        if (roll <= 0) return decal;
+      }
+      return decals[decals.length - 1];
+    };
+
+    const clear = (x: number, y: number) => {
+      const { shrine, arena, portals } = this.zone;
+      if (Phaser.Math.Distance.Between(x, y, shrine.x, shrine.y) < 120) return false;
+      if (arena && Phaser.Math.Distance.Between(x, y, arena.x, arena.y) < arena.radius + 40) return false;
+      return portals.every((p) => Phaser.Math.Distance.Between(x, y, p.x, p.y) > 140);
+    };
+
+    const count = Math.round((this.zone.width * this.zone.height) / 26000);
+    for (let i = 0; i < count; i++) {
+      const x = Math.round(rng.between(40, this.zone.width - 40));
+      const y = Math.round(rng.between(40, this.zone.height - 40));
+      if (!clear(x, y)) continue;
+      this.decals.push(this.add.image(x, y, pick().texture).setOrigin(0.5, 1).setDepth(y - 1));
+    }
   }
 
   private stoneTarget(stone: TrainingStone): Damageable {
@@ -1323,7 +1755,7 @@ export class WorldScene extends Phaser.Scene {
       hitPoint: () => this.stoneCentre(stone),
       hitRadius: () => 0,
       applyHit: (hit: HitInfo) =>
-        this.damageStone(stone, hit.damage, hit.tint ?? 0xffffff, hit.frost ?? 0, hit.knockback ?? 0, hit.aim),
+        this.damageStone(stone, hit, hit.tint ?? 0xffffff, hit.frost ?? 0, hit.knockback ?? 0, hit.aim),
     };
   }
 
@@ -1383,6 +1815,7 @@ export class WorldScene extends Phaser.Scene {
 
   private castQiSlash(payload: SkillPayload): void {
     const hitAlready = new Set<Damageable>();
+    const by = this.actorId();
     let previous = { x: payload.x, y: payload.y };
     this.fx.qiCrescent({
       x: payload.x,
@@ -1398,17 +1831,18 @@ export class WorldScene extends Phaser.Scene {
           const spot = target.hitPoint();
           if (distanceToSegment(spot, previous, now) > QI_SLASH_RADIUS + target.hitRadius()) continue;
           hitAlready.add(target);
-          if (this.hosting) {
-            this.lastHit.set(target, this.net.actorId());
-            target.applyHit({
+          this.land(
+            target,
+            {
               damage: payload.damage,
               aim: payload.aim,
               frost: payload.frost ?? 0,
               knockback: 6,
               tint: 0x8fd4ff,
               side: 'player',
-            });
-          }
+            },
+            by,
+          );
         }
         previous = now;
       },
@@ -1425,6 +1859,7 @@ export class WorldScene extends Phaser.Scene {
       this.time.delayedCall(ICE_ARRAY_STAGGER * (i + 1), () => this.fx.iceEruption(x, y, 0.78, 0));
     }
     const caught = new Set<Damageable>();
+    const by = this.actorId();
     const waves = ICE_ARRAY_POINTS + 1;
     for (let wave = 0; wave < waves; wave++) {
       const radius =
@@ -1436,17 +1871,18 @@ export class WorldScene extends Phaser.Scene {
           const distance = Phaser.Math.Distance.Between(payload.x, payload.y, spot.x, spot.y);
           if (distance > radius + target.hitRadius()) continue;
           caught.add(target);
-          if (this.hosting) {
-            this.lastHit.set(target, this.net.actorId());
-            target.applyHit({
+          this.land(
+            target,
+            {
               damage: payload.damage,
               aim: payload.aim,
               frost: payload.frost ?? 0,
               knockback: 0,
               tint: 0x8fd4ff,
               side: 'player',
-            });
-          }
+            },
+            by,
+          );
         }
       };
       if (wave === 0) sweep();
@@ -1456,6 +1892,7 @@ export class WorldScene extends Phaser.Scene {
 
   private castMagmaSlash(payload: SkillPayload): void {
     const hitAlready = new Set<Damageable>();
+    const by = this.actorId();
     this.magmaFx.magmaCrescent({
       x: payload.x,
       y: payload.y,
@@ -1470,17 +1907,18 @@ export class WorldScene extends Phaser.Scene {
           if (Phaser.Math.Distance.Between(spot.x, spot.y, x, y) > MAGMA_SLASH_RADIUS + target.hitRadius()) continue;
           hitAlready.add(target);
           this.magmaFx.magmaBurst(spot.x, spot.y, 0.7);
-          if (this.hosting) {
-            this.lastHit.set(target, this.net.actorId());
-            target.applyHit({
+          this.land(
+            target,
+            {
               damage: payload.damage,
               aim: payload.aim,
               frost: 0,
               knockback: 8,
               tint: 0xff6a3a,
               side: 'player',
-            });
-          }
+            },
+            by,
+          );
         }
       },
     });
@@ -1500,6 +1938,7 @@ export class WorldScene extends Phaser.Scene {
       });
     }
     const caught = new Set<Damageable>();
+    const by = this.actorId();
     const waves = MAGMA_ARRAY_POINTS + 1;
     for (let wave = 0; wave < waves; wave++) {
       const radius =
@@ -1512,17 +1951,100 @@ export class WorldScene extends Phaser.Scene {
           if (distance > radius + target.hitRadius()) continue;
           caught.add(target);
           this.magmaFx.magmaBurst(spot.x, spot.y, 0.9);
-          if (this.hosting) {
-            this.lastHit.set(target, this.net.actorId());
-            target.applyHit({
+          this.land(
+            target,
+            {
               damage: payload.damage,
               aim: payload.aim,
               frost: 0,
               knockback: 0,
               tint: 0xff4a28,
               side: 'player',
-            });
+            },
+            by,
+          );
+        }
+      };
+      if (wave === 0) sweep();
+      else this.time.delayedCall(MAGMA_ARRAY_STAGGER * wave, sweep);
+    }
+  }
+
+  private castStarSlash(payload: SkillPayload): void {
+    const hitAlready = new Set<Damageable>();
+    const by = this.actorId();
+    this.starFx.starCrescent({
+      x: payload.x,
+      y: payload.y,
+      aim: payload.aim,
+      range: 380,
+      duration: 380,
+      lift: FX_LIFT,
+      onStep: (x, y) => {
+        for (const target of this.targets) {
+          if (!target.alive || hitAlready.has(target)) continue;
+          const spot = target.hitPoint();
+          if (Phaser.Math.Distance.Between(spot.x, spot.y, x, y) > MAGMA_SLASH_RADIUS + target.hitRadius()) {
+            continue;
           }
+          hitAlready.add(target);
+          this.starFx.starBurst(spot.x, spot.y, 0.7);
+          this.land(
+            target,
+            {
+              damage: payload.damage,
+              aim: payload.aim,
+              frost: 0,
+              knockback: 8,
+              tint: 0xc9a0ff,
+              side: 'player',
+            },
+            by,
+          );
+        }
+      },
+    });
+  }
+
+  private castStarArray(payload: SkillPayload): void {
+    this.starFx.starPillar(payload.x, payload.y, 1, 0.007);
+    this.starFx.starNova(payload.x, payload.y);
+    const base = Math.atan2(payload.aim.y, payload.aim.x);
+    for (let i = 0; i < MAGMA_ARRAY_POINTS; i++) {
+      const angle = base + (i / MAGMA_ARRAY_POINTS) * Math.PI * 2;
+      const x = payload.x + Math.cos(angle) * MAGMA_ARRAY_SPREAD;
+      const y = payload.y + Math.sin(angle) * MAGMA_ARRAY_SPREAD;
+      this.time.delayedCall(MAGMA_ARRAY_STAGGER * (i + 1), () => {
+        this.starFx.starPillar(x, y, 0.82, 0);
+        this.starFx.starBurst(x, y, 0.8);
+      });
+    }
+    const caught = new Set<Damageable>();
+    const by = this.actorId();
+    const waves = MAGMA_ARRAY_POINTS + 1;
+    for (let wave = 0; wave < waves; wave++) {
+      const radius =
+        MAGMA_ARRAY_CENTRE_RADIUS + ((MAGMA_ARRAY_REACH - MAGMA_ARRAY_CENTRE_RADIUS) * wave) / (waves - 1);
+      const sweep = () => {
+        for (const target of this.targets) {
+          if (!target.alive || caught.has(target)) continue;
+          const spot = target.hitPoint();
+          const distance = Phaser.Math.Distance.Between(payload.x, payload.y, spot.x, spot.y);
+          if (distance > radius + target.hitRadius()) continue;
+          caught.add(target);
+          this.starFx.starBurst(spot.x, spot.y, 0.9);
+          this.land(
+            target,
+            {
+              damage: payload.damage,
+              aim: payload.aim,
+              frost: 0,
+              knockback: 0,
+              tint: 0xb48cff,
+              side: 'player',
+            },
+            by,
+          );
         }
       };
       if (wave === 0) sweep();
@@ -1627,7 +2149,6 @@ export class WorldScene extends Phaser.Scene {
       x: origin.x + origin.aim.x * options.sweep,
       y: origin.y + origin.aim.y * options.sweep,
     };
-    if (!this.hosting) return;
     for (const target of this.targets) {
       if (!target.alive) continue;
       const spot = target.hitPoint();
@@ -1635,8 +2156,7 @@ export class WorldScene extends Phaser.Scene {
         ? distanceToSegment(spot, origin, end)
         : Phaser.Math.Distance.Between(origin.x, origin.y, spot.x, spot.y);
       if (distance > options.radius + target.hitRadius()) continue;
-      this.lastHit.set(target, this.net.actorId());
-      target.applyHit({
+      this.land(target, {
         damage: options.damage,
         aim: origin.aim,
         frost: options.frost,
@@ -1647,9 +2167,84 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /* ------------------------------------------------------------ authority */
+
+  /**
+   * Every player hit goes through here.
+   *
+   * The host owns the numbers and echoes them the same frame. A guest replays
+   * the identical hit locally so its swing lands when it was thrown instead of
+   * a round trip later, then takes the host's hp the moment the echo arrives —
+   * a mispredicted bar is corrected within a frame or two, and only the host
+   * ever decides that something died.
+   */
+  private land(target: Damageable, hit: HitInfo, actor?: string): void {
+    if (!target.alive) return;
+    // Sweeps and arrays land over several frames, long after the remote swing
+    // that started them stopped being the current actor, so casts pass it in.
+    const by = actor ?? this.actorId();
+    const before = this.hpOf(target);
+    if (this.hosting) this.lastHit.set(target, by);
+    target.applyHit(this.hosting ? hit : { ...hit, predicted: true });
+
+    const dealt = Math.round(before - this.hpOf(target));
+    if (dealt <= 0) return;
+    this.showDamage(target, dealt, hit.tint ?? 0xffffff, by);
+    if (this.hosting) this.echoHit(target, dealt, by);
+  }
+
+  private hpOf(target: Damageable): number {
+    if (target === this.boss) return this.boss?.stats.hp ?? 0;
+    return target instanceof Mob ? target.hp : 0;
+  }
+
+  private echoHit(target: Damageable, dealt: number, by: string): void {
+    if (!peekSession()) return;
+    if (target === this.boss && this.boss) {
+      this.hitEcho.push({ k: 'b', i: 0, d: dealt, hp: Math.round(this.boss.stats.hp), by });
+      return;
+    }
+    const pack = this.packs.find((p) => p.mob === target);
+    if (pack) {
+      this.hitEcho.push({ k: 'm', i: pack.index, d: dealt, hp: Math.round(pack.mob.hp), by });
+    }
+  }
+
+  /** Push landed damage out well ahead of the snapshot, batched to a fixed rate. */
+  private flushHits(delta: number): void {
+    this.hitTimer += delta;
+    if (this.hitTimer < HIT_ECHO_MS) return;
+    this.hitTimer = 0;
+    if (!this.hitEcho.length) return;
+    const rows = this.hitEcho;
+    this.hitEcho = [];
+    peekSession()?.publishWorld({ kind: 'hit', rows });
+  }
+
+  private takeHit(row: NetHitRow): void {
+    const target = row.k === 'b' ? this.boss : this.packs.find((p) => p.index === row.i)?.mob;
+    if (!target) return;
+    // The thrower already drew its own number when it predicted the swing.
+    if (row.by !== this.selfId()) this.showDamage(target, row.d, ALLY_DAMAGE_TINT, row.by);
+    target.setNetHp(row.hp);
+  }
+
+  /** Your own damage burns, an ally's reads cool, so a shared kill stays legible. */
+  private showDamage(target: Damageable, damage: number, tint: number, by: string): void {
+    const spot = target.hitPoint();
+    const mine = by === this.selfId();
+    this.floatingNumber(
+      spot.x + Phaser.Math.Between(-9, 9),
+      spot.y - (target === this.boss ? 150 : 46),
+      damage,
+      mine ? tint : ALLY_DAMAGE_TINT,
+      false,
+    );
+  }
+
   private damageStone(
     stone: TrainingStone,
-    rawDamage: number,
+    hit: HitInfo,
     tint: number,
     frost: number,
     knockback: number,
@@ -1657,8 +2252,8 @@ export class WorldScene extends Phaser.Scene {
   ): void {
     const now = this.time.now;
     const wasFrozen = stone.frost.frozen(now);
-    const damage = stone.frost.amplify(rawDamage, now);
-    stone.hp -= damage;
+    const damage = stone.frost.amplify(hit.damage, now);
+    stone.hp = Math.max(hit.predicted ? 1 : 0, stone.hp - damage);
     this.floatingNumber(stone.sprite.x, stone.sprite.y - 12, damage, wasFrozen ? 0x9fe8ff : tint, wasFrozen);
     if (frost > 0) {
       const result = stone.frost.add(frost, now);

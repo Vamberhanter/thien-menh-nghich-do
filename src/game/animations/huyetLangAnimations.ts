@@ -25,6 +25,8 @@ const huyetlangAtlas = remoteAtlas(
 );
 export const HUYET_LANG_ATLAS_URL = huyetlangAtlas.url;
 export const HUYET_LANG_ATLAS_PATH = huyetlangAtlas.path;
+export const HUYET_LANG_ATLAS_LOCAL_URL = huyetlangAtlas.localUrl;
+export const HUYET_LANG_ATLAS_LOCAL_PATH = huyetlangAtlas.localPath;
 
 /* ------------------------------------------------------------------- clips */
 

@@ -69,7 +69,7 @@ export const DEFAULT_HUYET_LANG_STATS: CharacterStats = {
   maxSpiritualPower: 18,
 };
 
-/** Miku of Ảo Âm Các. Agile striker with a deep spirit pool for three star arts. */
+/** Miku of Ảo Âm Các — agile, spirit-heavy, lighter hits than Huyết Lang. */
 export const DEFAULT_MIKU_STATS: CharacterStats = {
   maxHp: 96,
   hp: 96,

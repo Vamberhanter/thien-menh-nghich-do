@@ -10,6 +10,7 @@ const SETS = {
     'public/assets/characters/lamuyen',
     'public/assets/characters/nhuyen/atlas',
     'public/assets/characters/huyetlang/atlas',
+    'public/assets/characters/miku/atlas',
   ],
   boss: ['public/assets/boss/boss1/atlas'],
 };

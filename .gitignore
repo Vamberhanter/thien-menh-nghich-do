@@ -11,3 +11,14 @@ dist
 # Runtime sheets live on Supabase Storage (bucket game-assets).
 public/assets/characters/**/*.png
 public/assets/boss/**/*.png
+# Licensed tileset art, staged by `npm run env:manaseed`.
+public/assets/environment/**/*.png
+# Licensed monster art, staged by `npm run env:monsters`.
+public/assets/monsters/**/*.png
+# Licensed item art, staged by `npm run env:items`.
+public/assets/items/**/*.png
+# Licensed weapon art, staged by `npm run env:weapons` from the sheet below.
+public/assets/weapons/**/*.png
+/File.png
+# Generated from source-art/gameplay by `npm run env:resources`.
+public/assets/resources/**/*.png

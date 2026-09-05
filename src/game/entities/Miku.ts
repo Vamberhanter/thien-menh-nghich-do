@@ -26,14 +26,17 @@ import type {
 } from '../events';
 
 /**
- * Miku of Ảo Âm Các — starlight dancer.
+ * Miku of Ảo Âm Các — star-sword songstress.
  *
  * Geometry and combat both follow {@link NhuYen}: the sprite's (x, y) is the
- * point she stands on, because every atlas frame carries a pivot there, and each
- * action fires its damage on an animation frame rather than on a timer.
+ * point he stands on, because every atlas frame carries a pivot there, and each
+ * action fires its damage on an animation frame rather than on a timer. His
+ * frames vary in size far more than hers do — the overhead chop is 44px taller
+ * than a walk step — so the physics body has to be re-placed whenever the
+ * displayed frame changes; `syncBody` does that and `tick` notices.
  */
 
-/** Feet-level collision box, so she overlaps props above the waist. */
+/** Feet-level collision box, so he overlaps props above the waist. */
 const BODY_WIDTH = 28;
 const BODY_HEIGHT = 16;
 
@@ -150,6 +153,8 @@ export class Miku extends Phaser.Physics.Arcade.Sprite {
       this.playState('idle', this.idleClip(), true);
     }
 
+    // Frame sizes differ between clips, so the feet-relative body offset only
+    // holds until the displayed frame changes.
     if (this.frame.name !== this.syncedFrame) {
       this.syncedFrame = this.frame.name;
       this.syncBody();
@@ -357,10 +362,22 @@ export class Miku extends Phaser.Physics.Arcade.Sprite {
     return MikuClip.idle(this.facing);
   }
 
+  /**
+   * Where a hit lands: `reach` px ahead of his paws, on the ground plane — the
+   * same convention as Như Yên's, and for the same reason (screen Y encodes
+   * distance in this view, so ranges have to be resolved flat).
+   */
   private hitOrigin(reach: number): Vector2Like {
     return { x: this.x + this.aim.x * reach, y: this.y + this.aim.y * reach };
   }
 
+  /**
+   * Puts the collision box under his paws for the frame on display.
+   *
+   * Arcade places a body at `gameObject.position + offset - displayOrigin`, and
+   * the displayed origin comes from the frame's baked pivot. Adding it back
+   * means the box lands at (x - w/2, y - h) whatever size the frame is.
+   */
   private syncBody(): void {
     const body = this.body as Phaser.Physics.Arcade.Body | null;
     if (!body) return;
@@ -378,7 +395,10 @@ export class Miku extends Phaser.Physics.Arcade.Sprite {
     if (force || this.playedKey !== clip.key) {
       this.playedKey = clip.key;
       if (force && next !== 'attack' && next !== 'skill') this.pending = null;
-      this.play(clip.key, !force);
+      if (this.anims && this.scene.anims.exists(clip.key)) {
+        this.play(clip.key, !force);
+      }
+      // play() applies the first frame, so the body can be placed right away
       this.syncedFrame = this.frame.name;
       this.syncBody();
     }

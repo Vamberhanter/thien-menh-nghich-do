@@ -20,6 +20,9 @@ export function createGameConfig(parent: HTMLElement): Phaser.Types.Core.GameCon
     render: {
       antialias: false,
       roundPixels: true,
+      // Without this the WebGL buffer is empty by the time anything outside the
+      // render loop reads it, so dev screenshots come out blank.
+      preserveDrawingBuffer: import.meta.env.DEV,
     },
 
     scale: {

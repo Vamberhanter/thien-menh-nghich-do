@@ -20,6 +20,8 @@ export const NHU_YEN_TEXTURE = 'nhuyen';
 const nhuyenAtlas = remoteAtlas('characters/nhuyen/atlas/nhuyen.json', 'characters/nhuyen/atlas');
 export const NHU_YEN_ATLAS_URL = nhuyenAtlas.url;
 export const NHU_YEN_ATLAS_PATH = nhuyenAtlas.path;
+export const NHU_YEN_ATLAS_LOCAL_URL = nhuyenAtlas.localUrl;
+export const NHU_YEN_ATLAS_LOCAL_PATH = nhuyenAtlas.localPath;
 
 /* ------------------------------------------------------------------- clips */
 

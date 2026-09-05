@@ -5,6 +5,7 @@ import type {
   CooldownPayload,
   ComboStatePayload,
   DeathCountdownPayload,
+  MinimapPayload,
   ProgressionPayload,
   StatePayload,
   StatsPayload,
@@ -20,6 +21,7 @@ import { NHU_YEN_PROFILE } from '../game/entities/NhuYen';
 import { HUYET_LANG_PROFILE } from '../game/entities/HuyetLang';
 import { MIKU_PROFILE } from '../game/entities/Miku';
 import { CHARACTER_NAME } from '../net/types';
+import { isInputGated, returnToLobby } from '../net/bind';
 
 const STATE_LABEL: Record<CharacterState, string> = {
   idle: 'Tĩnh tọa',
@@ -32,7 +34,6 @@ const STATE_LABEL: Record<CharacterState, string> = {
   dead: 'Tử vong',
 };
 
-/** Keys the skill bar labels, in the same slot order each character exposes. */
 const SKILL_KEYS: Record<string, readonly string[]> = {
   [LAM_UYEN_PROFILE.id]: ['K'],
   [NHU_YEN_PROFILE.id]: ['K', 'L', 'Space'],
@@ -41,18 +42,18 @@ const SKILL_KEYS: Record<string, readonly string[]> = {
 };
 
 const HINTS: Record<string, string> = {
-  [LAM_UYEN_PROFILE.id]: `WASD di chuyển · J kiếm chiêu · K ${HU_VO_KIEM_KHI.name} · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch`,
+  [LAM_UYEN_PROFILE.id]: `WASD di chuyển · J kiếm chiêu · K ${HU_VO_KIEM_KHI.name} · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Esc menu · Q tại huyết mạch`,
   [NHU_YEN_PROFILE.id]:
-    'WASD di chuyển · Shift chạy · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
+    'WASD di chuyển · Shift chạy · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Esc menu · Q tại huyết mạch',
   [HUYET_LANG_PROFILE.id]:
-    'WASD di chuyển · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
+    'WASD di chuyển · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Esc menu · Q tại huyết mạch',
   [MIKU_PROFILE.id]:
-    'WASD di chuyển · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
+    'WASD di chuyển · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Esc menu · Q tại huyết mạch',
 };
 
 const SEGMENTS = 12;
+const MAP_SIZE = 148;
 
-/** Pixel bar drawn from N discrete blocks — no gradients, no smoothing. */
 function PixelBar({ value, max, variant }: { value: number; max: number; variant: 'hp' | 'sp' | 'xp' }) {
   const filled = max > 0 ? Math.round((value / max) * SEGMENTS) : 0;
   return (
@@ -64,14 +65,6 @@ function PixelBar({ value, max, variant }: { value: number; max: number; variant
   );
 }
 
-/**
- * Combo pips for Hàn Băng Tam Thức. `pending` is the step the next press would
- * play, so that many pips are already banked and the chain is open; 0 means the
- * chain is closed and the next press starts over.
- *
- * The pip count comes from the character, not from the combo event — see
- * `CharacterChangedPayload.comboSteps`.
- */
 function ComboPips({ steps, pending }: { steps: number; pending: number }) {
   if (steps <= 1) return null;
   return (
@@ -81,6 +74,72 @@ function ComboPips({ steps, pending }: { steps: number; pending: number }) {
         {Array.from({ length: steps }, (_, i) => (
           <span key={i} className={`combo__pip${i < pending ? ' is-lit' : ''}`} />
         ))}
+      </div>
+    </div>
+  );
+}
+
+function markStyle(x: number, y: number, width: number, height: number) {
+  return {
+    left: `${(x / width) * 100}%`,
+    top: `${(y / height) * 100}%`,
+  };
+}
+
+function Minimap({ map }: { map: MinimapPayload }) {
+  return (
+    <div className="minimap" style={{ width: MAP_SIZE, height: MAP_SIZE }}>
+      <div className="minimap__title">{map.zoneName}</div>
+      <div className="minimap__board">
+        <span
+          className="minimap__mark minimap__mark--shrine"
+          style={markStyle(map.shrine.x, map.shrine.y, map.width, map.height)}
+          title="Huyết mạch"
+        />
+        <span
+          className="minimap__mark minimap__mark--waypoint"
+          style={markStyle(map.waypoint.x, map.waypoint.y, map.width, map.height)}
+          title="Trụ dịch chuyển"
+        />
+        {map.portals.map((portal, i) => (
+          <span
+            key={`p-${i}`}
+            className="minimap__mark minimap__mark--portal"
+            style={markStyle(portal.x, portal.y, map.width, map.height)}
+            title={portal.label ?? 'Cổng'}
+          />
+        ))}
+        {map.boss ? (
+          <span
+            className="minimap__mark minimap__mark--boss"
+            style={markStyle(map.boss.x, map.boss.y, map.width, map.height)}
+            title={map.boss.label ?? 'Boss'}
+          />
+        ) : null}
+        {map.peers.map((peer, i) => (
+          <span
+            key={`e-${i}`}
+            className="minimap__mark minimap__mark--peer"
+            style={markStyle(peer.x, peer.y, map.width, map.height)}
+            title="Đồng đạo"
+          />
+        ))}
+        <span
+          className="minimap__mark minimap__mark--self"
+          style={markStyle(map.player.x, map.player.y, map.width, map.height)}
+          title="Bạn"
+        />
+      </div>
+      <div className="minimap__legend">
+        <span>
+          <i className="minimap__dot minimap__dot--self" /> bạn
+        </span>
+        <span>
+          <i className="minimap__dot minimap__dot--peer" /> đồng đạo
+        </span>
+        <span>
+          <i className="minimap__dot minimap__dot--shrine" /> huyết mạch
+        </span>
       </div>
     </div>
   );
@@ -109,6 +168,17 @@ export function GameUI() {
   const [zone, setZone] = useState('Ngoại môn luyện địa');
   const [loot, setLoot] = useState<string | null>(null);
   const [cloud, setCloud] = useState<PersistPayload | null>(null);
+  const [minimap, setMinimap] = useState<MinimapPayload | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [inGame, setInGame] = useState(() => !isInputGated());
+
+  const leave = () => {
+    if (leaving) return;
+    setLeaving(true);
+    setMenuOpen(false);
+    void returnToLobby().finally(() => setLeaving(false));
+  };
 
   useEffect(() => {
     const onStats = (payload: StatsPayload) => setStats(payload);
@@ -128,11 +198,6 @@ export function GameUI() {
     }) => {
       setNotice(reason === 'spirit' ? 'Linh lực không đủ' : `${name} chưa hồi`);
     };
-
-    GameBus.on(GameEvent.StatsChanged, onStats);
-    GameBus.on(GameEvent.StateChanged, onState);
-    GameBus.on(GameEvent.ComboChanged, onCombo);
-    GameBus.on(GameEvent.CharacterChanged, onCharacter);
     const onNotice = (text: string) => {
       if (typeof text === 'string') setNotice(text);
     };
@@ -140,7 +205,21 @@ export function GameUI() {
     const onLoot = ({ label }: { label: string | null }) => setLoot(label);
     const onCool = (payload: CooldownPayload) => setCooldowns(payload.skills);
     const onZone = (payload: ZonePayload) => setZone(payload.name);
+    const onMinimap = (payload: MinimapPayload) => {
+      if (payload?.width) setMinimap(payload);
+    };
+    const onSession = () => {
+      setInGame(!isInputGated());
+      if (isInputGated()) {
+        setMenuOpen(false);
+        setMinimap(null);
+      }
+    };
 
+    GameBus.on(GameEvent.StatsChanged, onStats);
+    GameBus.on(GameEvent.StateChanged, onState);
+    GameBus.on(GameEvent.ComboChanged, onCombo);
+    GameBus.on(GameEvent.CharacterChanged, onCharacter);
     GameBus.on(GameEvent.SkillRejected, onSkillRejected);
     GameBus.on(GameEvent.NetRoster, setRoster);
     GameBus.on(GameEvent.Cooldowns, onCool);
@@ -150,6 +229,8 @@ export function GameUI() {
     GameBus.on(GameEvent.LootPrompt, onLoot);
     GameBus.on(GameEvent.Notice, onNotice);
     GameBus.on(GameEvent.Persist, setCloud);
+    GameBus.on(GameEvent.Minimap, onMinimap);
+    GameBus.on(GameEvent.NetSession, onSession);
     return () => {
       GameBus.off(GameEvent.StatsChanged, onStats);
       GameBus.off(GameEvent.StateChanged, onState);
@@ -164,6 +245,8 @@ export function GameUI() {
       GameBus.off(GameEvent.LootPrompt, onLoot);
       GameBus.off(GameEvent.Notice, onNotice);
       GameBus.off(GameEvent.Persist, setCloud);
+      GameBus.off(GameEvent.Minimap, onMinimap);
+      GameBus.off(GameEvent.NetSession, onSession);
     };
   }, []);
 
@@ -173,7 +256,30 @@ export function GameUI() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (isInputGated()) return;
+      if (event.code !== 'Escape') return;
+      event.preventDefault();
+      setMenuOpen((open) => !open);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Solo play never emits NetSession — sync when lobby closes via input gate.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const playing = !isInputGated();
+      setInGame((current) => (current === playing ? current : playing));
+      if (!playing) setMenuOpen(false);
+    }, 400);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const keys = SKILL_KEYS[character.id] ?? [];
+
+  if (!inGame) return null;
 
   return (
     <div className="hud">
@@ -209,6 +315,32 @@ export function GameUI() {
         )}
       </div>
 
+      <div className="hud__top-right">
+        {roster && roster.world ? (
+          <div className="hud__roster">
+            <div className="hud__roster-title">
+              {roster.world} · {roster.nearby.length + 1} tu tiên
+              {roster.host === true ? ' · chủ ô' : roster.host === false ? ' · đồng bộ' : ''}
+            </div>
+            <div className="hud__roster-row is-self">{roster.selfName} · bạn</div>
+            {roster.nearby.map((peer) => (
+              <div className="hud__roster-row" key={peer.id}>
+                {peer.name}
+                <span>{CHARACTER_NAME[peer.character] ?? peer.character}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          className={`hud__menu-btn${menuOpen ? ' is-on' : ''}`}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          Menu
+        </button>
+      </div>
+
       <div className="hud__skills hud__skills--keys">
         {character.skills.map((skill, i) => (
           <div className="skill" key={skill}>
@@ -221,6 +353,8 @@ export function GameUI() {
         ))}
       </div>
 
+      {minimap ? <Minimap map={minimap} /> : null}
+
       {notice && <div className="hud__notice">{notice}</div>}
       {loot && <div className="hud__loot">{loot}</div>}
       {death !== null && (
@@ -230,21 +364,45 @@ export function GameUI() {
         </div>
       )}
 
-      {roster && roster.world && (
-        <div className="hud__roster">
-          <div className="hud__roster-title">
-            {roster.world} · {roster.nearby.length + 1} tu tiên
-            {roster.host === true ? ' · chủ ô' : roster.host === false ? ' · đồng bộ' : ''}
+      {menuOpen ? (
+        <div className="game-menu">
+          <div className="game-menu__panel">
+            <div className="game-menu__title">Menu</div>
+            <button type="button" className="game-menu__btn" onClick={() => setMenuOpen(false)}>
+              Tiếp tục
+            </button>
+            <button
+              type="button"
+              className="game-menu__btn"
+              onClick={() => {
+                setMenuOpen(false);
+                GameBus.emit(GameEvent.InventoryToggle);
+              }}
+            >
+              Túi đồ
+            </button>
+            <button
+              type="button"
+              className="game-menu__btn"
+              onClick={() => {
+                setMenuOpen(false);
+                GameBus.emit(GameEvent.WarpCommand, { action: 'toggle' });
+              }}
+            >
+              Dịch chuyển
+            </button>
+            <button
+              type="button"
+              className="game-menu__btn game-menu__btn--danger"
+              onClick={leave}
+              disabled={leaving}
+            >
+              {leaving ? 'Đang rời…' : 'Rời phòng'}
+            </button>
+            <div className="game-menu__hint">Esc để đóng</div>
           </div>
-          <div className="hud__roster-row is-self">{roster.selfName} · bạn</div>
-          {roster.nearby.map((peer) => (
-            <div className="hud__roster-row" key={peer.id}>
-              {peer.name}
-              <span>{CHARACTER_NAME[peer.character] ?? peer.character}</span>
-            </div>
-          ))}
         </div>
-      )}
+      ) : null}
 
       <div className="hud__hint">{HINTS[character.id] ?? ''}</div>
     </div>

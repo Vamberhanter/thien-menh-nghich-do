@@ -10,6 +10,7 @@ import { directionFromVector } from '../types';
 import type { Direction, Vector2Like } from '../types';
 import type { AiActor } from '../systems/EnemyAI';
 import type { Damageable, HitInfo } from '../systems/Damageable';
+import { SNAP_LERP_MS, SNAP_TELEPORT_PX } from '../../net/types';
 
 /** Footprint: a box at the boss's feet, like the players'. */
 const BODY_WIDTH = 40;
@@ -40,6 +41,8 @@ export interface BossStrike {
 
 export interface Boss1Hooks {
   onStrike(strike: BossStrike): void;
+  /** An action just started. The host puts this on the wire so guests replay it. */
+  onAct?(action: BossActionSpec['id'], aim: Vector2Like): void;
   onDeath?(boss: Boss1): void;
 }
 
@@ -98,14 +101,24 @@ export interface BossStats {
 }
 
 export const BOSS1_STATS: BossStats = {
-  maxHp: 620,
-  hp: 620,
+  maxHp: 1860,
+  hp: 1860,
   attack: 16,
   defense: 6,
   speed: 92,
 };
 
 type BossState = 'idle' | 'walk' | 'attack' | 'skill' | 'hurt' | 'dead';
+
+/** What a guest needs to draw the host's boss. */
+export interface BossSync {
+  x: number;
+  y: number;
+  hp: number;
+  alive: boolean;
+  walking: boolean;
+  facing?: Direction;
+}
 
 interface PendingStrike {
   frame: number;
@@ -136,6 +149,7 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
   private now = 0;
   private nextFlinchAt = 0;
   private bar: Phaser.GameObjects.Graphics;
+  private netTarget: Vector2Like | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -187,6 +201,10 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
     return this.currentState;
   }
 
+  get bossFacing(): Direction {
+    return this.facing;
+  }
+
   /* -------------------------------------------------------- AiActor: write */
 
   move(direction: Vector2Like, speedScale = 1): void {
@@ -231,9 +249,25 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
     const action = BOSS1_ACTIONS[actionId as BossActionSpec['id']];
     if (!action || !this.ready(actionId)) return false;
 
+    this.readyAt.set(actionId, this.now + action.cooldown);
+    this.startAction(action, aim);
+    this.hooks.onAct?.(action.id, aim);
+    return true;
+  }
+
+  /**
+   * Guest replica: run the action the host just started. The clip and the
+   * queued strike are the real ones, so the crescent and the bolt leave the
+   * boss on the same frame everywhere — only the damage stays with the host.
+   */
+  replicateAct(id: BossActionSpec['id'], aim: Vector2Like): void {
+    const action = BOSS1_ACTIONS[id];
+    if (action && this.alive) this.startAction(action, aim);
+  }
+
+  private startAction(action: BossActionSpec, aim: Vector2Like): void {
     this.face(aim);
     this.setVelocity(0, 0);
-    this.readyAt.set(actionId, this.now + action.cooldown);
 
     const clip =
       action.id === 'melee'
@@ -244,7 +278,6 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
 
     this.playState(action.id === 'melee' ? 'attack' : 'skill', clip, true);
     this.pending = { frame: impactFrameOf(clip), action, aim: { ...aim } };
-    return true;
   }
 
   /* ------------------------------------------------------------ Damageable */
@@ -262,7 +295,7 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
     if (hit.side !== 'player' || !this.alive) return;
 
     const damage = Math.max(1, Math.round(hit.damage - this.stats.defense));
-    this.stats.hp = Math.max(0, this.stats.hp - damage);
+    this.stats.hp = Math.max(hit.predicted ? 1 : 0, this.stats.hp - damage);
 
     if (this.stats.hp <= 0) {
       this.die();
@@ -290,8 +323,9 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
 
   /* ---------------------------------------------------------------- update */
 
-  tick(time: number, _delta: number): void {
+  tick(time: number, delta: number): void {
     this.now = time;
+    this.glide(delta);
 
     // Frame boxes differ per clip, so the feet-relative body offset only holds
     // until the displayed frame changes.
@@ -323,18 +357,47 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
   }
 
   /** Guest replica: match the host without firing loot/XP hooks. */
-  syncFromHost(x: number, y: number, hp: number, alive: boolean): void {
-    this.setPosition(x, y);
-    this.stats.hp = Math.max(0, hp);
-    if (!alive && this.currentState !== 'dead') {
-      this.setVelocity(0, 0);
-      this.clearTint();
-      this.pending = null;
-      this.playState('dead', Boss1Clip.death(), true);
-      this.bar.clear();
-      const body = this.body as Phaser.Physics.Arcade.Body | null;
-      if (body) body.enable = false;
+  /**
+   * Guest replica: glide onto the host's boss and mirror whether it is walking.
+   * Actions are left alone — `replicateAct` owns those, and a snapshot arriving
+   * mid-swing must not cut the clip short.
+   */
+  syncFromHost(sync: BossSync): void {
+    if (Phaser.Math.Distance.Between(this.x, this.y, sync.x, sync.y) > SNAP_TELEPORT_PX) {
+      this.setPosition(sync.x, sync.y);
     }
+    this.netTarget = { x: sync.x, y: sync.y };
+    this.stats.hp = Math.max(0, sync.hp);
+
+    if (!sync.alive) {
+      if (this.currentState !== 'dead') this.die();
+      return;
+    }
+    if (sync.facing) this.facing = sync.facing;
+    if (this.busy) return;
+    if (sync.walking) this.playState('walk', Boss1Clip.walk(this.facing));
+    else this.playState('idle', Boss1Clip.idle());
+  }
+
+  /** Host's word on the boss's hp, ahead of the next snapshot. */
+  setNetHp(hp: number): void {
+    this.stats.hp = Math.max(0, hp);
+    if (this.stats.hp <= 0) this.die();
+  }
+
+  /** Promoted to host: stop chasing the old host and start simulating. */
+  releaseNet(): void {
+    this.netTarget = null;
+  }
+
+  private glide(delta: number): void {
+    const target = this.netTarget;
+    if (!target) return;
+    const t = Math.min(1, delta / SNAP_LERP_MS);
+    this.setPosition(
+      Phaser.Math.Linear(this.x, target.x, t),
+      Phaser.Math.Linear(this.y, target.y, t),
+    );
   }
 
   die(): void {

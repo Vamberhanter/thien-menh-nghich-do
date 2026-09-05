@@ -4,11 +4,21 @@ import { aimAngle } from '../types';
 import type { Vector2Like } from '../types';
 
 /**
- * Spawns Miku's starlight effects. Like Như Yên's, every effect here is a
- * real frame off her own strips rather than a tint or a particle blob:
+ * Spawns Miku's star effects. Like Như Yên's, every effect here is a
+ * real frame off his own strips rather than a tint or a particle blob:
  *
  *   crescent  the free-standing star arc — Tinh Mang Trảm
- *   star      the two-frame star eruption — Tinh Không Trận
+ *   pillar    the two-frame star eruption — Tinh Không Trận
+ *
+ * Ranges, timings and scales are deliberately hers: the two characters share a
+ * world, so a skill that reads bigger should hit harder, not just look louder.
+ * What differs is the character of it — three overlapping crescents for three
+ * heads, and sparks scattered along everything he does.
+ *
+ * The effect frames carry their own pivots (the crescent hangs off its centre
+ * so it can be rotated to any heading, the pillars off the base of their star
+ * ring), so nothing here sets an origin: `y` is simply where the star meets
+ * the ground.
  */
 
 export interface ProjectileOptions {
@@ -27,7 +37,7 @@ export interface ProjectileOptions {
   onStep?: (x: number, y: number) => void;
 }
 
-/** Three star trails, fanned a few degrees off the aim. */
+/** The three heads, fanned a few degrees off the aim. */
 const FAN = [
   { spread: -0.24, scale: 0.62, delay: 0 },
   { spread: 0, scale: 0.74, delay: 36 },
@@ -37,7 +47,11 @@ const FAN = [
 export class MikuEffects {
   constructor(private readonly scene: Phaser.Scene) {}
 
-  /** Tinh Mang Trảm. Three crescents growing as they fly. */
+  /**
+   * Tinh Mang Trảm. Three crescents, one per head, growing as they fly the way
+   * Băng Phách Trảm's does. Only the middle one is tracked for damage — the
+   * scene is told about its path — so the fan is presentation, not reach.
+   */
   starCrescent(options: ProjectileOptions): void {
     const heading = Math.atan2(options.aim.y, options.aim.x);
 
@@ -59,7 +73,10 @@ export class MikuEffects {
     }
   }
 
-  /** One Tinh Không Trận pillar, dropped on a ground point. */
+  /**
+   * One Tinh Không Trận pillar, dropped on a ground point. The frame is anchored
+   * at the base of its ring, so `y` is where the star breaks the ground.
+   */
   starPillar(x: number, y: number, scale = 1, shake = 0.006): void {
     this.glitter(x, y, scale * 0.7);
     const sprite = this.scene.add
@@ -68,6 +85,7 @@ export class MikuEffects {
       .setScale(scale * 0.7)
       .setAlpha(0);
 
+    // a quick bloom in, so the pillar reads as bursting out of the ground
     this.scene.tweens.add({
       targets: sprite,
       alpha: 1,
@@ -89,7 +107,7 @@ export class MikuEffects {
     if (shake > 0) this.scene.cameras.main.shake(180, shake);
   }
 
-  /** A small burst of starlight — one glitter stack landing. */
+  /** A small burst of star — one Starlight stack landing. */
   starBurst(x: number, y: number, scale = 0.45): void {
     const sprite = this.scene.add
       .sprite(x, y, MIKU_TEXTURE, MIKU_FX.crescent)
@@ -114,9 +132,10 @@ export class MikuEffects {
     const ring = this.scene.add
       .sprite(x, y, MIKU_TEXTURE, MIKU_FX.star)
       .setDepth(y + 251)
+      // flattened into a shockwave; the base pivot keeps it on the ground
       .setScale(0.35, 0.16)
       .setAlpha(0.85)
-      .setTint(0xc9a0ff);
+      .setTint(0xd8b4ff);
     this.scene.tweens.add({
       targets: ring,
       scaleX: 1.5,
@@ -127,7 +146,11 @@ export class MikuEffects {
     });
   }
 
-  /** Ảo Ảnh Bộ's trail — afterimages tinted violet with sparks dropping behind. */
+  /**
+   * Ảo Ảnh Bộ's trail. Each afterimage is a snapshot of whatever frame the
+   * sprite was on, tinted to the star running through his plate, with sparks
+   * dropping behind so the lunge reads as heat rather than as mist.
+   */
   shadowTrail(source: Phaser.GameObjects.Sprite, count: number, spacingMs: number): void {
     for (let i = 0; i < count; i++) {
       this.scene.time.delayedCall(i * spacingMs, () => {
@@ -188,7 +211,7 @@ export class MikuEffects {
     });
   }
 
-  /** Glittered ground under a strike: the star art, flattened and faded out. */
+  /** Starlighted ground under a strike: the pillar art, flattened and faded out. */
   private glitter(x: number, y: number, scale: number): void {
     const mark = this.scene.add
       .sprite(x, y, MIKU_TEXTURE, MIKU_FX.star)
@@ -207,12 +230,12 @@ export class MikuEffects {
     });
   }
 
-  /** Sparks thrown off anything bright. Plain rectangles: they are 2-3px on screen. */
+  /** Sparks thrown off anything hot. Plain rectangles: they are 2-3px on screen. */
   private sparks(x: number, y: number, count: number): void {
     for (let i = 0; i < count; i++) {
       const size = i % 3 === 0 ? 3 : 2;
       const spark = this.scene.add
-        .rectangle(x, y, size, size, i % 2 === 0 ? 0xfff0ff : 0xb48cff)
+        .rectangle(x, y, size, size, i % 2 === 0 ? 0xfff0ff : 0xc9a0ff)
         .setDepth(y + 252)
         .setAlpha(0.95);
       this.scene.tweens.add({
