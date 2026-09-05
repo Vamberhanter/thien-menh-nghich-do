@@ -154,6 +154,9 @@ export function TouchPad() {
             <button type="button" className={`pad__util${loot ? ' is-hot' : ''}`} onPointerDown={tap('pick')}>
               Nhặt
             </button>
+            <button type="button" className="pad__util" onPointerDown={tap('envArt')}>
+              Cảnh
+            </button>
 
             <button type="button" className="pad__atk" onPointerDown={tap('attack')}>
               Đánh

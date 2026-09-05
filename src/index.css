@@ -935,6 +935,11 @@ html.is-touch .warp {
   bottom: 62px;
 }
 
+.pad__util:nth-child(3) {
+  right: 188px;
+  bottom: 116px;
+}
+
 .pad__util.is-hot {
   border-color: #ffe9a8;
   color: #ffe9a8;

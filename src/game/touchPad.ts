@@ -1,6 +1,13 @@
 /** Shared virtual stick — React writes, Phaser controllers read. */
 
-export type PadAction = 'attack' | 'skill0' | 'skill1' | 'skill2' | 'bag' | 'pick';
+export type PadAction =
+  | 'attack'
+  | 'skill0'
+  | 'skill1'
+  | 'skill2'
+  | 'bag'
+  | 'pick'
+  | 'envArt';
 
 interface PadMove {
   x: number;

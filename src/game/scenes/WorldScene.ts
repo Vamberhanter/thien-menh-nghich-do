@@ -1180,7 +1180,7 @@ export class WorldScene extends Phaser.Scene {
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.pick) || consumePad('pick')) this.pickLoot();
     if (Phaser.Input.Keyboard.JustDown(this.keys.warp)) this.toggleWarp();
-    if (Phaser.Input.Keyboard.JustDown(this.keys.envArt)) this.swapEnvArt();
+    if (Phaser.Input.Keyboard.JustDown(this.keys.envArt) || consumePad('envArt')) this.swapEnvArt();
     if (Phaser.Input.Keyboard.JustDown(this.keys.swap)) this.trySwap();
     if (this.keys.hurt && Phaser.Input.Keyboard.JustDown(this.keys.hurt)) this.player.hurt(25);
     if (this.keys.respawn && Phaser.Input.Keyboard.JustDown(this.keys.respawn)) {
