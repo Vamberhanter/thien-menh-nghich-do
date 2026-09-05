@@ -104,6 +104,40 @@ export const HuyetLangSlot = {
   ShadowStep: 2,
 } as const;
 
+export const TINH_MANG_TRAM: SkillDefinition = {
+  name: 'Tinh Mang Trảm',
+  damageMultiplier: 2.2,
+  cooldown: 1600,
+  spiritCost: 6,
+};
+
+export const TINH_KHONG_TRAN: SkillDefinition = {
+  name: 'Tinh Không Trận',
+  damageMultiplier: 3.4,
+  cooldown: 5200,
+  spiritCost: 12,
+  recovery: 560,
+};
+
+export const AO_ANH_BO: SkillDefinition = {
+  name: 'Ảo Ảnh Bộ',
+  damageMultiplier: 0,
+  cooldown: 900,
+  spiritCost: 4,
+};
+
+export const MIKU_SKILLS: readonly SkillDefinition[] = [
+  TINH_MANG_TRAM,
+  TINH_KHONG_TRAN,
+  AO_ANH_BO,
+];
+
+export const MikuSlot = {
+  StarSlash: 0,
+  StarArray: 1,
+  ShadowStep: 2,
+} as const;
+
 export const ATTACK_COOLDOWN = 500;
 
 /** Spirit power regenerated per second while not casting. */

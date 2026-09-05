@@ -69,6 +69,17 @@ export const DEFAULT_HUYET_LANG_STATS: CharacterStats = {
   maxSpiritualPower: 18,
 };
 
+/** Miku of Ảo Âm Các. Agile striker with a deep spirit pool for three star arts. */
+export const DEFAULT_MIKU_STATS: CharacterStats = {
+  maxHp: 96,
+  hp: 96,
+  attack: 14,
+  defense: 5,
+  speed: 140,
+  spiritualPower: 28,
+  maxSpiritualPower: 28,
+};
+
 /** Unit vector for each facing, used for hitboxes and skill direction. */
 export const DIRECTION_VECTORS: Record<Direction, Vector2Like> = {
   down: { x: 0, y: 1 },

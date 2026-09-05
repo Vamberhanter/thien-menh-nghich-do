@@ -118,3 +118,10 @@ export const TAM_THU_LIET_CHAM: readonly ComboStep[] = [
   { damageMultiplier: 1.35, frost: 0, reach: 90, radius: 72, knockback: 10 },
   { damageMultiplier: 2.1, frost: 0, reach: 110, radius: 82, knockback: 22 },
 ];
+
+/** Tinh Ca Tam Liên — Miku's three-hit chain. Light and fast, no Frost. */
+export const TINH_CA_TAM_LIEN: readonly ComboStep[] = [
+  { damageMultiplier: 0.95, frost: 0, reach: 78, radius: 70, knockback: 4 },
+  { damageMultiplier: 1.2, frost: 0, reach: 96, radius: 76, knockback: 8 },
+  { damageMultiplier: 1.9, frost: 0, reach: 118, radius: 86, knockback: 16 },
+];

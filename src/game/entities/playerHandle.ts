@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { FEET_OFFSET_Y, LinYuan } from './LinYuan';
 import { HUYET_LANG_PROFILE, HuyetLang } from './HuyetLang';
+import { MIKU_PROFILE, Miku } from './Miku';
 import { NHU_YEN_PROFILE, NhuYen } from './NhuYen';
 import { CharacterController } from '../systems/CharacterController';
 import { HuyetLangController } from '../systems/HuyetLangController';
+import { MikuController } from '../systems/MikuController';
 import { NhuYenController } from '../systems/NhuYenController';
 import { HU_VO_KIEM_KHI } from '../systems/CombatSystem';
 import type { CharacterChangedPayload } from '../events';
@@ -143,6 +145,36 @@ export function createHuyetLang(
   });
 }
 
+export function createMiku(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  stats?: Partial<CharacterStats>,
+): PlayerHandle {
+  const sprite = new Miku(scene, x, y, stats);
+  const controller = new MikuController(scene, sprite);
+  return wrapPlayer({ ...MIKU_PROFILE }, sprite, controller, {
+    footY: () => sprite.y,
+    hitPoint: () => ({ x: sprite.x, y: sprite.y }),
+    invulnerable: () => sprite.isInvulnerable,
+    snapshot: () => {
+      const pending = sprite.combo.pending;
+      const atk = pending === 0 ? sprite.combo.length - 1 : pending - 1;
+      return {
+        character: 'miku',
+        x: sprite.x,
+        y: sprite.y,
+        facing: sprite.facingDirection,
+        aim: sprite.aimVector,
+        state: sprite.characterState,
+        hp: sprite.stats.hp,
+        atk,
+        zone: currentZone(),
+      };
+    },
+  });
+}
+
 interface LivingSprite extends Phaser.Physics.Arcade.Sprite {
   readonly stats: CharacterStats;
   readonly combat: CombatSystem;
@@ -211,6 +243,7 @@ export const PLAYER_FACTORIES = {
   lamuyen: createLamUyen,
   nhuyen: createNhuYen,
   huyetlang: createHuyetLang,
+  miku: createMiku,
 } as const;
 
 export type PlayerId = keyof typeof PLAYER_FACTORIES;

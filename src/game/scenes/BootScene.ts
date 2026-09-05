@@ -15,6 +15,11 @@ import {
   HUYET_LANG_TEXTURE,
 } from '../animations/huyetLangAnimations';
 import {
+  MIKU_ATLAS_PATH,
+  MIKU_ATLAS_URL,
+  MIKU_TEXTURE,
+} from '../animations/mikuAnimations';
+import {
   BOSS1_ATLAS_PATH,
   BOSS1_ATLAS_URL,
   BOSS1_TEXTURE,
@@ -52,6 +57,7 @@ export class BootScene extends Phaser.Scene {
     this.load.multiatlas(LIN_YUAN_TEXTURE, LIN_YUAN_ATLAS_URL, LIN_YUAN_ATLAS_PATH);
     this.load.multiatlas(NHU_YEN_TEXTURE, NHU_YEN_ATLAS_URL, NHU_YEN_ATLAS_PATH);
     this.load.multiatlas(HUYET_LANG_TEXTURE, HUYET_LANG_ATLAS_URL, HUYET_LANG_ATLAS_PATH);
+    this.load.multiatlas(MIKU_TEXTURE, MIKU_ATLAS_URL, MIKU_ATLAS_PATH);
     this.load.multiatlas(BOSS1_TEXTURE, BOSS1_ATLAS_URL, BOSS1_ATLAS_PATH);
 
     const width = this.scale.width;
@@ -76,6 +82,7 @@ export class BootScene extends Phaser.Scene {
     this.textures.get(LIN_YUAN_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.textures.get(NHU_YEN_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.textures.get(HUYET_LANG_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
+    this.textures.get(MIKU_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.textures.get(BOSS1_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
 
     this.bakeGrass();

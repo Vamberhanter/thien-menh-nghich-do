@@ -1,5 +1,5 @@
 import type { CharacterStats } from '../types';
-import { DEFAULT_LIN_YUAN_STATS, DEFAULT_NHU_YEN_STATS, DEFAULT_HUYET_LANG_STATS } from '../types';
+import { DEFAULT_LIN_YUAN_STATS, DEFAULT_NHU_YEN_STATS, DEFAULT_HUYET_LANG_STATS, DEFAULT_MIKU_STATS } from '../types';
 import type { PlayerId } from '../entities/playerHandle';
 
 /** Slice cap: Luyện Khí 9. Trúc Cơ is named but locked. */
@@ -74,14 +74,18 @@ export class Progression {
         ? DEFAULT_LIN_YUAN_STATS
         : character === 'huyetlang'
           ? DEFAULT_HUYET_LANG_STATS
-          : DEFAULT_NHU_YEN_STATS;
+          : character === 'miku'
+            ? DEFAULT_MIKU_STATS
+            : DEFAULT_NHU_YEN_STATS;
     const ranks = this.level - 1;
     const atk =
       character === 'nhuyen'
         ? Math.floor(ranks * 1.6)
         : character === 'huyetlang'
           ? Math.floor(ranks * 2.2)
-          : ranks * 2;
+          : character === 'miku'
+            ? Math.floor(ranks * 1.8)
+            : ranks * 2;
     return {
       maxHp: base.maxHp + ranks * 8 + (gear.maxHp ?? 0),
       hp: base.hp + ranks * 8 + (gear.maxHp ?? 0),

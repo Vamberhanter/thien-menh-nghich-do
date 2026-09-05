@@ -9,12 +9,14 @@ const KITS: Array<{ id: NetCharacter; name: string; sect: string }> = [
   { id: 'nhuyen', name: 'Như Yên', sect: 'Băng Cung' },
   { id: 'lamuyen', name: 'Lâm Uyên', sect: 'Hư Vô Kiếm' },
   { id: 'huyetlang', name: 'Huyết Lang', sect: 'Tam Thủ Môn' },
+  { id: 'miku', name: 'Miku', sect: 'Ảo Âm Các' },
 ];
 
 const SECT: Record<NetCharacter, string> = {
   nhuyen: 'Băng Cung',
   lamuyen: 'Hư Vô Kiếm',
   huyetlang: 'Tam Thủ Môn',
+  miku: 'Ảo Âm Các',
 };
 
 /**

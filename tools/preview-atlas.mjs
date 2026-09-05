@@ -10,7 +10,7 @@
 //   * is anything clipped — art touching a cell edge has been cut off;
 //   * is the scale consistent — bodies should be the same height in every row;
 //   * do the feet agree — the ground line should sit under them in every frame.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, openSync, writeSync, closeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { decodePNG } from './png-decode.mjs';
 import { Surface } from './pixel.mjs';
@@ -138,7 +138,20 @@ function frame0(list) {
   return list[0].frame.sourceSize;
 }
 
-writeFileSync(outPath, encodePNG(canvas));
+writePreview(outPath, canvas);
 for (const line of report) console.log(line);
 console.log(`\n${outPath}  ${canvas.width}x${canvas.height}  (${clips.size} clips)`);
 console.log('green bar = art clears its box on all sides; red bar = something is clipped');
+
+function writePreview(path, surface) {
+  const buf = encodePNG(surface);
+  const CHUNK = 60000;
+  const fd = openSync(path, 'w');
+  try {
+    for (let i = 0; i < buf.length; i += CHUNK) {
+      writeSync(fd, Buffer.from(buf).subarray(i, i + CHUNK));
+    }
+  } finally {
+    closeSync(fd);
+  }
+}

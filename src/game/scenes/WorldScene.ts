@@ -19,8 +19,16 @@ import { WorldTexture } from './BootScene';
 import { LIN_YUAN_TEXTURE, QI_SLASH_FRAME } from '../animations/linYuanAnimations';
 import { NhuYenEffects } from '../systems/NhuYenEffects';
 import { HuyetLangEffects } from '../systems/HuyetLangEffects';
+import { MikuEffects } from '../systems/MikuEffects';
 import { FrostMark } from '../systems/FrostMark';
-import { BANG_PHACH_TRAM, BANG_TINH_TRAN, HUYET_DIEM_TRAM, TAM_THU_HONG } from '../systems/CombatSystem';
+import {
+  BANG_PHACH_TRAM,
+  BANG_TINH_TRAN,
+  HUYET_DIEM_TRAM,
+  TAM_THU_HONG,
+  TINH_MANG_TRAM,
+  TINH_KHONG_TRAN,
+} from '../systems/CombatSystem';
 import { PLAYER_FACTORIES } from '../entities/playerHandle';
 import type { PlayerHandle, PlayerId } from '../entities/playerHandle';
 import { DIRECTION_VECTORS } from '../types';
@@ -75,7 +83,7 @@ const SHRINE_RADIUS = 80;
 const PORTAL_RADIUS = 48;
 const LOOT_RADIUS = 42;
 const MOB_RESPAWN_MS = 12000;
-const ROSTER: readonly PlayerId[] = ['nhuyen', 'lamuyen', 'huyetlang'];
+const ROSTER: readonly PlayerId[] = ['nhuyen', 'lamuyen', 'huyetlang', 'miku'];
 
 interface TrainingStone {
   sprite: Phaser.Physics.Arcade.Sprite;
@@ -122,6 +130,7 @@ export class WorldScene extends Phaser.Scene {
   private playerIndex = 0;
   private fx!: NhuYenEffects;
   private magmaFx!: HuyetLangEffects;
+  private starFx!: MikuEffects;
   private bossFx!: BossEffects;
   private props!: Phaser.Physics.Arcade.StaticGroup;
   private stones: TrainingStone[] = [];
@@ -179,6 +188,7 @@ export class WorldScene extends Phaser.Scene {
   create(): void {
     this.fx = new NhuYenEffects(this);
     this.magmaFx = new HuyetLangEffects(this);
+    this.starFx = new MikuEffects(this);
     this.bossFx = new BossEffects(this);
     this.avatarId = peekSession()?.profile.id ?? newPlayerId();
 
@@ -1352,6 +1362,12 @@ export class WorldScene extends Phaser.Scene {
       case TAM_THU_HONG.name:
         this.castRoar(payload);
         return;
+      case TINH_MANG_TRAM.name:
+        this.castStarSlash(payload);
+        return;
+      case TINH_KHONG_TRAN.name:
+        this.castStarArray(payload);
+        return;
       default:
         this.spawnQiBurst(payload);
         this.resolveHit(payload, {
@@ -1514,10 +1530,90 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  private castStarSlash(payload: SkillPayload): void {
+    const hitAlready = new Set<Damageable>();
+    this.starFx.starCrescent({
+      x: payload.x,
+      y: payload.y,
+      aim: payload.aim,
+      range: 380,
+      duration: 380,
+      lift: FX_LIFT,
+      onStep: (x, y) => {
+        for (const target of this.targets) {
+          if (!target.alive || hitAlready.has(target)) continue;
+          const spot = target.hitPoint();
+          if (Phaser.Math.Distance.Between(spot.x, spot.y, x, y) > MAGMA_SLASH_RADIUS + target.hitRadius()) continue;
+          hitAlready.add(target);
+          this.starFx.starBurst(spot.x, spot.y, 0.7);
+          if (this.hosting) {
+            this.lastHit.set(target, this.net.actorId());
+            target.applyHit({
+              damage: payload.damage,
+              aim: payload.aim,
+              frost: 0,
+              knockback: 8,
+              tint: 0xb48cff,
+              side: 'player',
+            });
+          }
+        }
+      },
+    });
+  }
+
+  private castStarArray(payload: SkillPayload): void {
+    this.starFx.starPillar(payload.x, payload.y, 1, 0.007);
+    this.starFx.starNova(payload.x, payload.y);
+    const base = Math.atan2(payload.aim.y, payload.aim.x);
+    for (let i = 0; i < MAGMA_ARRAY_POINTS; i++) {
+      const angle = base + (i / MAGMA_ARRAY_POINTS) * Math.PI * 2;
+      const x = payload.x + Math.cos(angle) * MAGMA_ARRAY_SPREAD;
+      const y = payload.y + Math.sin(angle) * MAGMA_ARRAY_SPREAD;
+      this.time.delayedCall(MAGMA_ARRAY_STAGGER * (i + 1), () => {
+        this.starFx.starPillar(x, y, 0.82, 0);
+        this.starFx.starBurst(x, y, 0.8);
+      });
+    }
+    const caught = new Set<Damageable>();
+    const waves = MAGMA_ARRAY_POINTS + 1;
+    for (let wave = 0; wave < waves; wave++) {
+      const radius =
+        MAGMA_ARRAY_CENTRE_RADIUS + ((MAGMA_ARRAY_REACH - MAGMA_ARRAY_CENTRE_RADIUS) * wave) / (waves - 1);
+      const sweep = () => {
+        for (const target of this.targets) {
+          if (!target.alive || caught.has(target)) continue;
+          const spot = target.hitPoint();
+          const distance = Phaser.Math.Distance.Between(payload.x, payload.y, spot.x, spot.y);
+          if (distance > radius + target.hitRadius()) continue;
+          caught.add(target);
+          this.starFx.starBurst(spot.x, spot.y, 0.9);
+          if (this.hosting) {
+            this.lastHit.set(target, this.net.actorId());
+            target.applyHit({
+              damage: payload.damage,
+              aim: payload.aim,
+              frost: 0,
+              knockback: 0,
+              tint: 0x9b6bff,
+              side: 'player',
+            });
+          }
+        }
+      };
+      if (wave === 0) sweep();
+      else this.time.delayedCall(MAGMA_ARRAY_STAGGER * wave, sweep);
+    }
+  }
+
   private onDash(payload: DashPayload, actor?: Phaser.GameObjects.Sprite): void {
     const sprite = actor ?? this.player.sprite;
     if (sprite.texture.key === 'huyetlang') {
       this.magmaFx.shadowTrail(sprite, 6, payload.duration / 6);
+      return;
+    }
+    if (sprite.texture.key === 'miku') {
+      this.starFx.shadowTrail(sprite, 6, payload.duration / 6);
       return;
     }
     this.fx.shadowTrail(sprite, 4, payload.duration / 4);

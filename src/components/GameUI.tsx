@@ -18,6 +18,7 @@ import { HU_VO_KIEM_KHI } from '../game/systems/CombatSystem';
 import { LAM_UYEN_PROFILE } from '../game/entities/playerHandle';
 import { NHU_YEN_PROFILE } from '../game/entities/NhuYen';
 import { HUYET_LANG_PROFILE } from '../game/entities/HuyetLang';
+import { MIKU_PROFILE } from '../game/entities/Miku';
 import { CHARACTER_NAME } from '../net/types';
 
 const STATE_LABEL: Record<CharacterState, string> = {
@@ -36,6 +37,7 @@ const SKILL_KEYS: Record<string, readonly string[]> = {
   [LAM_UYEN_PROFILE.id]: ['K'],
   [NHU_YEN_PROFILE.id]: ['K', 'L', 'Space'],
   [HUYET_LANG_PROFILE.id]: ['K', 'L', 'Space'],
+  [MIKU_PROFILE.id]: ['K', 'L', 'Space'],
 };
 
 const HINTS: Record<string, string> = {
@@ -43,6 +45,8 @@ const HINTS: Record<string, string> = {
   [NHU_YEN_PROFILE.id]:
     'WASD di chuyển · Shift chạy · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
   [HUYET_LANG_PROFILE.id]:
+    'WASD di chuyển · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
+  [MIKU_PROFILE.id]:
     'WASD di chuyển · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
 };
 

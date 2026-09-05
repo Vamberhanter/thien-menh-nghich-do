@@ -16,8 +16,13 @@ import {
   HuyetLangClip,
   createHuyetLangAnimations,
 } from '../animations/huyetLangAnimations';
+import {
+  MIKU_TEXTURE,
+  MikuClip,
+  createMikuAnimations,
+} from '../animations/mikuAnimations';
 import type { CharacterState, Direction } from '../types';
-import { BANG_PHACH_TRAM, BANG_TINH_TRAN, HUYET_DIEM_TRAM } from '../systems/CombatSystem';
+import { BANG_PHACH_TRAM, BANG_TINH_TRAN, HUYET_DIEM_TRAM, TINH_MANG_TRAM } from '../systems/CombatSystem';
 import type { NetAction, NetPose } from '../../net/types';
 
 const LABEL_LIFT = 92;
@@ -26,6 +31,7 @@ const LABEL_COLOR: Record<PlayerId, string> = {
   nhuyen: '#9fe8ff',
   lamuyen: '#c8d6ff',
   huyetlang: '#ff7a4a',
+  miku: '#c9a0ff',
 };
 
 /**
@@ -63,6 +69,7 @@ export class RemoteAvatar {
     createLinYuanAnimations(scene);
     createNhuYenAnimations(scene);
     createHuyetLangAnimations(scene);
+    createMikuAnimations(scene);
 
     this.sprite = this.makeSprite(pose.character, pose.x, pose.y);
     this.label = scene.add
@@ -160,6 +167,9 @@ export class RemoteAvatar {
     if (this.character === 'huyetlang') {
       return huyetLangClip(state, this.facing, this.atk, this.skillName);
     }
+    if (this.character === 'miku') {
+      return mikuClip(state, this.facing, this.atk, this.skillName);
+    }
     return { key: linYuanKey(state, this.facing), flip: false };
   }
 
@@ -194,6 +204,11 @@ export class RemoteAvatar {
       sprite.setDepth(y);
       return sprite;
     }
+    if (character === 'miku') {
+      const sprite = this.scene.add.sprite(x, y, MIKU_TEXTURE, 'idle_down_0');
+      sprite.setDepth(y);
+      return sprite;
+    }
     const sprite = this.scene.add.sprite(x, y - FEET_OFFSET_Y, LIN_YUAN_TEXTURE, 'idle_down_0');
     sprite.setOrigin(0.5, 0.5);
     sprite.setDepth(y);
@@ -201,7 +216,7 @@ export class RemoteAvatar {
   }
 
   private setFoot(x: number, y: number): void {
-    if (this.character === 'nhuyen' || this.character === 'huyetlang') {
+    if (this.character === 'nhuyen' || this.character === 'huyetlang' || this.character === 'miku') {
       this.sprite.setPosition(x, y);
     } else {
       this.sprite.setPosition(x, y - FEET_OFFSET_Y);
@@ -216,7 +231,7 @@ export class RemoteAvatar {
   }
 
   private displayY(): number {
-    if (this.character === 'nhuyen' || this.character === 'huyetlang') return this.sprite.y;
+    if (this.character === 'nhuyen' || this.character === 'huyetlang' || this.character === 'miku') return this.sprite.y;
     return this.sprite.y + FEET_OFFSET_Y;
   }
 }
@@ -288,7 +303,6 @@ function huyetLangClip(
     case 'attack':
       return HuyetLangClip.attack(facing, atk);
     case 'skill':
-      // an unnamed skill is the roar, whose charge is the safest thing to show
       return skillName === HUYET_DIEM_TRAM.name
         ? HuyetLangClip.magmaSlash(facing)
         : HuyetLangClip.roar(facing);
@@ -298,5 +312,32 @@ function huyetLangClip(
       return HuyetLangClip.death();
     default:
       return HuyetLangClip.idle(facing);
+  }
+}
+
+function mikuClip(
+  state: CharacterState,
+  facing: Direction,
+  atk: number,
+  skillName: string,
+): { key: string; flip: boolean } {
+  switch (state) {
+    case 'walk':
+    case 'run':
+      return MikuClip.move(facing);
+    case 'dash':
+      return MikuClip.dash(facing);
+    case 'attack':
+      return MikuClip.attack(facing, atk);
+    case 'skill':
+      return skillName === TINH_MANG_TRAM.name
+        ? MikuClip.starSlash(facing)
+        : MikuClip.starArray(facing);
+    case 'hurt':
+      return MikuClip.hurt();
+    case 'dead':
+      return MikuClip.death();
+    default:
+      return MikuClip.idle(facing);
   }
 }
