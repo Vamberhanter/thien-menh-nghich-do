@@ -1,0 +1,192 @@
+import { useEffect, useRef, useState, type PointerEvent as ReactPointer } from 'react';
+import { GameBus, GameEvent } from '../game/events';
+import type { CharacterChangedPayload, CooldownPayload } from '../game/events';
+import { NHU_YEN_PROFILE } from '../game/entities/NhuYen';
+import {
+  prefersTouchUi,
+  pressPad,
+  resetPadMove,
+  setPadMove,
+  writeTouchPadForced,
+  type PadAction,
+} from '../game/touchPad';
+
+const STICK_RADIUS = 58;
+const DEADZONE = 10;
+const SPRINT_AT = 0.74;
+
+interface Stick {
+  originX: number;
+  originY: number;
+  thumbX: number;
+  thumbY: number;
+}
+
+/**
+ * On-screen stick + skills. Open on a real phone, or after tapping
+ * "Hiện nút". Desktop keyboard stays the default.
+ */
+export function TouchPad() {
+  const [show, setShow] = useState(prefersTouchUi);
+  const [character, setCharacter] = useState<CharacterChangedPayload>({ ...NHU_YEN_PROFILE });
+  const [cooldowns, setCooldowns] = useState<readonly number[]>([]);
+  const [loot, setLoot] = useState(false);
+  const [stick, setStick] = useState<Stick | null>(null);
+  const pointer = useRef<number | null>(null);
+  const stickRef = useRef<Stick | null>(null);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('is-touch', show);
+    window.dispatchEvent(new Event('resize'));
+    return () => document.documentElement.classList.remove('is-touch');
+  }, [show]);
+
+  useEffect(() => {
+    const onLoot = ({ label }: { label: string | null }) => setLoot(Boolean(label));
+    const onCool = (payload: CooldownPayload) => setCooldowns(payload.skills);
+    GameBus.on(GameEvent.CharacterChanged, setCharacter);
+    GameBus.on(GameEvent.Cooldowns, onCool);
+    GameBus.on(GameEvent.LootPrompt, onLoot);
+    return () => {
+      GameBus.off(GameEvent.CharacterChanged, setCharacter);
+      GameBus.off(GameEvent.Cooldowns, onCool);
+      GameBus.off(GameEvent.LootPrompt, onLoot);
+    };
+  }, []);
+
+  const toggle = () => {
+    setShow((on) => {
+      const next = !on;
+      writeTouchPadForced(next);
+      if (!next) resetPadMove();
+      return next;
+    });
+  };
+
+  const onStickDown = (event: ReactPointer) => {
+    if (pointer.current !== null) return;
+    pointer.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const next = { originX: x, originY: y, thumbX: x, thumbY: y };
+    stickRef.current = next;
+    setStick(next);
+    setPadMove(0, 0, false);
+  };
+
+  const onStickMove = (event: ReactPointer) => {
+    const held = stickRef.current;
+    if (pointer.current !== event.pointerId || !held) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const dx = x - held.originX;
+    const dy = y - held.originY;
+    const length = Math.hypot(dx, dy);
+    const clamped = length > STICK_RADIUS ? STICK_RADIUS / length : 1;
+    const tx = held.originX + dx * clamped;
+    const ty = held.originY + dy * clamped;
+    const next = { originX: held.originX, originY: held.originY, thumbX: tx, thumbY: ty };
+    stickRef.current = next;
+    setStick(next);
+    if (length < DEADZONE) {
+      setPadMove(0, 0, false);
+      return;
+    }
+    setPadMove((dx * clamped) / STICK_RADIUS, (dy * clamped) / STICK_RADIUS, length / STICK_RADIUS >= SPRINT_AT);
+  };
+
+  const onStickUp = (event: ReactPointer) => {
+    if (pointer.current !== event.pointerId) return;
+    pointer.current = null;
+    stickRef.current = null;
+    setStick(null);
+    resetPadMove();
+  };
+
+  const tap = (action: PadAction) => (event: ReactPointer) => {
+    event.preventDefault();
+    event.stopPropagation();
+    pressPad(action);
+  };
+
+  return (
+    <div className={`pad${show ? ' is-on' : ''}`}>
+      <button type="button" className="pad__toggle" onClick={toggle}>
+        {show ? 'Ẩn nút' : 'Hiện nút'}
+      </button>
+
+      {show && (
+        <>
+          <div
+            className="pad__move"
+            onPointerDown={onStickDown}
+            onPointerMove={onStickMove}
+            onPointerUp={onStickUp}
+            onPointerCancel={onStickUp}
+          >
+            <div
+              className={`pad__base${stick ? ' is-held' : ''}`}
+              style={
+                stick
+                  ? { left: stick.originX, top: stick.originY, transform: 'translate(-50%, -50%)' }
+                  : undefined
+              }
+            >
+              {stick && (
+                <span
+                  className="pad__thumb"
+                  style={{
+                    left: stick.thumbX - stick.originX + STICK_RADIUS,
+                    top: stick.thumbY - stick.originY + STICK_RADIUS,
+                  }}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="pad__skills">
+            <button type="button" className="pad__util" onPointerDown={tap('bag')}>
+              Túi
+            </button>
+            <button type="button" className={`pad__util${loot ? ' is-hot' : ''}`} onPointerDown={tap('pick')}>
+              Nhặt
+            </button>
+
+            <button type="button" className="pad__atk" onPointerDown={tap('attack')}>
+              Đánh
+            </button>
+
+            {character.skills.map((skill, i) => (
+              <button
+                type="button"
+                key={skill}
+                className={`pad__skill pad__skill--${i}`}
+                onPointerDown={tap((`skill${i}`) as PadAction)}
+              >
+                <em>{shortSkill(skill)}</em>
+                <span>{skill}</span>
+                {(cooldowns[i] ?? 0) > 0.02 && (
+                  <i className="pad__cd" style={{ height: `${Math.round(cooldowns[i] * 100)}%` }} />
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const SKILL_SHORT: Record<string, string> = {
+  'Hư Vô Kiếm Khí': 'Hư',
+  'Băng Phách Trảm': 'Phách',
+  'Băng Tinh Trận': 'Trận',
+  'Sương Ảnh Bộ': 'Ảnh',
+};
+
+function shortSkill(name: string): string {
+  return SKILL_SHORT[name] ?? name.slice(0, 2);
+}

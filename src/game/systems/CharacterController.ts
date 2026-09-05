@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import type { LinYuan } from '../entities/LinYuan';
 import type { Vector2Like } from '../types';
+import { isInputGated } from '../../net/bind';
+import { consumePad, padMove } from '../touchPad';
 
 export interface ControllerKeys {
   up: Phaser.Input.Keyboard.Key[];
@@ -49,15 +51,15 @@ export class CharacterController {
   update(time: number, delta: number): void {
     this.player.tick(time, delta);
 
-    if (!this.enabled || this.player.isDead) {
+    if (!this.enabled || this.player.isDead || isInputGated()) {
       this.player.setVelocity(0, 0);
       return;
     }
 
     // Action inputs are checked first: they win over movement this frame.
-    if (anyJustDown(this.keys.attack)) {
+    if (anyJustDown(this.keys.attack) || consumePad('attack')) {
       this.player.attack();
-    } else if (anyJustDown(this.keys.skill)) {
+    } else if (anyJustDown(this.keys.skill) || consumePad('skill0')) {
       this.player.castSkill();
     }
 
@@ -76,7 +78,9 @@ export class CharacterController {
     if (anyDown(this.keys.right)) x += 1;
     if (anyDown(this.keys.up)) y -= 1;
     if (anyDown(this.keys.down)) y += 1;
-    return { x, y };
+    if (x !== 0 || y !== 0) return { x, y };
+    const pad = padMove();
+    return { x: pad.x, y: pad.y };
   }
 
   destroy(): void {

@@ -1,0 +1,112 @@
+import Phaser from 'phaser';
+import type { HuyetLang } from '../entities/HuyetLang';
+import type { Vector2Like } from '../types';
+import { isInputGated } from '../../net/bind';
+import { consumePad, padMove } from '../touchPad';
+
+/**
+ * Keyboard bindings for Huyết Lang.
+ *
+ *   W A S D / arrows   move
+ *   J                  Tam Thủ Liệt Trảm, the three-hit chain
+ *   K                  Huyết Diễm Trảm
+ *   L                  Tam Thủ Hống
+ *   Space              Liệt Ảnh Bộ
+ */
+export class HuyetLangController {
+  private readonly keys: {
+    up: Phaser.Input.Keyboard.Key[];
+    down: Phaser.Input.Keyboard.Key[];
+    left: Phaser.Input.Keyboard.Key[];
+    right: Phaser.Input.Keyboard.Key[];
+    attack: Phaser.Input.Keyboard.Key[];
+    magmaSlash: Phaser.Input.Keyboard.Key[];
+    roar: Phaser.Input.Keyboard.Key[];
+    dash: Phaser.Input.Keyboard.Key[];
+  };
+
+  private enabled = true;
+
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly player: HuyetLang,
+  ) {
+    const keyboard = scene.input.keyboard;
+    if (!keyboard) throw new Error('HuyetLangController requires a keyboard plugin');
+
+    const addKeys = (...codes: number[]) => codes.map((code) => keyboard.addKey(code, false));
+    const K = Phaser.Input.Keyboard.KeyCodes;
+
+    this.keys = {
+      up: addKeys(K.W, K.UP),
+      down: addKeys(K.S, K.DOWN),
+      left: addKeys(K.A, K.LEFT),
+      right: addKeys(K.D, K.RIGHT),
+      attack: addKeys(K.J),
+      magmaSlash: addKeys(K.K),
+      roar: addKeys(K.L),
+      dash: addKeys(K.SPACE),
+    };
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    if (!enabled) this.player.move({ x: 0, y: 0 });
+  }
+
+  update(time: number, delta: number): void {
+    this.player.tick(time, delta);
+
+    if (!this.enabled || this.player.isDead || isInputGated()) {
+      if (!this.player.isDead) this.player.setVelocity(0, 0);
+      return;
+    }
+
+    if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
+      this.player.dash(this.readSteer());
+    } else if (anyJustDown(this.keys.roar) || consumePad('skill1')) {
+      this.player.castRoar();
+    } else if (anyJustDown(this.keys.magmaSlash) || consumePad('skill0')) {
+      this.player.castMagmaSlash();
+    } else if (anyJustDown(this.keys.attack) || consumePad('attack')) {
+      this.player.attack();
+    }
+
+    if (this.player.isBusy) {
+      this.player.move({ x: 0, y: 0 });
+      return;
+    }
+
+    this.player.move(this.readSteer());
+  }
+
+  private readSteer(): Vector2Like {
+    const keys = this.readAxis();
+    if (keys.x !== 0 || keys.y !== 0) return keys;
+    const pad = padMove();
+    return { x: pad.x, y: pad.y };
+  }
+
+  private readAxis(): Vector2Like {
+    let x = 0;
+    let y = 0;
+    if (anyDown(this.keys.left)) x -= 1;
+    if (anyDown(this.keys.right)) x += 1;
+    if (anyDown(this.keys.up)) y -= 1;
+    if (anyDown(this.keys.down)) y += 1;
+    return { x, y };
+  }
+
+  destroy(): void {
+    const keyboard = this.scene.input.keyboard;
+    if (!keyboard) return;
+    for (const group of Object.values(this.keys)) {
+      for (const key of group) keyboard.removeKey(key, true);
+    }
+  }
+}
+
+const anyDown = (keys: Phaser.Input.Keyboard.Key[]) => keys.some((key) => key.isDown);
+
+const anyJustDown = (keys: Phaser.Input.Keyboard.Key[]) =>
+  keys.some((key) => Phaser.Input.Keyboard.JustDown(key));

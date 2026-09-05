@@ -57,16 +57,50 @@ export const SUONG_ANH_BO: SkillDefinition = {
   spiritCost: 4,
 };
 
+export const HUYET_DIEM_TRAM: SkillDefinition = {
+  name: 'Huyết Diễm Trảm',
+  damageMultiplier: 2.2,
+  cooldown: 1600,
+  spiritCost: 6,
+};
+
+export const TAM_THU_HONG: SkillDefinition = {
+  name: 'Tam Thủ Hống',
+  damageMultiplier: 3.4,
+  cooldown: 5200,
+  spiritCost: 12,
+  recovery: 560,
+};
+
+export const LIET_ANH_BO: SkillDefinition = {
+  name: 'Liệt Ảnh Bộ',
+  damageMultiplier: 0,
+  cooldown: 900,
+  spiritCost: 4,
+};
+
 export const NHU_YEN_SKILLS: readonly SkillDefinition[] = [
   BANG_PHACH_TRAM,
   BANG_TINH_TRAN,
   SUONG_ANH_BO,
 ];
 
+export const HUYET_LANG_SKILLS: readonly SkillDefinition[] = [
+  HUYET_DIEM_TRAM,
+  TAM_THU_HONG,
+  LIET_ANH_BO,
+];
+
 /** Slot indices into `NHU_YEN_SKILLS`, so callers never pass a bare number. */
 export const NhuYenSlot = {
   QiSlash: 0,
   IceArray: 1,
+  ShadowStep: 2,
+} as const;
+
+export const HuyetLangSlot = {
+  MagmaSlash: 0,
+  Roar: 1,
   ShadowStep: 2,
 } as const;
 

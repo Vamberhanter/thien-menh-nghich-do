@@ -4,3 +4,10 @@ dist
 *.tsbuildinfo
 .DS_Store
 *.local
+.env
+.env.*
+!.env.example
+
+# Runtime sheets live on Supabase Storage (bucket game-assets).
+public/assets/characters/**/*.png
+public/assets/boss/**/*.png

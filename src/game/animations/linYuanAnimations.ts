@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { remoteAtlas } from '../../net/assets';
 import type { Direction } from '../types';
 
 /**
@@ -9,8 +10,9 @@ import type { Direction } from '../types';
  * standing point at (80, 126) — see FRAME/ANCHOR in tools/build-lamuyen-atlas.mjs.
  */
 export const LIN_YUAN_TEXTURE = 'lamuyen';
-export const LIN_YUAN_ATLAS_URL = 'assets/characters/lamuyen/lamuyen.json';
-export const LIN_YUAN_ATLAS_PATH = 'assets/characters/lamuyen';
+const lamuyenAtlas = remoteAtlas('characters/lamuyen/lamuyen.json', 'characters/lamuyen');
+export const LIN_YUAN_ATLAS_URL = lamuyenAtlas.url;
+export const LIN_YUAN_ATLAS_PATH = lamuyenAtlas.path;
 
 /** Frame geometry, needed by the entity to place its physics body. */
 export const FRAME_WIDTH = 160;

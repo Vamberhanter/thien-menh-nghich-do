@@ -54,6 +54,21 @@ export const DEFAULT_NHU_YEN_STATS: CharacterStats = {
   maxSpiritualPower: 26,
 };
 
+/**
+ * Huyết Lang of Tam Thủ Môn. A heavier chassis: more HP and armour, slower
+ * stride, a shallower spirit pool because the kit leans on the greatsword
+ * chain rather than keeping three ice arts spinning.
+ */
+export const DEFAULT_HUYET_LANG_STATS: CharacterStats = {
+  maxHp: 128,
+  hp: 128,
+  attack: 17,
+  defense: 9,
+  speed: 108,
+  spiritualPower: 18,
+  maxSpiritualPower: 18,
+};
+
 /** Unit vector for each facing, used for hitboxes and skill direction. */
 export const DIRECTION_VECTORS: Record<Direction, Vector2Like> = {
   down: { x: 0, y: 1 },

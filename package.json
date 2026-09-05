@@ -17,13 +17,22 @@
     "gen:placeholder": "node tools/generate-lin-yuan-sprites.mjs",
     "measure:stride": "node tools/measure-stride.mjs walk_side run_side walk_down walk_up",
     "analyse:cycle": "node tools/analyse-cycle.mjs walk_side run_side walk_down walk_up",
-    "build:boss": "node tools/build-boss-atlas.mjs",
+    "build:huyetlang": "node tools/build-huyetlang-atlas.mjs",
+    "inspect:huyetlang": "node tools/extract-huyetlang.mjs --report",
+    "measure:huyetlang": "node tools/extract-huyetlang.mjs --measure",
+    "dump:huyetlang": "node tools/extract-huyetlang.mjs --dump .tmp/huyetlang-frames",
+    "cuts:huyetlang": "node tools/extract-huyetlang.mjs --preview .tmp/huyetlang-cuts",
     "inspect:boss": "node tools/extract-boss.mjs --report",
     "dump:boss": "node tools/extract-boss.mjs --dump .tmp/boss-frames",
     "check:ai": "node tools/check-enemy-ai.mjs",
-    "check:atlas": "node tools/check-atlas.mjs public/assets/characters/lamuyen/lamuyen.json && node tools/check-atlas.mjs public/assets/characters/nhuyen/atlas/nhuyen.json && node tools/check-atlas.mjs public/assets/boss/boss1/atlas/boss1.json"
+    "check:atlas": "node tools/check-atlas.mjs public/assets/characters/lamuyen/lamuyen.json && node tools/check-atlas.mjs public/assets/characters/nhuyen/atlas/nhuyen.json && node tools/check-atlas.mjs public/assets/boss/boss1/atlas/boss1.json",
+    "preview:atlas": "node tools/preview-atlas.mjs public/assets/characters/huyetlang/atlas/huyetlang.json .tmp/huyetlang-atlas.png",
+    "upload:characters": "node tools/upload-game-assets.mjs characters",
+    "upload:boss": "node tools/upload-game-assets.mjs boss",
+    "upload:assets": "node tools/upload-game-assets.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.115.0",
     "phaser": "^3.87.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

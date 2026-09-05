@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { remoteAtlas } from '../../net/assets';
 import type { Direction } from '../types';
 
 /**
@@ -16,8 +17,9 @@ import type { Direction } from '../types';
  * Yên stands on — which also makes it the depth-sort key.
  */
 export const NHU_YEN_TEXTURE = 'nhuyen';
-export const NHU_YEN_ATLAS_URL = 'assets/characters/nhuyen/atlas/nhuyen.json';
-export const NHU_YEN_ATLAS_PATH = 'assets/characters/nhuyen/atlas';
+const nhuyenAtlas = remoteAtlas('characters/nhuyen/atlas/nhuyen.json', 'characters/nhuyen/atlas');
+export const NHU_YEN_ATLAS_URL = nhuyenAtlas.url;
+export const NHU_YEN_ATLAS_PATH = nhuyenAtlas.path;
 
 /* ------------------------------------------------------------------- clips */
 

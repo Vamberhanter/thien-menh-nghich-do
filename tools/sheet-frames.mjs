@@ -185,6 +185,70 @@ function labelComponents(alpha, width, height) {
   return { labels, sizes };
 }
 
+/**
+ * Reassigns every component in a row to the pose it is nearest to, rather than
+ * to whichever cell holds most of its pixels.
+ *
+ * Majority-of-pixels is the wrong question for art that overhangs its cell.
+ * Huyết Lang's tail curls a long way to his right, far enough that on some walk
+ * frames more than half of it lies in the next cell — so the next frame drew a
+ * severed tail floating beside a character it did not belong to. Distance
+ * answers it correctly: the tail is touching its own body's bounding box and
+ * 60px clear of the neighbour's.
+ *
+ * Each cell's largest owned component is taken as that cell's pose and is left
+ * where it is, so no cell can end up empty. Everything else — armour plates cut
+ * loose by the backdrop knockout, embers, a crescent trailing out of frame —
+ * goes to the nearest pose, which also means nothing is dropped for splitting
+ * evenly across a cut line.
+ */
+function reclaim({ alpha, labels, sizes, width, y0, y1, owns }) {
+  const boxes = new Map();
+  for (let y = y0; y <= y1; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      if (!alpha[i]) continue;
+      const label = labels[i];
+      if (!label) continue;
+      const box = boxes.get(label);
+      if (!box) {
+        boxes.set(label, { x0: x, x1: x, y0: y, y1: y });
+        continue;
+      }
+      if (x < box.x0) box.x0 = x;
+      if (x > box.x1) box.x1 = x;
+      if (y > box.y1) box.y1 = y;
+    }
+  }
+
+  const poses = owns.map((own) => {
+    let biggest = 0; // label 0 is "no component", and sizes[0] is 0
+    for (const label of own) if (sizes[label] > sizes[biggest]) biggest = label;
+    return biggest;
+  });
+  const anchored = new Set(poses.filter(Boolean));
+
+  /** Manhattan gap between two boxes; 0 when they overlap or touch. */
+  const gap = (a, b) =>
+    Math.max(0, a.x0 - b.x1, b.x0 - a.x1) + Math.max(0, a.y0 - b.y1, b.y0 - a.y1);
+
+  for (const [label, box] of boxes) {
+    if (anchored.has(label)) continue;
+    let nearest = -1;
+    let best = Infinity;
+    poses.forEach((pose, col) => {
+      if (!pose) return;
+      const distance = gap(box, boxes.get(pose));
+      if (distance < best) {
+        best = distance;
+        nearest = col;
+      }
+    });
+    if (nearest < 0) continue;
+    owns.forEach((own, col) => (col === nearest ? own.add(label) : own.delete(label)));
+  }
+}
+
 /* ------------------------------------------------------------- the analysis */
 
 /**
@@ -194,12 +258,16 @@ function labelComponents(alpha, width, height) {
  * crescent trailing out of the neighbouring cell is never blitted twice: a
  * component is kept only by the frame holding most of its pixels.
  *
- * @param {{dir:string, key:string, spec:object, rules:{isDark:Function,isBody:Function}}} input
+ * `img` lets a caller hand in an already-decoded sheet. Sheets that ship a
+ * black canvas instead of alpha have to be knocked out before segmentation, and
+ * doing that in the caller keeps this file free of per-character clean-up.
+ *
+ * @param {{dir:string, key:string, spec:object, rules:{isDark:Function,isBody:Function}, img?:object}} input
  */
-export function analyseSheet({ dir, key, spec, rules }) {
+export function analyseSheet({ dir, key, spec, rules, img: decoded }) {
   if (!spec) throw new Error(`unknown sheet "${key}"`);
 
-  const img = decodePNG(`${dir}/${spec.file}`);
+  const img = decoded ?? decodePNG(`${dir}/${spec.file}`);
   const { width, height, data } = img;
 
   const alpha = new Uint8Array(width * height);
@@ -216,14 +284,33 @@ export function analyseSheet({ dir, key, spec, rules }) {
     rowProfile[y] = c;
   }
 
+  /**
+   * `cut: 'even'` skips the search entirely and tiles the sheet into equal
+   * cells. Sheets laid out on a machine-made grid are better served this way:
+   * the emptiest-line search drifts towards whatever side of a cell happens to
+   * be emptier, and on Huyết Lang's strips that walked the cut lines up to 60px
+   * off, far enough to swap which cell a pose belongs to.
+   */
+  const even = spec.cut === 'even';
+  const tile = (length, count) =>
+    Array.from({ length: count + 1 }, (_, k) => Math.round((k * length) / count));
+
   // Rows first by their empty gaps. Where the effects have closed those gaps —
   // the boss's ground explosions bridge three rows of its attack sheet — the
   // bands that hold more than one row are split further.
-  let rows = bands(rowProfile, 2, 20);
-  let rowMethod = 'gaps';
-  if (rows.length !== spec.cols.length) {
-    rows = splitBands(rowProfile, rows, spec.cols.length);
-    rowMethod = 'split';
+  let rows;
+  let rowMethod;
+  if (even) {
+    const lines = tile(height, spec.cols.length);
+    rows = spec.cols.map((_, r) => [lines[r], lines[r + 1] - 1]);
+    rowMethod = 'even';
+  } else {
+    rows = bands(rowProfile, 2, 20);
+    rowMethod = 'gaps';
+    if (rows.length !== spec.cols.length) {
+      rows = splitBands(rowProfile, rows, spec.cols.length);
+      rowMethod = 'split';
+    }
   }
 
   const frames = [];
@@ -235,17 +322,17 @@ export function analyseSheet({ dir, key, spec, rules }) {
     for (let y = y0; y <= y1; y++) {
       for (let x = 0; x < width; x++) if (alpha[y * width + x]) colProfile[x]++;
     }
-    const { cuts, method } = axisCuts(colProfile, width, count);
+    const { cuts, method } = even
+      ? { cuts: tile(width, count), method: 'even' }
+      : axisCuts(colProfile, width, count);
     rowInfo.push({ row, y0, y1, method, rowMethod, cuts });
 
+    const owns = [];
     for (let col = 0; col < count; col++) {
-      const sliceX0 = cuts[col];
-      const sliceX1 = cuts[col + 1] - 1;
-
       // how much of each component falls inside this slice
       const inside = new Map();
       for (let y = y0; y <= y1; y++) {
-        for (let x = sliceX0; x <= sliceX1; x++) {
+        for (let x = cuts[col]; x <= cuts[col + 1] - 1; x++) {
           const i = y * width + x;
           const label = labels[i];
           if (!label) continue;
@@ -256,9 +343,26 @@ export function analyseSheet({ dir, key, spec, rules }) {
       for (const [label, n] of inside) {
         if (n * 2 > sizes[label]) own.add(label);
       }
+      owns.push(own);
+    }
 
+    if (spec.claim === 'nearest') reclaim({ alpha, labels, sizes, width, y0, y1, owns });
+
+    for (let col = 0; col < count; col++) {
       frames.push(
-        measureFrame({ img, alpha, labels, own, row, col, y0, y1, rules, sliceX0, sliceX1 }),
+        measureFrame({
+          img,
+          alpha,
+          labels,
+          own: owns[col],
+          row,
+          col,
+          y0,
+          y1,
+          rules,
+          sliceX0: cuts[col],
+          sliceX1: cuts[col + 1] - 1,
+        }),
       );
     }
   });

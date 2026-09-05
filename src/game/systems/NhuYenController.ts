@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import type { NhuYen } from '../entities/NhuYen';
 import type { Vector2Like } from '../types';
+import { isInputGated } from '../../net/bind';
+import { consumePad, padMove } from '../touchPad';
 
 /**
  * Keyboard bindings for Như Yên. Kept separate from
@@ -62,20 +64,20 @@ export class NhuYenController {
   update(time: number, delta: number): void {
     this.player.tick(time, delta);
 
-    if (!this.enabled || this.player.isDead) {
+    if (!this.enabled || this.player.isDead || isInputGated()) {
       if (!this.player.isDead) this.player.setVelocity(0, 0);
       return;
     }
 
     // Actions are checked before movement so a press wins the frame. Order sets
     // the priority when two land together: dash first, since it is the escape.
-    if (anyJustDown(this.keys.dash)) {
+    if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
       this.player.dash();
-    } else if (anyJustDown(this.keys.iceArray)) {
+    } else if (anyJustDown(this.keys.iceArray) || consumePad('skill1')) {
       this.player.castIceArray();
-    } else if (anyJustDown(this.keys.qiSlash)) {
+    } else if (anyJustDown(this.keys.qiSlash) || consumePad('skill0')) {
       this.player.castQiSlash();
-    } else if (anyJustDown(this.keys.attack)) {
+    } else if (anyJustDown(this.keys.attack) || consumePad('attack')) {
       this.player.attack();
     }
 
@@ -84,10 +86,13 @@ export class NhuYenController {
       return;
     }
 
-    this.player.move(this.readAxis(), anyDown(this.keys.sprint));
+    const keys = this.readKeys();
+    const usingKeys = keys.x !== 0 || keys.y !== 0;
+    const pad = padMove();
+    this.player.move(usingKeys ? keys : { x: pad.x, y: pad.y }, usingKeys ? anyDown(this.keys.sprint) : pad.sprint);
   }
 
-  private readAxis(): Vector2Like {
+  private readKeys(): Vector2Like {
     let x = 0;
     let y = 0;
     if (anyDown(this.keys.left)) x -= 1;

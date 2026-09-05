@@ -10,6 +10,11 @@ import {
   NHU_YEN_TEXTURE,
 } from '../animations/nhuYenAnimations';
 import {
+  HUYET_LANG_ATLAS_PATH,
+  HUYET_LANG_ATLAS_URL,
+  HUYET_LANG_TEXTURE,
+} from '../animations/huyetLangAnimations';
+import {
   BOSS1_ATLAS_PATH,
   BOSS1_ATLAS_URL,
   BOSS1_TEXTURE,
@@ -20,9 +25,20 @@ const PIXEL = 2;
 
 export const WorldTexture = {
   Grass: 'tile-grass',
+  Forest: 'tile-forest',
+  Ash: 'tile-ash',
   Tree: 'prop-tree',
   Rock: 'prop-rock',
   TrainingStone: 'prop-training-stone',
+  Portal: 'prop-portal',
+  Shrine: 'prop-shrine',
+  Loot: 'prop-loot',
+} as const;
+
+export const MobTexture = {
+  Wolf: 'mob-wolf',
+  Archer: 'mob-archer',
+  Brute: 'mob-brute',
 } as const;
 
 /** Loads assets and bakes the placeholder environment tiles. */
@@ -32,8 +48,10 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
+    this.load.setCORS('anonymous');
     this.load.multiatlas(LIN_YUAN_TEXTURE, LIN_YUAN_ATLAS_URL, LIN_YUAN_ATLAS_PATH);
     this.load.multiatlas(NHU_YEN_TEXTURE, NHU_YEN_ATLAS_URL, NHU_YEN_ATLAS_PATH);
+    this.load.multiatlas(HUYET_LANG_TEXTURE, HUYET_LANG_ATLAS_URL, HUYET_LANG_ATLAS_PATH);
     this.load.multiatlas(BOSS1_TEXTURE, BOSS1_ATLAS_URL, BOSS1_ATLAS_PATH);
 
     const width = this.scale.width;
@@ -57,14 +75,23 @@ export class BootScene extends Phaser.Scene {
     // Nearest-neighbour keeps every sprite pixel-sharp when the canvas scales.
     this.textures.get(LIN_YUAN_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.textures.get(NHU_YEN_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
+    this.textures.get(HUYET_LANG_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.textures.get(BOSS1_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
 
     this.bakeGrass();
+    this.bakeForest();
+    this.bakeAsh();
     this.bakeTree();
     this.bakeRock();
     this.bakeTrainingStone();
+    this.bakePortal();
+    this.bakeShrine();
+    this.bakeLoot();
+    this.bakeWolf();
+    this.bakeArcher();
+    this.bakeBrute();
 
-    this.scene.start('TestScene');
+    this.scene.start('WorldScene');
   }
 
   /* --------------------------------------------------- placeholder textures */
@@ -156,6 +183,93 @@ export class BootScene extends Phaser.Scene {
       px(13, 20, 6, 2, '#6fd8ff');
       px(14, 24, 4, 2, '#2f9fd8');
       px(6, 34, 20, 4, '#2a2640');
+    });
+  }
+
+  private bakeForest(): void {
+    this.paint(WorldTexture.Forest, 32, 32, (px) => {
+      px(0, 0, 32, 32, '#1a2e22');
+      for (let y = 0; y < 32; y += 4) {
+        for (let x = 0; x < 32; x += 4) {
+          if ((x / 4 + y / 4) % 3 === 0) px(x, y, 2, 2, '#243c2c');
+          if ((x / 4 + y / 4) % 5 === 0) px(x + 2, y + 1, 1, 2, '#162418');
+        }
+      }
+    });
+  }
+
+  private bakeAsh(): void {
+    this.paint(WorldTexture.Ash, 32, 32, (px) => {
+      px(0, 0, 32, 32, '#2a2228');
+      for (let y = 0; y < 32; y += 4) {
+        for (let x = 0; x < 32; x += 4) {
+          if ((x / 4 + y / 4) % 3 === 0) px(x, y, 2, 2, '#3a2a30');
+          if ((x / 4 + y / 4) % 4 === 0) px(x + 1, y + 2, 1, 1, '#5a3038');
+        }
+      }
+    });
+  }
+
+  private bakePortal(): void {
+    this.paint(WorldTexture.Portal, 36, 40, (px) => {
+      px(10, 28, 16, 6, '#1a2030');
+      px(8, 8, 20, 22, '#1c3a4a');
+      px(12, 12, 12, 14, '#2f9fd8');
+      px(14, 14, 8, 10, '#9fe8ff');
+      px(16, 16, 4, 6, '#e9f3ff');
+    });
+  }
+
+  private bakeShrine(): void {
+    this.paint(WorldTexture.Shrine, 40, 52, (px) => {
+      px(4, 40, 32, 8, '#3a3554');
+      px(8, 38, 24, 6, '#4a4468');
+      px(14, 16, 12, 24, '#544d76');
+      px(12, 12, 16, 8, '#6b64a0');
+      px(16, 4, 8, 12, '#6fd8ff');
+      px(18, 2, 4, 6, '#e9f3ff');
+      px(17, 14, 6, 4, '#9fe8ff');
+    });
+  }
+
+  private bakeLoot(): void {
+    this.paint(WorldTexture.Loot, 16, 14, (px) => {
+      px(2, 4, 12, 8, '#6b4a1e');
+      px(3, 3, 10, 3, '#8a6428');
+      px(6, 6, 4, 3, '#d4a84a');
+    });
+  }
+
+  private bakeWolf(): void {
+    this.paint(MobTexture.Wolf, 28, 20, (px) => {
+      px(4, 8, 16, 8, '#5a4030');
+      px(16, 6, 8, 8, '#6a4c38');
+      px(20, 4, 6, 5, '#5a4030');
+      px(22, 5, 2, 2, '#e8d0a8');
+      px(6, 14, 3, 4, '#4a3428');
+      px(14, 14, 3, 4, '#4a3428');
+    });
+  }
+
+  private bakeArcher(): void {
+    this.paint(MobTexture.Archer, 20, 32, (px) => {
+      px(7, 4, 6, 6, '#3d5a38');
+      px(8, 10, 4, 10, '#4a6a42');
+      px(6, 20, 3, 8, '#3d5a38');
+      px(11, 20, 3, 8, '#3d5a38');
+      px(2, 12, 5, 2, '#c4a060');
+      px(14, 8, 2, 10, '#8a6a30');
+    });
+  }
+
+  private bakeBrute(): void {
+    this.paint(MobTexture.Brute, 28, 36, (px) => {
+      px(8, 4, 12, 8, '#4a3038');
+      px(6, 12, 16, 14, '#6a3844');
+      px(4, 26, 6, 8, '#4a3038');
+      px(18, 26, 6, 8, '#4a3038');
+      px(2, 14, 5, 5, '#8a4854');
+      px(21, 14, 5, 5, '#8a4854');
     });
   }
 }

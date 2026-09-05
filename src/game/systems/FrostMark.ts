@@ -37,6 +37,12 @@ export class FrostMark {
     return now < this.frozenUntil;
   }
 
+  reset(): void {
+    this.stackCount = 0;
+    this.lapsesAt = 0;
+    this.frozenUntil = 0;
+  }
+
   /**
    * Adds Frost. Reaching FROST_MAX_STACKS consumes them all and freezes the
    * target, so a frozen enemy starts building the next mark from zero.

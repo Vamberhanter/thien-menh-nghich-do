@@ -95,18 +95,26 @@ export class ComboChain {
  * the third hit matters, and the finisher carries two Frost stacks, which is
  * exactly enough to freeze a target the first two hits already marked.
  *
- * `reach` and `radius` are set against how far the qi crescent is actually
- * *drawn*. At the impact frame the arc reaches roughly 111px, 122px and 130px
- * past her feet (measured post-scale by `npm run frames:nhuyen -- --report`), so
- * each step covers out to about that far and the swing connects with what the
- * art visibly touches. Inner edges stay near her body — `reach - radius` is a
- * few px — so a target she is standing on top of is still hit.
+ * `reach` and `radius` are generous versus the drawn crescent so a swing
+ * still connects when the target is a step off the blade. Inner edges stay
+ * near her body — `reach - radius` is a few px — so a target she is standing
+ * on is still hit.
  */
 export const HAN_BANG_TAM_THUC: readonly ComboStep[] = [
-  { damageMultiplier: 0.9, frost: 1, reach: 58, radius: 52, knockback: 0 },
-  { damageMultiplier: 1.1, frost: 1, reach: 72, radius: 56, knockback: 4 },
-  { damageMultiplier: 1.8, frost: 2, reach: 90, radius: 64, knockback: 14 },
+  { damageMultiplier: 0.9, frost: 1, reach: 80, radius: 72, knockback: 0 },
+  { damageMultiplier: 1.1, frost: 1, reach: 100, radius: 78, knockback: 4 },
+  { damageMultiplier: 1.8, frost: 2, reach: 124, radius: 88, knockback: 14 },
 ];
 
 /** Grace period for chaining, in ms. Long enough to feel forgiving. */
 export const COMBO_WINDOW = 620;
+
+/**
+ * Tam Thủ Liệt Trảm — Huyết Lang's greatsword chain. No Frost: the three heads
+ * hit harder and shove farther, paying for the missing crowd-control.
+ */
+export const TAM_THU_LIET_CHAM: readonly ComboStep[] = [
+  { damageMultiplier: 1.1, frost: 0, reach: 74, radius: 66, knockback: 6 },
+  { damageMultiplier: 1.35, frost: 0, reach: 90, radius: 72, knockback: 10 },
+  { damageMultiplier: 2.1, frost: 0, reach: 110, radius: 82, knockback: 22 },
+];

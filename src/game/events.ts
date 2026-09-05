@@ -20,7 +20,67 @@ export const GameEvent = {
   Dash: 'player-dash',
   /** Which character the scene handed the controls to. */
   CharacterChanged: 'character-changed',
+  /** A WorldSession was attached or dropped. */
+  NetSession: 'net-session',
+  /** Nearby players changed. */
+  NetRoster: 'net-roster',
+  /** Another player's pose arrived. */
+  NetPose: 'net-pose',
+  /** Another player's attack / skill / dash arrived. */
+  NetAction: 'net-action',
+  /** Shared PvE event (snapshot, hurt, loot, reward). */
+  NetWorld: 'net-world',
+  /** Zone host changed. */
+  NetHost: 'net-host',
+  /** Seconds left on the death respawn clock. `null` means alive. */
+  DeathCountdown: 'death-countdown',
+  /** Skill cooldown ratios for the HUD pips, 0 = ready. */
+  Cooldowns: 'skill-cooldowns',
+  /** Cultivation rank / XP changed. */
+  Progression: 'progression-changed',
+  /** Bag or equipment changed. */
+  Inventory: 'inventory-changed',
+  /** HUD asked to wear / take off / use an item. */
+  InventoryCommand: 'inventory-command',
+  /** Inventory panel should open or close. */
+  InventoryToggle: 'inventory-toggle',
+  /** Standing on a loot pile — HUD can prompt F. */
+  LootPrompt: 'loot-prompt',
+  /** Entered a named zone. */
+  ZoneChanged: 'zone-changed',
+  /** A toast the HUD should show (shrine-only swap, full bag, …). */
+  Notice: 'game-notice',
+  /** Cloud save just finished. */
+  Persist: 'persist-status',
+  /** Lobby selected an owned avatar before (or instead of) joining a room. */
+  AvatarChosen: 'avatar-chosen',
+  /** Visited warp list + whether the picker is open. */
+  WarpState: 'warp-state',
+  /** HUD asked to open, close, or travel. */
+  WarpCommand: 'warp-command',
 } as const;
+
+export interface WarpStatePayload {
+  open: boolean;
+  current: string;
+  unlocked: readonly string[];
+}
+
+export interface WarpCommandPayload {
+  action: 'toggle' | 'close' | 'travel';
+  zone?: string;
+}
+
+export interface AvatarChosenPayload {
+  id: string;
+  character: string;
+  name: string;
+}
+
+export interface PersistPayload {
+  remote: boolean;
+  error?: string;
+}
 
 export interface StatsPayload {
   hp: number;
@@ -109,6 +169,32 @@ export interface CharacterChangedPayload {
    * followed.
    */
   comboSteps: number;
+}
+
+export interface DeathCountdownPayload {
+  /** Whole seconds remaining; 0 means the revive is happening. */
+  seconds: number | null;
+}
+
+export interface CooldownPayload {
+  /** 0 = ready, 1 = just used. Same order as the character's skill bar. */
+  skills: readonly number[];
+}
+
+export interface ProgressionPayload {
+  level: number;
+  xp: number;
+  need: number;
+  title: string;
+}
+
+export interface ZonePayload {
+  id: string;
+  name: string;
+}
+
+export interface LootPromptPayload {
+  label: string | null;
 }
 
 export function emitStats(stats: CharacterStats): void {

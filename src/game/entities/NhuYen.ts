@@ -64,7 +64,7 @@ const DASH_SPEED = DASH_DISTANCE / (DASH_DURATION / 1000);
  * so its own pillar rises where she stands. The rest of the array spreads
  * outward from there; that spread lives in the scene with the other ranges.
  */
-const QI_SLASH_REACH = 34;
+const QI_SLASH_REACH = 48;
 const ICE_ARRAY_REACH = 0;
 
 /** How far into a swing a press starts being buffered for the next one. */

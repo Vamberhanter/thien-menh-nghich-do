@@ -149,7 +149,7 @@ export class NhuYenEffects {
       this.scene.time.delayedCall(i * spacingMs, () => {
         if (!source.active) return;
         const ghost = this.scene.add
-          .sprite(source.x, source.y, NHU_YEN_TEXTURE, source.frame.name)
+          .sprite(source.x, source.y, source.texture.key, source.frame.name)
           .setOrigin(source.originX, source.originY)
           .setFlipX(source.flipX)
           .setDepth(source.y - 1)

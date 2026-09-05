@@ -322,6 +322,21 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
     this.bar.fillStyle(0xff8b96, 1).fillRect(x, y, Math.round(width * fraction), 2);
   }
 
+  /** Guest replica: match the host without firing loot/XP hooks. */
+  syncFromHost(x: number, y: number, hp: number, alive: boolean): void {
+    this.setPosition(x, y);
+    this.stats.hp = Math.max(0, hp);
+    if (!alive && this.currentState !== 'dead') {
+      this.setVelocity(0, 0);
+      this.clearTint();
+      this.pending = null;
+      this.playState('dead', Boss1Clip.death(), true);
+      this.bar.clear();
+      const body = this.body as Phaser.Physics.Arcade.Body | null;
+      if (body) body.enable = false;
+    }
+  }
+
   die(): void {
     if (!this.alive) return;
     this.stats.hp = 0;

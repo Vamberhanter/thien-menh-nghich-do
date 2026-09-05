@@ -29,8 +29,8 @@ const BODY_OFFSET_Y = STANDING_POINT.y - BODY_HEIGHT;
 export const FEET_OFFSET_Y = STANDING_POINT.y - FRAME_HEIGHT / 2;
 
 /** How far in front of the character a hit lands. */
-const ATTACK_REACH = 44;
-const SKILL_REACH = 78;
+const ATTACK_REACH = 68;
+const SKILL_REACH = 100;
 
 export class LinYuan extends Phaser.Physics.Arcade.Sprite {
   readonly stats: CharacterStats;

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { remoteAtlas } from '../../net/assets';
 import type { Direction } from '../types';
 
 /**
@@ -12,8 +13,9 @@ import type { Direction } from '../types';
  * stands on, and that doubles as the depth-sort key.
  */
 export const BOSS1_TEXTURE = 'boss1';
-export const BOSS1_ATLAS_URL = 'assets/boss/boss1/atlas/boss1.json';
-export const BOSS1_ATLAS_PATH = 'assets/boss/boss1/atlas';
+const bossAtlas = remoteAtlas('boss/boss1/atlas/boss1.json', 'boss/boss1/atlas');
+export const BOSS1_ATLAS_URL = bossAtlas.url;
+export const BOSS1_ATLAS_PATH = bossAtlas.path;
 
 interface ClipSpec {
   clip: string;
