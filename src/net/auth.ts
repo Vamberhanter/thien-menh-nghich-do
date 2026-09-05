@@ -1,42 +1,29 @@
 import { getSupabase } from './supabase';
 
 const EMAIL_KEY = 'tmnd.email';
-const ACCOUNT_KEY = 'tmnd.account';
 
 export interface GameUser {
   id: string;
   email: string;
 }
 
-let current: GameUser | null = readAccount();
+let current: GameUser | null = null;
+let accessToken: string | null = null;
+let startup: Promise<void> | null = null;
 const listeners = new Set<(user: GameUser | null) => void>();
 
-function readAccount(): GameUser | null {
-  try {
-    const raw = localStorage.getItem(ACCOUNT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as GameUser;
-    if (!parsed?.id || !parsed.email) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function setAccount(user: GameUser | null): GameUser | null {
+function setAccount(user: GameUser | null, token: string | null = accessToken): GameUser | null {
   current = user;
+  accessToken = user ? token : null;
   if (user) {
-    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(user));
     rememberEmail(user.email);
-  } else {
-    localStorage.removeItem(ACCOUNT_KEY);
   }
   for (const listener of listeners) listener(user);
   return user;
 }
 
 export function currentAccessToken(): string | null {
-  return null;
+  return accessToken;
 }
 
 export function rememberedEmail(): string {
@@ -64,45 +51,62 @@ export function normalizeEmail(raw: string): string {
   return `${local}@${domain}`;
 }
 
-export function startAuth(): Promise<GameUser | null> {
-  current = readAccount();
-  return Promise.resolve(current);
+export async function startAuth(): Promise<GameUser | null> {
+  if (!startup) {
+    const supabase = getSupabase();
+    supabase.auth.onAuthStateChange((_event, session) => {
+      setAccount(asUser(session?.user), session?.access_token ?? null);
+    });
+
+    startup = supabase.auth.getSession().then(({ data, error }) => {
+      if (error) throw new Error(authMessage(error.message));
+      setAccount(asUser(data.session?.user), data.session?.access_token ?? null);
+    });
+  }
+  await startup;
+  return current;
 }
 
 export async function currentUser(): Promise<GameUser | null> {
-  return current ?? readAccount();
+  await startAuth();
+  return current;
 }
 
 export function subscribeAuth(onUser: (user: GameUser | null) => void): () => void {
-  onUser(current ?? readAccount());
+  onUser(current);
   listeners.add(onUser);
   return () => listeners.delete(onUser);
 }
 
 export async function signIn(email: string, password: string): Promise<GameUser> {
-  const { data, error } = await getSupabase().rpc('login_account', {
-    p_email: normalizeEmail(email),
-    p_password: password,
+  const { data, error } = await getSupabase().auth.signInWithPassword({
+    email: normalizeEmail(email),
+    password,
   });
   if (error) throw new Error(authMessage(error.message));
-  const user = asUser(data);
+  const user = asUser(data.user);
   if (!user) throw new Error('Không đăng nhập được');
-  return setAccount(user)!;
+  return setAccount(user, data.session?.access_token ?? null)!;
 }
 
 export async function signUp(email: string, password: string): Promise<GameUser> {
   const normalized = normalizeEmail(email);
-  const { data, error } = await getSupabase().rpc('register_account', {
-    p_email: normalized,
-    p_password: password,
+  const { data, error } = await getSupabase().auth.signUp({
+    email: normalized,
+    password,
   });
   if (error) throw new Error(authMessage(error.message));
-  const created = asUser(data);
+  const created = asUser(data.user);
   if (!created) throw new Error('Không tạo được tài khoản');
-  return signIn(normalized, password);
+  if (!data.session) {
+    throw new Error('Tài khoản đã được tạo. Hãy xác nhận email rồi đăng nhập.');
+  }
+  return setAccount(created, data.session.access_token)!;
 }
 
 export async function signOut(): Promise<void> {
+  const { error } = await getSupabase().auth.signOut();
+  if (error) throw new Error(authMessage(error.message));
   setAccount(null);
 }
 
@@ -116,10 +120,13 @@ function asUser(raw: unknown): GameUser | null {
 }
 
 export function authMessage(message: string): string {
-  if (/invalid login|sai email/i.test(message)) return 'Sai email hoặc mật khẩu';
-  if (/already|đã có tài khoản/i.test(message)) return 'Email này đã có tài khoản. Hãy đăng nhập.';
+  if (/invalid login|invalid credentials|sai email/i.test(message)) return 'Sai email hoặc mật khẩu';
+  if (/already|registered|đã có tài khoản/i.test(message)) {
+    return 'Email này đã có tài khoản. Hãy đăng nhập.';
+  }
   if (/password|mật khẩu tối thiểu/i.test(message) && /6|least|character/i.test(message)) {
     return 'Mật khẩu tối thiểu 6 ký tự';
   }
+  if (/email not confirmed/i.test(message)) return 'Hãy xác nhận email trước khi đăng nhập';
   return message;
 }
