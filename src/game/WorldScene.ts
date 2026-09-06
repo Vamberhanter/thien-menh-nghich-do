@@ -78,8 +78,8 @@ import type {
   ZoneDef,
   ZoneId,
 } from './zones';
-import { setCurrentZone } from '../worldState';
-import { consumePad } from '../touchPad';
+import { setCurrentZone } from './worldState';
+import { consumePad } from './touchPad';
 
 const HIT_RADIUS = 64;
 /** Muted grey-blue so your own numbers stay readable in a four-player pile-on. */
@@ -1411,8 +1411,8 @@ export class WorldScene extends Phaser.Scene {
     }
     if (payload.action === 'sell' && payload.index !== undefined) {
       const sold = this.bag.sell(payload.index);
-      if (sold?.sellValue) {
-        GameBus.emit(GameEvent.Notice, `Đã bán ${sold.name} · +${sold.sellValue} tiền đồng`);
+      if (sold) {
+        GameBus.emit(GameEvent.Notice, `Đã bán ${sold.item.name} · +${sold.gained} tiền đồng`);
       }
     }
     this.applyGrowth(false);
