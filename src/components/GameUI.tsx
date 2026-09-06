@@ -26,6 +26,13 @@ import { MIKU_PROFILE } from '../game/entities/Miku';
 import { CHARACTER_NAME } from '../net/types';
 import { isInputGated, returnToLobby, setSystemMenuOpen } from '../net/bind';
 import { consumePad } from '../game/touchPad';
+import {
+  CONTROL_MODE_LABEL,
+  cycleControlMode,
+  readControlMode,
+  type ControlMode,
+} from '../game/touchPad';
+import { gamepadConnected } from '../game/gamepad';
 
 const STATE_LABEL: Record<CharacterState, string> = {
   idle: 'Tĩnh tọa',
@@ -67,6 +74,7 @@ type MenuAction =
   | 'shop'
   | 'farm'
   | 'warp'
+  | 'controls'
   | 'leave';
 
 interface MenuItem {
@@ -75,17 +83,23 @@ interface MenuItem {
   danger?: boolean;
 }
 
-const MENU_ITEMS: readonly MenuItem[] = [
-  { id: 'resume', label: 'Tiếp tục' },
-  { id: 'inventory', label: 'Túi đồ' },
-  { id: 'character', label: 'Nhân vật' },
-  { id: 'breakthrough', label: 'Đột phá' },
-  { id: 'quest', label: 'Nhiệm vụ' },
-  { id: 'shop', label: 'Thương nhân' },
-  { id: 'farm', label: 'Linh Điền' },
-  { id: 'warp', label: 'Dịch chuyển' },
-  { id: 'leave', label: 'Rời phòng', danger: true },
-];
+function buildMenuItems(mode: ControlMode): readonly MenuItem[] {
+  return [
+    { id: 'resume', label: 'Tiếp tục' },
+    { id: 'inventory', label: 'Túi đồ' },
+    { id: 'character', label: 'Nhân vật' },
+    { id: 'breakthrough', label: 'Đột phá' },
+    { id: 'quest', label: 'Nhiệm vụ' },
+    { id: 'shop', label: 'Thương nhân' },
+    { id: 'farm', label: 'Linh Điền' },
+    { id: 'warp', label: 'Dịch chuyển' },
+    {
+      id: 'controls',
+      label: `Điều khiển · ${CONTROL_MODE_LABEL[mode]}`,
+    },
+    { id: 'leave', label: 'Rời phòng', danger: true },
+  ];
+}
 
 function PixelBar({ value, max, variant }: { value: number; max: number; variant: 'hp' | 'sp' | 'xp' }) {
   const filled = max > 0 ? Math.round((value / max) * SEGMENTS) : 0;
@@ -209,6 +223,8 @@ export function GameUI() {
   const [inGame, setInGame] = useState(() => !isInputGated());
   const [quests, setQuests] = useState<QuestStatePayload>({ quests: [], tracked: [] });
   const [breakthroughReady, setBreakthroughReady] = useState(false);
+  const [controlMode, setControlMode] = useState<ControlMode>(() => readControlMode());
+  const MENU_ITEMS = buildMenuItems(controlMode);
   const [tribulation, setTribulation] = useState<TribulationHudPayload | null>(null);
 
   const leave = () => {
@@ -221,6 +237,24 @@ export function GameUI() {
   const runMenuAction = (action: MenuAction) => {
     if (action === 'leave') {
       leave();
+      return;
+    }
+    if (action === 'controls') {
+      const next = cycleControlMode(controlMode);
+      setControlMode(next);
+      GameBus.emit(GameEvent.ControlModeChanged, {
+        mode: next,
+        showPad: next !== 'keyboard',
+      });
+      GameBus.emit(GameEvent.TouchPadSet, { show: next !== 'keyboard' });
+      const padHint = gamepadConnected() ? ' · tay cầm đã kết nối' : ' · cắm tay cầm khi cần';
+      const tip =
+        next === 'keyboard'
+          ? `Chế độ bàn phím${padHint}`
+          : next === 'touch'
+            ? 'Hiện nút trên màn hình'
+            : `Tay cầm + hiện nút${padHint}`;
+      GameBus.emit(GameEvent.Notice, tip);
       return;
     }
     setMenuOpen(false);
@@ -564,7 +598,15 @@ export function GameUI() {
                 {item.id === 'leave' && leaving ? 'Đang rời…' : item.label}
               </button>
             ))}
-            <div className="game-menu__hint">D-pad / stick chọn · A xác nhận · B / Start đóng</div>
+            <div className="game-menu__hint">
+              {controlMode === 'gamepad'
+                ? 'A đánh · X/Y/B chiêu · LB túi · RB nhặt · Start menu'
+                : controlMode === 'touch'
+                  ? 'Dùng nút trên màn hình · tay cầm vẫn dùng được'
+                  : 'WASD / chuột · hoặc chọn lại Điều khiển để hiện nút'}
+              <br />
+              D-pad chọn · A xác nhận · B / Start đóng
+            </div>
           </div>
         </div>
       ) : null}

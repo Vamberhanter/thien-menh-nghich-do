@@ -3,14 +3,13 @@ import { GameBus, GameEvent } from '../game/events';
 import type { CharacterChangedPayload, CooldownPayload } from '../game/events';
 import { NHU_YEN_PROFILE } from '../game/entities/NhuYen';
 import {
-  itemOf,
-  type InventoryState,
-} from '../game/systems/Inventory';
-import {
+  controlModeShowsPad,
   prefersTouchUi,
   pressPad,
+  readControlMode,
   resetPadMove,
   setPadMove,
+  writeControlMode,
   writeTouchPadForced,
   type PadAction,
 } from '../game/touchPad';
@@ -19,27 +18,6 @@ const STICK_RADIUS = 58;
 const DEADZONE = 10;
 const SPRINT_AT = 0.74;
 
-const SKILL_SHORT: Record<string, string> = {
-  'Hư Vô Kiếm Khí': 'Kiếm',
-  'Phá Không': 'Phá',
-  'Ngự Kiếm Bộ': 'Lướt',
-  'Vạn Kiếm Quy Tông': 'Vạn',
-  'Băng Phách Trảm': 'Phách',
-  'Băng Tinh Trận': 'Trận',
-  'Sương Ảnh Bộ': 'Ảnh',
-  'Thiên Lý Băng Phong': 'Băng',
-  'Huyết Diễm Trảm': 'Huyết',
-  'Tam Thủ Hồng': 'Hồng',
-  'Liệt Ảnh Bộ': 'Xung',
-  'Ma Thần Giáng Thế': 'Ma',
-  'Tinh Mang Trảm': 'Tinh',
-  'Tinh Không Trận': 'Không',
-  'Ảo Ảnh Bộ': 'Ảo',
-  'Vạn Âm Triệu Tông': 'Âm',
-};
-
-const SKILL_KEYS = ['K', 'L', 'Space', 'U'] as const;
-
 interface Stick {
   originX: number;
   originY: number;
@@ -47,13 +25,16 @@ interface Stick {
   thumbY: number;
 }
 
+/**
+ * On-screen stick + skills. Open on a real phone, or after tapping
+ * "Hiện nút". Desktop keyboard stays the default.
+ */
 export function TouchPad() {
   const [show, setShow] = useState(prefersTouchUi);
   const [character, setCharacter] = useState<CharacterChangedPayload>({ ...NHU_YEN_PROFILE });
   const [cooldowns, setCooldowns] = useState<readonly number[]>([]);
   const [loot, setLoot] = useState(false);
   const [stick, setStick] = useState<Stick | null>(null);
-  const [potion, setPotion] = useState({ hp: 0, sp: 0 });
   const pointer = useRef<number | null>(null);
   const stickRef = useRef<Stick | null>(null);
 
@@ -66,35 +47,48 @@ export function TouchPad() {
   useEffect(() => {
     const onLoot = ({ label }: { label: string | null }) => setLoot(Boolean(label));
     const onCool = (payload: CooldownPayload) => setCooldowns(payload.skills);
-    const onInv = (next: InventoryState) => {
-      if (!next?.bag) return;
-      let hp = 0;
-      let sp = 0;
-      next.bag.forEach((id, index) => {
-        const item = itemOf(id);
-        if (!item || item.kind !== 'consumable') return;
-        const qty = Math.max(1, next.quantities?.[index] ?? 1);
-        if (item.restoreHp) hp += qty;
-        if (item.restoreSp) sp += qty;
-      });
-      setPotion({ hp, sp });
+    const onPadSet = (payload: { show?: boolean }) => {
+      if (typeof payload?.show !== 'boolean') return;
+      writeControlMode(payload.show ? 'touch' : 'keyboard');
+      setShow(payload.show);
+      if (!payload.show) resetPadMove();
+    };
+    const onMode = (payload: { mode?: string; showPad?: boolean }) => {
+      if (typeof payload?.showPad === 'boolean') {
+        setShow(payload.showPad);
+        if (!payload.showPad) resetPadMove();
+        return;
+      }
+      if (payload?.mode === 'keyboard' || payload?.mode === 'touch' || payload?.mode === 'gamepad') {
+        const showPad = controlModeShowsPad(payload.mode);
+        setShow(showPad);
+        if (!showPad) resetPadMove();
+      }
     };
     GameBus.on(GameEvent.CharacterChanged, setCharacter);
     GameBus.on(GameEvent.Cooldowns, onCool);
     GameBus.on(GameEvent.LootPrompt, onLoot);
-    GameBus.on(GameEvent.Inventory, onInv);
+    GameBus.on(GameEvent.TouchPadSet, onPadSet);
+    GameBus.on(GameEvent.ControlModeChanged, onMode);
+    setShow(controlModeShowsPad(readControlMode()) || prefersTouchUi());
     return () => {
       GameBus.off(GameEvent.CharacterChanged, setCharacter);
       GameBus.off(GameEvent.Cooldowns, onCool);
       GameBus.off(GameEvent.LootPrompt, onLoot);
-      GameBus.off(GameEvent.Inventory, onInv);
+      GameBus.off(GameEvent.TouchPadSet, onPadSet);
+      GameBus.off(GameEvent.ControlModeChanged, onMode);
     };
   }, []);
 
   const toggle = () => {
     setShow((on) => {
       const next = !on;
+      writeControlMode(next ? 'touch' : 'keyboard');
       writeTouchPadForced(next);
+      GameBus.emit(GameEvent.ControlModeChanged, {
+        mode: next ? 'touch' : 'keyboard',
+        showPad: next,
+      });
       if (!next) resetPadMove();
       return next;
     });
@@ -149,12 +143,6 @@ export function TouchPad() {
     pressPad(action);
   };
 
-  const usePotion = (kind: 'hp' | 'sp') => (event: ReactPointer) => {
-    event.preventDefault();
-    event.stopPropagation();
-    GameBus.emit(GameEvent.InventoryCommand, { action: 'use-quick', kind });
-  };
-
   return (
     <div className={`pad${show ? ' is-on' : ''}`}>
       <button type="button" className="pad__toggle" onClick={toggle}>
@@ -192,55 +180,30 @@ export function TouchPad() {
 
           <div className="pad__skills">
             <div className="pad__utilities">
-              <button type="button" className="pad__util" onPointerDown={tap('bag')} title="Túi đồ">
-                Tui
+              <button type="button" className="pad__util" onPointerDown={tap('bag')}>
+                Túi
               </button>
-              <button
-                type="button"
-                className={`pad__util${loot ? ' is-hot' : ''}`}
-                onPointerDown={tap('pick')}
-                title="Nhặt đồ"
-              >
-                Nhat
+              <button type="button" className={`pad__util${loot ? ' is-hot' : ''}`} onPointerDown={tap('pick')}>
+                Nhặt
               </button>
-              <button type="button" className="pad__util" onPointerDown={tap('envArt')} title="Đổi nền cảnh">
-                Nen
+              <button type="button" className="pad__util" onPointerDown={tap('envArt')}>
+                Cảnh
               </button>
             </div>
 
-            <div className="pad__potions">
-              <button
-                type="button"
-                className={`pad__potion pad__potion--hp${potion.hp ? '' : ' is-empty'}`}
-                onPointerDown={usePotion('hp')}
-                title="Hồi máu"
-              >
-                <em>Máu</em>
-                <span>×{potion.hp}</span>
-              </button>
-              <button
-                type="button"
-                className={`pad__potion pad__potion--sp${potion.sp ? '' : ' is-empty'}`}
-                onPointerDown={usePotion('sp')}
-                title="Hồi linh lực"
-              >
-                <em>Linh</em>
-                <span>×{potion.sp}</span>
-              </button>
-            </div>
-
-            <button type="button" className="pad__atk" onPointerDown={tap('attack')}>Đánh</button>
+            <button type="button" className="pad__atk" onPointerDown={tap('attack')}>
+              Đánh
+            </button>
 
             {character.skills.map((skill, i) => (
               <button
                 type="button"
-                key={`${skill}-${i}`}
+                key={skill}
                 className={`pad__skill pad__skill--${i}`}
                 onPointerDown={tap((`skill${i}`) as PadAction)}
-                title={skill}
               >
                 <em>{shortSkill(skill)}</em>
-                <span>{SKILL_KEYS[i] ?? String(i + 1)}</span>
+                <span>{skill}</span>
                 {(cooldowns[i] ?? 0) > 0.02 && (
                   <i className="pad__cd" style={{ height: `${Math.round(cooldowns[i] * 100)}%` }} />
                 )}
@@ -252,6 +215,13 @@ export function TouchPad() {
     </div>
   );
 }
+
+const SKILL_SHORT: Record<string, string> = {
+  'Hư Vô Kiếm Khí': 'Hư',
+  'Băng Phách Trảm': 'Phách',
+  'Băng Tinh Trận': 'Trận',
+  'Sương Ảnh Bộ': 'Ảnh',
+};
 
 function shortSkill(name: string): string {
   return SKILL_SHORT[name] ?? name.slice(0, 2);

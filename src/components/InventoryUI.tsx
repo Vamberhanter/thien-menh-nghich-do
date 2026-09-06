@@ -171,7 +171,7 @@ export function InventoryUI() {
                 <>
                   <ItemIcon item={item} />
                   <span>{item.name}</span>
-                  {qty > 1 ? <b>×{qty}</b> : null}
+                  {qty > 1 ? <b>x{qty}</b> : null}
                   {item.sellValue ? <small>Bán {item.sellValue}</small> : null}
                 </>
               ) : null}

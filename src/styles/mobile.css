@@ -161,9 +161,3 @@ html.is-touch .pad__skills {
     max-height: calc(100dvh - 56px);
   }
 }
-
-html.is-touch .pad__potions {
-  right: auto;
-  left: 0;
-  bottom: 178px;
-}

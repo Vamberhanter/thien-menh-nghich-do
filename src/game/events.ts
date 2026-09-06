@@ -82,6 +82,10 @@ export const GameEvent = {
   TribulationState: 'tribulation-state',
   /** Pause / system menu (Esc or gamepad Start). */
   MenuToggle: 'menu-toggle',
+  /** Show / hide on-screen controls (from system menu). */
+  TouchPadSet: 'touch-pad-set',
+  /** Keyboard / on-screen / gamepad preference changed. */
+  ControlModeChanged: 'control-mode-changed',
   /** Standing on a loot pile — HUD can prompt F. */
   LootPrompt: 'loot-prompt',
   /** Entered a named zone. */
