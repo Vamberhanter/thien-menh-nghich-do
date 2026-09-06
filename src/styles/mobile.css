@@ -108,6 +108,10 @@ html.is-touch .pad__skills {
     max-width: none;
     max-height: calc(100dvh - 88px);
   }
+
+  html.is-touch .storage-columns {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-height: 520px) and (orientation: landscape) {
@@ -156,4 +160,10 @@ html.is-touch .pad__skills {
     max-width: none;
     max-height: calc(100dvh - 56px);
   }
+}
+
+html.is-touch .pad__potions {
+  right: auto;
+  left: 0;
+  bottom: 178px;
 }

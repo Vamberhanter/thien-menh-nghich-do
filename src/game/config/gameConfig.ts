@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { BootScene } from '../scenes/BootScene';
-import { WorldScene } from '../scenes/WorldScene';
+import { WorldScene } from '../WorldScene';
 
 export const GAME_WIDTH = 1280;
 export const GAME_HEIGHT = 720;

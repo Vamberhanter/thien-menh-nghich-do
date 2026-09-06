@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test": "vitest run",
     "preview": "vite preview",
     "build:lamuyen": "node tools/build-lamuyen-atlas.mjs",
     "inspect:lamuyen": "node tools/extract-lamuyen.mjs --report",
@@ -17,9 +18,11 @@
     "gen:placeholder": "node tools/generate-lin-yuan-sprites.mjs",
     "env:manaseed": "node tools/build-manaseed-env.mjs",
     "env:monsters": "node tools/build-monsters.mjs",
-    "env:items": "node tools/build-farm-items.mjs",
+    "env:items": "node tools/build-farm-items.mjs && node tools/build-catalog-icons.mjs",
+    "env:farm": "node tools/build-farm-env.mjs && node tools/build-farm-items.mjs",
+    "env:catalog-icons": "node tools/build-catalog-icons.mjs",
     "env:weapons": "node tools/build-weapons.mjs",
-    "env:resources": "node tools/build-world-resources.mjs && node tools/build-farm-items.mjs",
+    "env:resources": "node tools/build-world-resources.mjs && node tools/build-farm-env.mjs && node tools/build-farm-items.mjs && node tools/build-catalog-icons.mjs",
     "measure:stride": "node tools/measure-stride.mjs walk_side run_side walk_down walk_up",
     "analyse:cycle": "node tools/analyse-cycle.mjs walk_side run_side walk_down walk_up",
     "build:huyetlang": "node tools/build-huyetlang-atlas.mjs",
@@ -51,6 +54,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
   }
 }

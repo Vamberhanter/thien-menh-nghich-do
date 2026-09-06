@@ -17,6 +17,14 @@ export { MANA_SEED_SOURCE, MANA_SEED_SOURCE_URL } from './manaSeedArt';
 export { MONSTER_TEXTURES, monsterArt } from './monsterArt';
 export { CHEST_SOURCE, CHEST_SOURCE_URL, ITEM_ICON_SOURCES, dropTexture } from './itemArt';
 export { WORLD_RESOURCE_TEXTURES, WorldResourceTexture } from './worldResourceArt';
+export {
+  FARM_TEXTURES,
+  FarmTexture,
+  cropKindFromSeed,
+  farmGrowTexture,
+  growthStage,
+} from './farmArt';
+export type { FarmCropKind } from './farmArt';
 export type { DecalArt, EnvKit, PropArt, PropBox } from './kit';
 
 /**

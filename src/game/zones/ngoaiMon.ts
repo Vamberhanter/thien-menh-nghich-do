@@ -57,5 +57,12 @@ export const NGOAI_MON: ZoneDef = {
       spawn: { x: 180, y: 900 },
       label: 'Rừng ngoại môn',
     },
+    {
+      x: 1200,
+      y: 1680,
+      to: 'linh-dien',
+      spawn: { x: 1200, y: 220 },
+      label: 'Linh Điền',
+    },
   ],
 };

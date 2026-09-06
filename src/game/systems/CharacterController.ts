@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { LinYuan } from '../entities/LinYuan';
 import type { Vector2Like } from '../types';
-import { isInputGated } from '../../net/bind';
+import { isGameplayGated } from '../../net/bind';
 import { consumePad, padMove } from '../touchPad';
 
 export interface ControllerKeys {
@@ -11,6 +11,9 @@ export interface ControllerKeys {
   right: Phaser.Input.Keyboard.Key[];
   attack: Phaser.Input.Keyboard.Key[];
   skill: Phaser.Input.Keyboard.Key[];
+  secondary: Phaser.Input.Keyboard.Key[];
+  dash: Phaser.Input.Keyboard.Key[];
+  ultimate: Phaser.Input.Keyboard.Key[];
 }
 
 /**
@@ -39,6 +42,9 @@ export class CharacterController {
       right: addKeys(K.D, K.RIGHT),
       attack: addKeys(K.J),
       skill: addKeys(K.K),
+      secondary: addKeys(K.L),
+      dash: addKeys(K.SPACE),
+      ultimate: addKeys(K.U),
     };
   }
 
@@ -51,16 +57,21 @@ export class CharacterController {
   update(time: number, delta: number): void {
     this.player.tick(time, delta);
 
-    if (!this.enabled || this.player.isDead || isInputGated()) {
+    if (!this.enabled || this.player.isDead || isGameplayGated()) {
       this.player.setVelocity(0, 0);
       return;
     }
 
-    // Action inputs are checked first: they win over movement this frame.
-    if (anyJustDown(this.keys.attack) || consumePad('attack')) {
-      this.player.attack();
+    if (anyJustDown(this.keys.ultimate) || consumePad('skill3')) {
+      this.player.castSkill(3);
+    } else if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
+      this.player.castSkill(2);
+    } else if (anyJustDown(this.keys.secondary) || consumePad('skill1')) {
+      this.player.castSkill(1);
     } else if (anyJustDown(this.keys.skill) || consumePad('skill0')) {
-      this.player.castSkill();
+      this.player.castSkill(0);
+    } else if (anyJustDown(this.keys.attack) || consumePad('attack')) {
+      this.player.attack();
     }
 
     if (this.player.isBusy) {

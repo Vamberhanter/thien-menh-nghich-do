@@ -67,5 +67,12 @@ export const RUNG_NGOAI_MON: ZoneDef = {
       spawn: { x: 260, y: 1600 },
       label: 'Huyết Ma Cốc',
     },
+    {
+      x: 2220,
+      y: 1100,
+      to: 'thanh-phong-coc',
+      spawn: { x: 220, y: 1100 },
+      label: 'Thanh Phong Cốc',
+    },
   ],
 };

@@ -87,5 +87,12 @@ export const HUYET_MA_COC: ZoneDef = {
       spawn: { x: 2100, y: 900 },
       label: 'Rừng ngoại môn',
     },
+    {
+      x: 160,
+      y: 1300,
+      to: 'thanh-phong-coc',
+      spawn: { x: 220, y: 1400 },
+      label: 'Thanh Phong Cốc',
+    },
   ],
 };

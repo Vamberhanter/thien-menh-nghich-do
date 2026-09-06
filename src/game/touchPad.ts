@@ -5,9 +5,17 @@ export type PadAction =
   | 'skill0'
   | 'skill1'
   | 'skill2'
+  | 'skill3'
   | 'bag'
   | 'pick'
-  | 'envArt';
+  | 'envArt'
+  | 'warp'
+  | 'swap'
+  | 'menu'
+  | 'menuUp'
+  | 'menuDown'
+  | 'menuConfirm'
+  | 'menuBack';
 
 interface PadMove {
   x: number;

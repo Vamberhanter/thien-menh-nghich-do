@@ -223,6 +223,10 @@ export class Miku extends Phaser.Physics.Arcade.Sprite {
     return this.cast(MikuSlot.StarSlash, MikuClip.starSlash(this.facing), STAR_SLASH_REACH);
   }
 
+  castUltimate(): boolean {
+    return this.cast(MikuSlot.Ultimate, MikuClip.starSlash(this.facing), STAR_SLASH_REACH * 1.35);
+  }
+
   castStarArray(): boolean {
     return this.cast(MikuSlot.StarArray, MikuClip.starArray(this.facing), STAR_ARRAY_REACH);
   }
@@ -351,10 +355,15 @@ export class Miku extends Phaser.Physics.Arcade.Sprite {
 
   private rejectSkill(slot: number): void {
     const skill = this.combat.skillAt(slot);
+    const reason = this.combat.isSkillLocked(slot)
+      ? 'locked'
+      : this.combat.hasSpiritFor(skill)
+        ? 'cooldown'
+        : 'spirit';
     GameBus.emit(GameEvent.SkillRejected, {
       name: skill.name,
       slot,
-      reason: this.combat.hasSpiritFor(skill) ? 'cooldown' : 'spirit',
+      reason,
     });
   }
 

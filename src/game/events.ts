@@ -44,6 +44,44 @@ export const GameEvent = {
   InventoryCommand: 'inventory-command',
   /** Inventory panel should open or close. */
   InventoryToggle: 'inventory-toggle',
+  /** Character build (attributes, skills and sockets) changed. */
+  CharacterBuild: 'character-build-changed',
+  /** HUD asked to allocate an attribute or unlock a skill. */
+  CharacterBuildCommand: 'character-build-command',
+  /** Character development panel should open or close. */
+  CharacterPanelToggle: 'character-panel-toggle',
+  /** Quest journal and tracked objectives changed. */
+  QuestState: 'quest-state-changed',
+  /** HUD asked to accept, complete or track a quest. */
+  QuestCommand: 'quest-command',
+  /** Quest journal should open or close. */
+  QuestToggle: 'quest-toggle',
+  /** Merchant inventory and availability changed. */
+  ShopState: 'shop-state-changed',
+  /** HUD asked to buy an offer or sell an inventory slot. */
+  ShopCommand: 'shop-command',
+  /** Merchant panel should open or close. */
+  ShopToggle: 'shop-toggle',
+  /** Personal cultivation plots changed. */
+  FarmState: 'farm-state-changed',
+  /** HUD asked to plant or harvest a personal plot. */
+  FarmCommand: 'farm-command',
+  /** Farming panel should open or close. */
+  FarmToggle: 'farm-toggle',
+  /** Seed selected in the Linh Điền panel (used for world-plot planting). */
+  FarmSelectSeed: 'farm-select-seed',
+  /** Personal shrine warehouse panel. */
+  StorageToggle: 'storage-toggle',
+  /** Deposit / withdraw between bag and warehouse. */
+  StorageCommand: 'storage-command',
+  /** Alchemy cauldron panel. */
+  AlchemyToggle: 'alchemy-toggle',
+  /** Craft one alchemy recipe. */
+  AlchemyCommand: 'alchemy-command',
+  /** Tribulation HUD countdown. */
+  TribulationState: 'tribulation-state',
+  /** Pause / system menu (Esc or gamepad Start). */
+  MenuToggle: 'menu-toggle',
   /** Standing on a loot pile — HUD can prompt F. */
   LootPrompt: 'loot-prompt',
   /** Entered a named zone. */
@@ -82,6 +120,13 @@ export interface AvatarChosenPayload {
 export interface PersistPayload {
   remote: boolean;
   error?: string;
+}
+
+export interface TribulationHudPayload {
+  active: boolean;
+  label: string;
+  secondsLeft: number;
+  remaining: number;
 }
 
 export interface StatsPayload {
@@ -188,6 +233,83 @@ export interface ProgressionPayload {
   xp: number;
   need: number;
   title: string;
+}
+
+export interface BreakthroughCostView {
+  id: string;
+  name: string;
+  need: number;
+  have: number;
+  icon?: string;
+}
+
+export interface BreakthroughView {
+  available: boolean;
+  lockedReason?: string;
+  recipeName?: string;
+  costs: readonly BreakthroughCostView[];
+}
+
+export interface CharacterBuildPayload {
+  character: string;
+  level: number;
+  title: string;
+  attributePoints: number;
+  skillPoints: number;
+  attributes: Record<string, number>;
+  skills: Record<string, number>;
+  breakthrough: BreakthroughView;
+}
+
+export interface QuestView {
+  id: string;
+  title: string;
+  summary: string;
+  status: 'available' | 'active' | 'ready' | 'completed' | 'locked';
+  progress: string;
+  minLevel: number;
+  reward: string;
+}
+
+export interface QuestStatePayload {
+  quests: readonly QuestView[];
+  tracked: readonly QuestView[];
+}
+
+export interface ShopOfferView {
+  id: string;
+  itemId: string;
+  name: string;
+  price: number;
+  minLevel: number;
+  available: boolean;
+}
+
+export interface ShopStatePayload {
+  merchant: string;
+  coins: number;
+  offers: readonly ShopOfferView[];
+}
+
+export interface FarmPlotView {
+  id: string;
+  status: 'empty' | 'growing' | 'ready';
+  watered: boolean;
+  crop: string;
+  progress: number;
+}
+
+export interface FarmStatePayload {
+  available: boolean;
+  selectedSeed: string;
+  seeds: ReadonlyArray<{ id: string; name: string; quantity: number }>;
+  plots: readonly FarmPlotView[];
+}
+
+export interface StorageCommandPayload {
+  action: 'deposit' | 'withdraw';
+  index: number;
+  quantity?: number;
 }
 
 export interface ZonePayload {

@@ -1,1 +1,2 @@
-export { WorldScene as TestScene } from './WorldScene';
+export { WorldScene as TestScene } from '../WorldScene';
+

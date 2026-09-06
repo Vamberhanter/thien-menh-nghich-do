@@ -14,7 +14,7 @@ import {
 } from '../types';
 import type { CharacterState, CharacterStats, Direction, Vector2Like } from '../types';
 import { GameBus, GameEvent, emitStats } from '../events';
-import type { AttackPayload, SkillPayload, StatePayload } from '../events';
+import type { AttackPayload, DashPayload, SkillPayload, StatePayload } from '../events';
 
 /**
  * Physics body: feet-sized, so the character overlaps props above the waist.
@@ -133,28 +133,54 @@ export class LinYuan extends Phaser.Physics.Arcade.Sprite {
     return true;
   }
 
-  castSkill(): boolean {
+  castSkill(slot = 0): boolean {
     if (this.isBusy || this.isDead) return false;
-    if (!this.combat.canCastSkill()) {
+    if (!this.combat.canCastSkill(slot)) {
+      const skill = this.combat.skillAt(slot);
       GameBus.emit(GameEvent.SkillRejected, {
-        name: this.combat.skill.name,
-        reason: this.combat.hasSpiritFor() ? 'cooldown' : 'spirit',
+        name: skill.name,
+        reason: this.combat.isSkillLocked(slot)
+          ? 'locked'
+          : this.combat.hasSpiritFor(skill)
+            ? 'cooldown'
+            : 'spirit',
       });
       return false;
     }
 
-    const damage = this.combat.beginSkill();
+    const skill = this.combat.skillAt(slot);
+    // Dash slot (2): short lunge without a dedicated dash clip.
+    if (slot === 2 && skill.damageMultiplier <= 0) {
+      this.combat.beginSkill(slot);
+      emitStats(this.stats);
+      const aim = DIRECTION_VECTORS[this.facing];
+      this.setVelocity(aim.x * 420, aim.y * 420);
+      this.scene.time.delayedCall(140, () => {
+        if (!this.isDead) this.setVelocity(0, 0);
+      });
+      GameBus.emit(GameEvent.Dash, {
+        direction: this.facing,
+        aim,
+        x: this.x,
+        y: this.y + FEET_OFFSET_Y,
+        distance: 90,
+        duration: 140,
+      } satisfies DashPayload);
+      return true;
+    }
+
+    const damage = this.combat.beginSkill(slot);
     this.setVelocity(0, 0);
     this.playState('skill', true);
     emitStats(this.stats);
 
-    const origin = this.hitOrigin(SKILL_REACH);
+    const origin = this.hitOrigin(slot === 3 ? SKILL_REACH * 1.4 : SKILL_REACH);
     const payload: SkillPayload = {
       damage,
       direction: this.facing,
       aim: DIRECTION_VECTORS[this.facing],
-      name: this.combat.skill.name,
-      cost: this.combat.skill.spiritCost,
+      name: skill.name,
+      cost: skill.spiritCost,
       ...origin,
     };
     GameBus.emit(GameEvent.Skill, payload);

@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GameBus, GameEvent } from '../game/events';
 import type {
+  CharacterBuildPayload,
   CharacterChangedPayload,
   CooldownPayload,
   ComboStatePayload,
   DeathCountdownPayload,
   MinimapPayload,
   ProgressionPayload,
+  QuestStatePayload,
   StatePayload,
   StatsPayload,
   ZonePayload,
   PersistPayload,
+  TribulationHudPayload,
 } from '../game/events';
 import type { RosterPayload } from '../net/types';
 import { DEFAULT_NHU_YEN_STATS } from '../game/types';
@@ -21,7 +24,8 @@ import { NHU_YEN_PROFILE } from '../game/entities/NhuYen';
 import { HUYET_LANG_PROFILE } from '../game/entities/HuyetLang';
 import { MIKU_PROFILE } from '../game/entities/Miku';
 import { CHARACTER_NAME } from '../net/types';
-import { isInputGated, returnToLobby } from '../net/bind';
+import { isInputGated, returnToLobby, setSystemMenuOpen } from '../net/bind';
+import { consumePad } from '../game/touchPad';
 
 const STATE_LABEL: Record<CharacterState, string> = {
   idle: 'Tĩnh tọa',
@@ -42,17 +46,46 @@ const SKILL_KEYS: Record<string, readonly string[]> = {
 };
 
 const HINTS: Record<string, string> = {
-  [LAM_UYEN_PROFILE.id]: `WASD di chuyển · J kiếm chiêu · K ${HU_VO_KIEM_KHI.name} · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Esc menu · Q tại huyết mạch`,
+  [LAM_UYEN_PROFILE.id]: `WASD / stick · J / A tấn · K / X ${HU_VO_KIEM_KHI.name} · RB nhặt · Start menu · Back đổi nhân vật tại huyết mạch`,
   [NHU_YEN_PROFILE.id]:
-    'WASD di chuyển · Shift chạy · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Esc menu · Q tại huyết mạch',
+    'WASD / stick · LT chạy · A liên chiêu · X / Y / B chiêu · RB nhặt · LB túi · Start menu · RT dịch chuyển',
   [HUYET_LANG_PROFILE.id]:
-    'WASD di chuyển · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Esc menu · Q tại huyết mạch',
+    'WASD / stick · A liên chiêu · X / Y / B chiêu · RB nhặt · LB túi · Start menu · RT dịch chuyển',
   [MIKU_PROFILE.id]:
-    'WASD di chuyển · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Esc menu · Q tại huyết mạch',
+    'WASD / stick · A liên chiêu · X / Y / B chiêu · RB nhặt · LB túi · Start menu · RT dịch chuyển',
 };
 
 const SEGMENTS = 12;
 const MAP_SIZE = 148;
+
+type MenuAction =
+  | 'resume'
+  | 'inventory'
+  | 'character'
+  | 'breakthrough'
+  | 'quest'
+  | 'shop'
+  | 'farm'
+  | 'warp'
+  | 'leave';
+
+interface MenuItem {
+  id: MenuAction;
+  label: string;
+  danger?: boolean;
+}
+
+const MENU_ITEMS: readonly MenuItem[] = [
+  { id: 'resume', label: 'Tiếp tục' },
+  { id: 'inventory', label: 'Túi đồ' },
+  { id: 'character', label: 'Nhân vật' },
+  { id: 'breakthrough', label: 'Đột phá' },
+  { id: 'quest', label: 'Nhiệm vụ' },
+  { id: 'shop', label: 'Thương nhân' },
+  { id: 'farm', label: 'Linh Điền' },
+  { id: 'warp', label: 'Dịch chuyển' },
+  { id: 'leave', label: 'Rời phòng', danger: true },
+];
 
 function PixelBar({ value, max, variant }: { value: number; max: number; variant: 'hp' | 'sp' | 'xp' }) {
   const filled = max > 0 ? Math.round((value / max) * SEGMENTS) : 0;
@@ -170,8 +203,13 @@ export function GameUI() {
   const [cloud, setCloud] = useState<PersistPayload | null>(null);
   const [minimap, setMinimap] = useState<MinimapPayload | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuIndex, setMenuIndex] = useState(0);
+  const menuIndexRef = useRef(0);
   const [leaving, setLeaving] = useState(false);
   const [inGame, setInGame] = useState(() => !isInputGated());
+  const [quests, setQuests] = useState<QuestStatePayload>({ quests: [], tracked: [] });
+  const [breakthroughReady, setBreakthroughReady] = useState(false);
+  const [tribulation, setTribulation] = useState<TribulationHudPayload | null>(null);
 
   const leave = () => {
     if (leaving) return;
@@ -179,6 +217,93 @@ export function GameUI() {
     setMenuOpen(false);
     void returnToLobby().finally(() => setLeaving(false));
   };
+
+  const runMenuAction = (action: MenuAction) => {
+    if (action === 'leave') {
+      leave();
+      return;
+    }
+    setMenuOpen(false);
+    if (action === 'resume') return;
+    if (action === 'inventory') GameBus.emit(GameEvent.InventoryToggle);
+    else if (action === 'character') GameBus.emit(GameEvent.CharacterPanelToggle);
+    else if (action === 'breakthrough') {
+      GameBus.emit(GameEvent.CharacterPanelToggle, { tab: 'breakthrough', forceOpen: true });
+    }
+    else if (action === 'quest') GameBus.emit(GameEvent.QuestToggle);
+    else if (action === 'shop') GameBus.emit(GameEvent.ShopToggle);
+    else if (action === 'farm') GameBus.emit(GameEvent.FarmToggle);
+    else if (action === 'warp') GameBus.emit(GameEvent.WarpCommand, { action: 'toggle' });
+  };
+
+  useEffect(() => {
+    setSystemMenuOpen(menuOpen);
+    if (menuOpen) {
+      setMenuIndex(0);
+      menuIndexRef.current = 0;
+    }
+    return () => setSystemMenuOpen(false);
+  }, [menuOpen]);
+
+  useEffect(() => {
+    menuIndexRef.current = menuIndex;
+  }, [menuIndex]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    let frame = 0;
+    const tick = () => {
+      if (consumePad('menuUp')) {
+        setMenuIndex((index) => {
+          const next = (index + MENU_ITEMS.length - 1) % MENU_ITEMS.length;
+          menuIndexRef.current = next;
+          return next;
+        });
+      }
+      if (consumePad('menuDown')) {
+        setMenuIndex((index) => {
+          const next = (index + 1) % MENU_ITEMS.length;
+          menuIndexRef.current = next;
+          return next;
+        });
+      }
+      if (consumePad('menuConfirm')) {
+        const item = MENU_ITEMS[menuIndexRef.current];
+        if (item) runMenuAction(item.id);
+      }
+      if (consumePad('menuBack')) setMenuOpen(false);
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [menuOpen, leaving]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code === 'ArrowUp' || event.code === 'KeyW') {
+        event.preventDefault();
+        setMenuIndex((index) => {
+          const next = (index + MENU_ITEMS.length - 1) % MENU_ITEMS.length;
+          menuIndexRef.current = next;
+          return next;
+        });
+      } else if (event.code === 'ArrowDown' || event.code === 'KeyS') {
+        event.preventDefault();
+        setMenuIndex((index) => {
+          const next = (index + 1) % MENU_ITEMS.length;
+          menuIndexRef.current = next;
+          return next;
+        });
+      } else if (event.code === 'Enter' || event.code === 'Space') {
+        event.preventDefault();
+        const item = MENU_ITEMS[menuIndexRef.current];
+        if (item) runMenuAction(item.id);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuOpen, leaving]);
 
   useEffect(() => {
     const onStats = (payload: StatsPayload) => setStats(payload);
@@ -194,9 +319,15 @@ export function GameUI() {
       reason,
     }: {
       name: string;
-      reason: 'cooldown' | 'spirit';
+      reason: 'cooldown' | 'spirit' | 'locked';
     }) => {
-      setNotice(reason === 'spirit' ? 'Linh lực không đủ' : `${name} chưa hồi`);
+      setNotice(
+        reason === 'spirit'
+          ? 'Linh lực không đủ'
+          : reason === 'locked'
+            ? `Cần học ${name} trong cây kỹ năng`
+            : `${name} chưa hồi`,
+      );
     };
     const onNotice = (text: string) => {
       if (typeof text === 'string') setNotice(text);
@@ -215,6 +346,13 @@ export function GameUI() {
         setMinimap(null);
       }
     };
+    const onBuild = (payload: CharacterBuildPayload) => {
+      setBreakthroughReady(Boolean(payload.breakthrough?.available));
+    };
+    const onTribulation = (payload: TribulationHudPayload) => {
+      if (!payload?.active) setTribulation(null);
+      else setTribulation(payload);
+    };
 
     GameBus.on(GameEvent.StatsChanged, onStats);
     GameBus.on(GameEvent.StateChanged, onState);
@@ -230,7 +368,10 @@ export function GameUI() {
     GameBus.on(GameEvent.Notice, onNotice);
     GameBus.on(GameEvent.Persist, setCloud);
     GameBus.on(GameEvent.Minimap, onMinimap);
+    GameBus.on(GameEvent.QuestState, setQuests);
     GameBus.on(GameEvent.NetSession, onSession);
+    GameBus.on(GameEvent.CharacterBuild, onBuild);
+    GameBus.on(GameEvent.TribulationState, onTribulation);
     return () => {
       GameBus.off(GameEvent.StatsChanged, onStats);
       GameBus.off(GameEvent.StateChanged, onState);
@@ -246,7 +387,10 @@ export function GameUI() {
       GameBus.off(GameEvent.Notice, onNotice);
       GameBus.off(GameEvent.Persist, setCloud);
       GameBus.off(GameEvent.Minimap, onMinimap);
+      GameBus.off(GameEvent.QuestState, setQuests);
       GameBus.off(GameEvent.NetSession, onSession);
+      GameBus.off(GameEvent.CharacterBuild, onBuild);
+      GameBus.off(GameEvent.TribulationState, onTribulation);
     };
   }, []);
 
@@ -257,14 +401,21 @@ export function GameUI() {
   }, [notice]);
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
+    const toggleMenu = () => {
       if (isInputGated()) return;
-      if (event.code !== 'Escape') return;
-      event.preventDefault();
       setMenuOpen((open) => !open);
     };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape') return;
+      event.preventDefault();
+      toggleMenu();
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    GameBus.on(GameEvent.MenuToggle, toggleMenu);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      GameBus.off(GameEvent.MenuToggle, toggleMenu);
+    };
   }, []);
 
   // Solo play never emits NetSession — sync when lobby closes via input gate.
@@ -309,8 +460,12 @@ export function GameUI() {
         <ComboPips steps={character.comboSteps} pending={comboPending} />
         <div className="hud__state">{STATE_LABEL[state]}</div>
         {cloud && (
-          <div className={`hud__cloud${cloud.remote ? '' : ' is-local'}`}>
-            {cloud.remote ? 'Đã lưu database' : 'Chưa lên database'}
+          <div className={`hud__cloud${cloud.remote ? '' : ' is-local'}`} title={cloud.error ?? undefined}>
+            {cloud.remote
+              ? 'Đã lưu database'
+              : cloud.error
+                ? `Chưa lên database · ${cloud.error}`
+                : 'Chưa lên database'}
           </div>
         )}
       </div>
@@ -339,6 +494,15 @@ export function GameUI() {
         >
           Menu
         </button>
+        <button
+          type="button"
+          className={`hud__menu-btn hud__breakthrough${breakthroughReady ? ' is-ready' : ''}`}
+          onClick={() =>
+            GameBus.emit(GameEvent.CharacterPanelToggle, { tab: 'breakthrough', forceOpen: true })
+          }
+        >
+          Đột phá
+        </button>
       </div>
 
       <div className="hud__skills hud__skills--keys">
@@ -355,7 +519,24 @@ export function GameUI() {
 
       {minimap ? <Minimap map={minimap} /> : null}
 
+      {quests.tracked.length ? (
+        <aside className="quest-tracker">
+          <strong>Nhiệm vụ</strong>
+          {quests.tracked.slice(0, 3).map((quest) => (
+            <div key={quest.id}>
+              <span>{quest.title}</span>
+              <small>{quest.progress}</small>
+            </div>
+          ))}
+        </aside>
+      ) : null}
+
       {notice && <div className="hud__notice">{notice}</div>}
+      {tribulation && (
+        <div className="hud__tribulation" role="status">
+          {tribulation.label} · còn {tribulation.secondsLeft}s · {tribulation.remaining} yêu
+        </div>
+      )}
       {loot && <div className="hud__loot">{loot}</div>}
       {death !== null && (
         <div className="hud__death">
@@ -366,40 +547,24 @@ export function GameUI() {
 
       {menuOpen ? (
         <div className="game-menu">
-          <div className="game-menu__panel">
+          <div className="game-menu__panel" role="menu" aria-label="Menu trò chơi">
             <div className="game-menu__title">Menu</div>
-            <button type="button" className="game-menu__btn" onClick={() => setMenuOpen(false)}>
-              Tiếp tục
-            </button>
-            <button
-              type="button"
-              className="game-menu__btn"
-              onClick={() => {
-                setMenuOpen(false);
-                GameBus.emit(GameEvent.InventoryToggle);
-              }}
-            >
-              Túi đồ
-            </button>
-            <button
-              type="button"
-              className="game-menu__btn"
-              onClick={() => {
-                setMenuOpen(false);
-                GameBus.emit(GameEvent.WarpCommand, { action: 'toggle' });
-              }}
-            >
-              Dịch chuyển
-            </button>
-            <button
-              type="button"
-              className="game-menu__btn game-menu__btn--danger"
-              onClick={leave}
-              disabled={leaving}
-            >
-              {leaving ? 'Đang rời…' : 'Rời phòng'}
-            </button>
-            <div className="game-menu__hint">Esc để đóng</div>
+            {MENU_ITEMS.map((item, index) => (
+              <button
+                type="button"
+                role="menuitem"
+                key={item.id}
+                className={`game-menu__btn${item.danger ? ' game-menu__btn--danger' : ''}${
+                  index === menuIndex ? ' is-focused' : ''
+                }`}
+                disabled={item.id === 'leave' && leaving}
+                onMouseEnter={() => setMenuIndex(index)}
+                onClick={() => runMenuAction(item.id)}
+              >
+                {item.id === 'leave' && leaving ? 'Đang rời…' : item.label}
+              </button>
+            ))}
+            <div className="game-menu__hint">D-pad / stick chọn · A xác nhận · B / Start đóng</div>
           </div>
         </div>
       ) : null}

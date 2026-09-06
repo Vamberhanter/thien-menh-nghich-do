@@ -1,4 +1,4 @@
-import { MAX_LEVEL, Progression } from '../../game/systems/Progression';
+import { MAX_LEVEL, Progression, titleForLevel } from '../../game/systems/Progression';
 import type { NetCharacter } from '../../net/types';
 import { classOf } from './classes';
 import { Panel } from './parts';
@@ -20,13 +20,13 @@ export function StatsPanel({
   progression.restore({ level, xp });
   const stats = progression.derive(character);
   const entry = classOf(character);
-  const capped = level >= MAX_LEVEL;
+  const peaked = progression.atCap || progression.atRealmCap;
 
   return (
     <Panel title="Chỉ số" sub="Căn cơ">
       <div className="rod-stats">
-        <Stat label="Cấp" value={String(level)} highlight />
-        <Stat label="KN" value={capped ? 'đỉnh' : `${xp}/${progression.need}`} />
+        <Stat label="Cảnh" value={titleForLevel(level)} highlight />
+        <Stat label="KN" value={peaked ? 'đỉnh' : `${xp}/${progression.need}`} />
         <Stat label="Máu" value={String(stats.maxHp)} />
         <Stat label="Linh" value={String(stats.maxSpiritualPower)} />
         <Stat label="Công" value={String(stats.attack)} />
@@ -35,6 +35,7 @@ export function StatsPanel({
       </div>
       <div className="rod-note">
         {entry.archetype} · {entry.name} · {entry.sect}
+        {level >= MAX_LEVEL ? ' · đỉnh Kết Đan' : ''}
       </div>
     </Panel>
   );

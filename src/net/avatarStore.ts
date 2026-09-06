@@ -6,6 +6,10 @@ import { emptyInventory } from '../game/systems/Inventory';
 import type { ZoneId } from '../game/zones';
 import { DEFAULT_ZONE } from '../game/zones';
 import { clampPlayerName, parseNetCharacter, type NetCharacter } from './types';
+import { createAttributeState, type AttributeState } from '../game/systems/Attributes';
+import { createSkillState, type SkillTreeState } from '../game/systems/SkillSystem';
+import { createQuestState, type QuestState } from '../game/systems/QuestSystem';
+import { createFarmState, ensureFarmPlots, DEFAULT_FARM_PLOTS, type FarmState } from '../game/systems/Farming';
 
 export interface AvatarRecord {
   id: string;
@@ -16,6 +20,11 @@ export interface AvatarRecord {
   hp?: number;
   spiritualPower?: number;
   inventory: InventoryState;
+  attributes?: AttributeState;
+  skills?: SkillTreeState;
+  quests?: QuestState;
+  farm?: FarmState;
+  trackedQuests?: string[];
   zone: ZoneId;
   x: number;
   y: number;
@@ -81,6 +90,11 @@ export async function saveAvatar(record: AvatarRecord, keepalive = false): Promi
     hp: stamped.hp ?? null,
     spiritual_power: stamped.spiritualPower ?? null,
     inventory: stamped.inventory,
+    attributes: stamped.attributes ?? createAttributeState(),
+    skills: stamped.skills ?? createSkillState(stamped.character),
+    quest_state: stamped.quests ?? createQuestState(),
+    farm_state: stamped.farm ?? createFarmState(DEFAULT_FARM_PLOTS),
+    tracked_quests: stamped.trackedQuests ?? [],
     zone: stamped.zone,
     x: Math.round(stamped.x),
     y: Math.round(stamped.y),
@@ -157,8 +171,9 @@ function writeLocal(record: AvatarRecord): void {
 function normalize(raw: Record<string, unknown>, id: string): AvatarRecord {
   const inventory =
     raw.inventory && typeof raw.inventory === 'object'
-      ? (raw.inventory as InventoryState)
+      ? ({ ...(raw.inventory as InventoryState) } as InventoryState)
       : emptyInventory();
+  if (raw.coins != null) inventory.coins = Math.max(0, Number(raw.coins) || 0);
   const spiritual =
     raw.spiritualPower ?? raw.spiritual_power;
   return defaultAvatar({
@@ -170,6 +185,34 @@ function normalize(raw: Record<string, unknown>, id: string): AvatarRecord {
     hp: raw.hp == null ? undefined : Number(raw.hp),
     spiritualPower: spiritual == null ? undefined : Number(spiritual),
     inventory,
+    attributes:
+      raw.attributes && typeof raw.attributes === 'object'
+        ? (raw.attributes as unknown as AttributeState)
+        : undefined,
+    skills:
+      raw.skills && typeof raw.skills === 'object'
+        ? (raw.skills as unknown as SkillTreeState)
+        : undefined,
+    quests:
+      raw.quests && typeof raw.quests === 'object'
+        ? (raw.quests as unknown as QuestState)
+        : raw.quest_state && typeof raw.quest_state === 'object'
+          ? (raw.quest_state as unknown as QuestState)
+          : undefined,
+    farm: (() => {
+      const rawFarm =
+        raw.farm && typeof raw.farm === 'object'
+          ? (raw.farm as unknown as FarmState)
+          : raw.farm_state && typeof raw.farm_state === 'object'
+            ? (raw.farm_state as unknown as FarmState)
+            : undefined;
+      return rawFarm ? ensureFarmPlots(rawFarm, DEFAULT_FARM_PLOTS) : undefined;
+    })(),
+    trackedQuests: Array.isArray(raw.trackedQuests)
+      ? raw.trackedQuests.filter((value): value is string => typeof value === 'string')
+      : Array.isArray(raw.tracked_quests)
+        ? raw.tracked_quests.filter((value): value is string => typeof value === 'string')
+        : undefined,
     zone: (raw.zone as ZoneId) || DEFAULT_ZONE,
     x: Number(raw.x) || 1200,
     y: Number(raw.y) || 940,
@@ -182,7 +225,7 @@ function normalize(raw: Record<string, unknown>, id: string): AvatarRecord {
 }
 
 const AVATAR_COLS =
-  'id, name, character, level, xp, hp, spiritual_power, inventory, zone, x, y, spawn, warps, room_id, user_id, updated_at';
+  'id, name, character, level, xp, hp, spiritual_power, inventory, coins, attributes, skills, quest_state, farm_state, tracked_quests, zone, x, y, spawn, warps, room_id, user_id, updated_at';
 
 export async function listMyAvatars(): Promise<AvatarRecord[]> {
   const user = await currentUser();
@@ -261,7 +304,7 @@ export function pickAvatar(record: AvatarRecord): void {
 async function loadAvatarRow(id: string): Promise<{ data: Record<string, unknown> | null; error?: string }> {
   const first = await getSupabase().from('avatars').select(AVATAR_COLS).eq('id', id).maybeSingle();
   if (!first.error) return { data: (first.data as Record<string, unknown> | null) ?? null };
-  if (!/spawn|warps|room_id|PGRST204/i.test(first.error.message)) return { data: null, error: first.error.message };
+  if (!/spawn|warps|room_id|attributes|skills|quest_state|farm_state|tracked_quests|PGRST204/i.test(first.error.message)) return { data: null, error: first.error.message };
   const legacy = await getSupabase()
     .from('avatars')
     .select('id, name, character, level, xp, hp, spiritual_power, inventory, zone, x, y, updated_at')
@@ -274,8 +317,19 @@ async function loadAvatarRow(id: string): Promise<{ data: Record<string, unknown
 async function upsertAvatar(row: Record<string, unknown>): Promise<string | undefined> {
   const first = await getSupabase().from('avatars').upsert(row, { onConflict: 'id' });
   if (!first.error) return undefined;
-  if (!/spawn|warps|room_id|user_id|PGRST204/i.test(first.error.message)) return first.error.message;
-  const { spawn: _spawn, warps: _warps, room_id: _room, user_id: _user, ...legacy } = row;
+  if (!/spawn|warps|room_id|user_id|attributes|skills|quest_state|farm_state|tracked_quests|PGRST204/i.test(first.error.message)) return first.error.message;
+  const {
+    spawn: _spawn,
+    warps: _warps,
+    room_id: _room,
+    user_id: _user,
+    attributes: _attributes,
+    skills: _skills,
+    quest_state: _quests,
+    farm_state: _farm,
+    tracked_quests: _tracked,
+    ...legacy
+  } = row;
   const retry = await getSupabase().from('avatars').upsert(legacy, { onConflict: 'id' });
   return retry.error?.message;
 }

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { HuyetLang } from '../entities/HuyetLang';
 import type { Vector2Like } from '../types';
-import { isInputGated } from '../../net/bind';
+import { isGameplayGated } from '../../net/bind';
 import { consumePad, padMove } from '../touchPad';
 
 /**
@@ -23,6 +23,7 @@ export class HuyetLangController {
     magmaSlash: Phaser.Input.Keyboard.Key[];
     roar: Phaser.Input.Keyboard.Key[];
     dash: Phaser.Input.Keyboard.Key[];
+    ultimate: Phaser.Input.Keyboard.Key[];
   };
 
   private enabled = true;
@@ -46,6 +47,7 @@ export class HuyetLangController {
       magmaSlash: addKeys(K.K),
       roar: addKeys(K.L),
       dash: addKeys(K.SPACE),
+      ultimate: addKeys(K.U),
     };
   }
 
@@ -57,12 +59,14 @@ export class HuyetLangController {
   update(time: number, delta: number): void {
     this.player.tick(time, delta);
 
-    if (!this.enabled || this.player.isDead || isInputGated()) {
+    if (!this.enabled || this.player.isDead || isGameplayGated()) {
       if (!this.player.isDead) this.player.setVelocity(0, 0);
       return;
     }
 
-    if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
+    if (anyJustDown(this.keys.ultimate) || consumePad('skill3')) {
+      this.player.castUltimate();
+    } else if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
       this.player.dash(this.readSteer());
     } else if (anyJustDown(this.keys.roar) || consumePad('skill1')) {
       this.player.castRoar();

@@ -4,6 +4,7 @@ import { startAuth } from './net/auth';
 import './index.css';
 import './styles/lobby.css';
 import './styles/mobile.css';
+import './ui-bag-pad.css';
 
 startAuth();
 

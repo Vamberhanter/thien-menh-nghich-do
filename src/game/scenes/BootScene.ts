@@ -43,6 +43,7 @@ import {
   MONSTER_TEXTURES,
   WORLD_RESOURCE_TEXTURES,
   paintEnvironment,
+  FARM_TEXTURES,
 } from '../env';
 
 const ATLASES = [
@@ -111,6 +112,9 @@ export class BootScene extends Phaser.Scene {
     }
     for (const resource of WORLD_RESOURCE_TEXTURES) {
       this.load.image(resource.key, resource.url);
+    }
+    for (const farm of FARM_TEXTURES) {
+      this.load.image(farm.key, farm.url);
     }
 
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, this.onAtlasMiss, this);

@@ -6,11 +6,26 @@ import { clampPlayerName, parseNetCharacter, slugifyWorld, type NetCharacter, ty
 
 let current: WorldSession | null = null;
 let inputGated = true;
+let systemMenuOpen = false;
 let beat: number | null = null;
 
 /** True while the join overlay owns the keyboard. */
 export function isInputGated(): boolean {
   return inputGated;
+}
+
+/** Pause menu — blocks world actions but still accepts Start to close. */
+export function isSystemMenuOpen(): boolean {
+  return systemMenuOpen;
+}
+
+export function setSystemMenuOpen(value: boolean): void {
+  systemMenuOpen = value;
+}
+
+/** Lobby gate or in-game pause menu. */
+export function isGameplayGated(): boolean {
+  return inputGated || systemMenuOpen;
 }
 
 export function setInputGated(value: boolean): void {

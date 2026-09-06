@@ -86,6 +86,22 @@ export class BossEffects {
     });
   }
 
+  /** Warning ellipse before nova / heavy slash so the hit is readable. */
+  telegraph(x: number, y: number, radius: number, color = 0xff6b5a): void {
+    const g = this.scene.add.graphics().setDepth(y - 8);
+    g.lineStyle(3, color, 0.85);
+    g.strokeEllipse(x, y, radius * 2, radius * 1.35);
+    g.fillStyle(color, 0.12);
+    g.fillEllipse(x, y, radius * 2, radius * 1.35);
+    this.scene.tweens.add({
+      targets: g,
+      alpha: 0,
+      duration: 420,
+      ease: 'Quad.easeOut',
+      onComplete: () => g.destroy(),
+    });
+  }
+
   /**
    * Ma Dực Trận's ring. `radius` is the damage radius, and the art is scaled to
    * match it, so what the player sees is what the skill actually covers.
