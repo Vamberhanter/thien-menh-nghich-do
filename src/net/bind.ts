@@ -7,6 +7,7 @@ import { clampPlayerName, parseNetCharacter, slugifyWorld, type NetCharacter, ty
 let current: WorldSession | null = null;
 let inputGated = true;
 let systemMenuOpen = false;
+let uiTyping = false;
 let beat: number | null = null;
 
 /** True while the join overlay owns the keyboard. */
@@ -23,9 +24,18 @@ export function setSystemMenuOpen(value: boolean): void {
   systemMenuOpen = value;
 }
 
-/** Lobby gate or in-game pause menu. */
+/** Chat / form focus — blocks WASD and skills without closing the world. */
+export function setUiTyping(value: boolean): void {
+  uiTyping = value;
+}
+
+export function isUiTyping(): boolean {
+  return uiTyping;
+}
+
+/** Lobby gate, pause menu, or typing in a HUD field. */
 export function isGameplayGated(): boolean {
-  return inputGated || systemMenuOpen;
+  return inputGated || systemMenuOpen || uiTyping;
 }
 
 export function setInputGated(value: boolean): void {

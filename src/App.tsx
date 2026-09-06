@@ -3,6 +3,7 @@ import { GameUI } from './components/GameUI';
 import { InventoryUI } from './components/InventoryUI';
 import { Lobby } from './components/Lobby';
 import { TouchPad } from './components/TouchPad';
+import { GamepadHints } from './components/GamepadHints';
 import { WarpUI } from './components/WarpUI';
 import { CharacterPanel } from './components/CharacterPanel';
 import { QuestJournal } from './components/QuestJournal';
@@ -10,6 +11,7 @@ import { ShopUI } from './components/ShopUI';
 import { FarmUI } from './components/FarmUI';
 import { StorageUI } from './components/StorageUI';
 import { AlchemyUI } from './components/AlchemyUI';
+import { SideDock } from './components/SideDock';
 
 export default function App() {
   return (
@@ -18,6 +20,8 @@ export default function App() {
         <GameCanvas />
         <GameUI />
         <TouchPad />
+        <GamepadHints />
+        <SideDock />
         <InventoryUI />
         <WarpUI />
         <CharacterPanel />

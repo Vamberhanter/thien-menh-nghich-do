@@ -1,12 +1,16 @@
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { startAuth } from './net/auth';
+import { startUpdateWatcher } from './net/updateWatcher';
 import './index.css';
 import './styles/lobby.css';
 import './styles/mobile.css';
 import './ui-bag-pad.css';
+import './styles/gamepad-hints.css';
+import './styles/side-dock.css';
 
 startAuth();
+startUpdateWatcher();
 
 // No StrictMode: its double mount would create, destroy and recreate the
 // Phaser game on every load, which aborts the asset loader mid-flight.

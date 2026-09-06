@@ -89,6 +89,13 @@ export interface ZoneDef {
   farmPlots?: FarmPlotDef[];
   /** Cottage, fences, path tiles, animals around the farm court. */
   farmDecor?: FarmDecorDef[];
+  /**
+   * Continuous dirt court under the plots (world top-left + size). One solid
+   * bed avoids grass peeking through gaps between soil sprites.
+   */
+  farmBed?: { x: number; y: number; width: number; height: number };
+  /** Portal → gate road as one TileSprite strip (same idea as farmBed). */
+  farmPath?: { x: number; y: number; width: number; height: number };
   chests: ChestDef[];
   mobs: MobSpawn[];
   boss?: { x: number; y: number };

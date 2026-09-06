@@ -3,22 +3,43 @@ import type { FarmDecorDef, FarmPlotDef, ZoneDef } from './types';
 const W = 2400;
 const H = 1800;
 
-/** Continuous tilled field bounds (inclusive pad grid). */
+/**
+ * One continuous dirt court + a shared 48px grid for fence / plots.
+ * Road to the gate is a single TileSprite (`farmPath`), not stamped tiles.
+ */
+const PAD = 48;
+const PATH_W = 56;
 const FIELD = {
   left: 960,
   right: 1440,
   top: 800,
-  bottom: 1200,
-  pad: 48,
+  bottom: 1184,
+  pad: PAD,
   plotCols: 3,
   plotRows: 4,
-  plotGapX: 120,
-  plotGapY: 88,
-  originX: 1080,
-  originY: 860,
+  plotGapX: PAD * 3,
+  plotGapY: PAD * 2,
+  originX: 1056,
+  originY: 896,
+  gateX: 1200,
 } as const;
 
-/** Dense tree ring — leave a north gap for the portal road. */
+const FARM_BED = {
+  x: FIELD.left - PAD / 2,
+  y: FIELD.top - PAD,
+  width: FIELD.right - FIELD.left + PAD,
+  height: FIELD.bottom - FIELD.top + PAD,
+} as const;
+
+/** Portal → into the court: continuous strip centred on the gate. */
+const FARM_PATH = {
+  x: FIELD.gateX - PATH_W / 2,
+  y: 168,
+  width: PATH_W,
+  /** Reach ~3 pads into the tilled bed so the gate reads as an entrance. */
+  height: FARM_BED.y + PAD * 3 - 168,
+} as const;
+
 function treeRing(): Array<[number, number]> {
   const trees: Array<[number, number]> = [];
   for (let x = 180; x <= W - 180; x += 140) {
@@ -62,34 +83,20 @@ function farmPlots(): FarmPlotDef[] {
 function farmDecor(): FarmDecorDef[] {
   const decor: FarmDecorDef[] = [];
 
-  // Path from portal down to the north gate
-  for (let y = 220; y <= FIELD.top - 20; y += FIELD.pad) {
-    decor.push({ kind: 'path', x: 1200, y });
-  }
-  // Short path into the field
-  for (let y = FIELD.top; y <= FIELD.top + FIELD.pad * 2; y += FIELD.pad) {
-    decor.push({ kind: 'path', x: 1200, y });
-  }
+  const left = FIELD.left - FIELD.pad;
+  const right = FIELD.right + FIELD.pad;
+  const top = FIELD.top - FIELD.pad;
+  const bottom = FIELD.bottom + FIELD.pad;
+  const gateHalf = PATH_W / 2 + 8;
 
-  // Continuous tilled soil under the whole court
-  for (let y = FIELD.top; y <= FIELD.bottom; y += FIELD.pad) {
-    for (let x = FIELD.left; x <= FIELD.right; x += FIELD.pad) {
-      decor.push({ kind: 'soil-pad', x, y });
-    }
-  }
-
-  // Fence around the field — gap at north centre for the gate
-  const left = FIELD.left - 48;
-  const right = FIELD.right + 48;
-  const top = FIELD.top - 40;
-  const bottom = FIELD.bottom + 40;
-  for (let x = left; x <= right; x += 48) {
-    if (Math.abs(x - 1200) >= 56) {
+  for (let x = left; x <= right; x += FIELD.pad) {
+    // North fence opens for the road.
+    if (Math.abs(x - FIELD.gateX) >= gateHalf) {
       decor.push({ kind: 'fence-h', x, y: top });
     }
     decor.push({ kind: 'fence-h', x, y: bottom });
   }
-  for (let y = top + 48; y < bottom; y += 48) {
+  for (let y = top + FIELD.pad; y < bottom; y += FIELD.pad) {
     decor.push({ kind: 'fence-v', x: left, y });
     decor.push({ kind: 'fence-v', x: right, y });
   }
@@ -97,12 +104,15 @@ function farmDecor(): FarmDecorDef[] {
   decor.push({ kind: 'fence-post', x: right, y: top });
   decor.push({ kind: 'fence-post', x: left, y: bottom });
   decor.push({ kind: 'fence-post', x: right, y: bottom });
+  // Gate posts frame the entrance.
+  decor.push({ kind: 'fence-post', x: FIELD.gateX - gateHalf, y: top });
+  decor.push({ kind: 'fence-post', x: FIELD.gateX + gateHalf, y: top });
 
-  decor.push({ kind: 'house', x: 720, y: 1000 });
-  decor.push({ kind: 'chicken', x: 800, y: 1100 });
-  decor.push({ kind: 'chicken', x: 840, y: 1140 });
-  decor.push({ kind: 'chicken', x: 760, y: 1160 });
-  decor.push({ kind: 'chicken', x: 820, y: 1180 });
+  decor.push({ kind: 'house', x: 720, y: 1008 });
+  decor.push({ kind: 'chicken', x: 816, y: 1104 });
+  decor.push({ kind: 'chicken', x: 864, y: 1152 });
+  decor.push({ kind: 'chicken', x: 768, y: 1152 });
+  decor.push({ kind: 'chicken', x: 816, y: 1200 });
 
   return decor;
 }
@@ -120,27 +130,29 @@ export const LINH_DIEN: ZoneDef = {
     [420, 400], [1980, 400], [360, 1100], [2040, 1100], [560, 1600], [1840, 1600],
   ],
   stones: [
-    [900, 400], [1500, 400], [1200, 1500],
+    [900, 400], [1500, 400], [1200, 1536],
   ],
-  // Wild herbs outside the fence only
   plants: [
     { kind: 'spirit-herb', x: 560, y: 640 },
     { kind: 'spirit-herb', x: 1840, y: 640 },
     { kind: 'spirit-herb', x: 500, y: 1300 },
     { kind: 'spirit-herb', x: 1900, y: 1300 },
-    { kind: 'blood-berry', x: 580, y: 900 },
-    { kind: 'blood-berry', x: 1820, y: 900 },
-    { kind: 'earth-fruit', x: 600, y: 1480 },
-    { kind: 'earth-fruit', x: 1800, y: 1480 },
-    { kind: 'essence-root', x: 860, y: 1400 },
-    { kind: 'essence-root', x: 1540, y: 1400 },
+    { kind: 'blood-berry', x: 576, y: 912 },
+    { kind: 'blood-berry', x: 1824, y: 912 },
+    { kind: 'earth-fruit', x: 600, y: 1488 },
+    { kind: 'earth-fruit', x: 1800, y: 1488 },
+    { kind: 'essence-root', x: 864, y: 1392 },
+    { kind: 'essence-root', x: 1536, y: 1392 },
   ],
+  farmBed: { ...FARM_BED },
+  farmPath: { ...FARM_PATH },
   farmPlots: farmPlots(),
   farmDecor: farmDecor(),
   chests: [
-    { tier: 'common', x: 860, y: 720 },
-    { tier: 'common', x: 1540, y: 720 },
-    { tier: 'rare', x: 1200, y: 1320 },
+    // Nestled by the fence corners — off the road and tilled court.
+    { tier: 'common', x: 912, y: 768 },
+    { tier: 'common', x: 1488, y: 768 },
+    { tier: 'rare', x: 1200, y: 1296 },
   ],
   mobs: [],
   portals: [

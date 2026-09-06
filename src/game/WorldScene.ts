@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { Boss1, BOSS1_ACTIONS } from './entities/Boss1';
 import type { BossStrike } from './entities/Boss1';
 import { EnemyAI } from './systems/EnemyAI';
@@ -25,6 +25,10 @@ import {
   nextEnvArt,
   repaintEnvironment,
   WorldResourceTexture,
+  FarmTexture,
+  cropKindFromSeed,
+  farmGrowTexture,
+  growthStage,
 } from './env';
 import type { EnvKit } from './env';
 import type { PropArt } from './env';
@@ -46,16 +50,65 @@ import type { PlayerHandle, PlayerId } from './entities/playerHandle';
 import { DIRECTION_VECTORS } from './types';
 import type { Direction, Vector2Like } from './types';
 import { Multiplayer } from './systems/Multiplayer';
-import { isInputGated, loadSavedJoin, peekSession } from '../net/bind';
+import { isInputGated, isSystemMenuOpen, isUiTyping, loadSavedJoin, peekSession } from '../net/bind';
 import { newPlayerId } from '../net/supabase';
 import type { WorldSession } from '../net/WorldSession';
 import type { NetHitRow, WorldNetEvent, WorldSnap } from '../net/types';
 import { HIT_ECHO_MS, WORLD_SNAP_MS } from '../net/types';
 import { defaultAvatar, loadAvatar, saveAvatar } from '../net/avatarStore';
 import { loadZoneSnap, saveZoneSnap } from '../net/zoneStore';
-import { Progression, writeDerived } from './systems/Progression';
+import { Progression, titleForLevel, writeDerived } from './systems/Progression';
+import {
+  breakThrough,
+  canBreakThrough,
+  costLabel,
+  recipeForLevel,
+} from './systems/BreakthroughSystem';
 import { Inventory, itemOf, rollDrops } from './systems/Inventory';
 import type { EquipSlot } from './systems/Inventory';
+import {
+  allocateAttribute,
+  createAttributeState,
+  deriveAttributeBonuses,
+  type AttributeState,
+} from './systems/Attributes';
+import {
+  SKILL_CATALOG,
+  SKILL_TREES,
+  SkillSystem,
+  type SkillClass,
+} from './systems/SkillSystem';
+import { buildCombatKit, kitBindHint } from './systems/SkillKit';
+import {
+  craftAlchemy,
+  alchemyCostLabel,
+} from './systems/AlchemySystem';
+import {
+  idleTribulation,
+  planTribulation,
+  TRIBULATION_DURATION_MS,
+  TRIBULATION_FAIL_COOLDOWN_MS,
+  type TribulationState,
+} from './systems/TribulationSystem';
+import {
+  QUESTS,
+  QuestSystem,
+  refreshQuestAvailability,
+  type QuestEvent,
+} from './systems/QuestSystem';
+import { SHOP_CATALOG } from './systems/ShopSystem';
+import {
+  SEED_CATALOG,
+  createFarmState,
+  ensureFarmPlots,
+  growFarm,
+  harvestPlot,
+  plantSeed,
+  plotGrowth,
+  waterPlot,
+  DEFAULT_FARM_PLOTS,
+  type FarmState,
+} from './systems/Farming';
 import { Mob, MOB_AI } from './entities/Mob';
 import type { MobStrike } from './entities/Mob';
 import {
@@ -65,6 +118,7 @@ import {
   MOB_DROPS,
   MOB_XP,
   STONE_XP,
+  WIND_BOSS_DROPS,
   ZONE_ORDER,
   warpStand,
   zoneOf,
@@ -72,6 +126,8 @@ import {
 import type {
   ChestDef,
   ChestTier,
+  FarmDecorDef,
+  FarmPlotDef,
   PlantDef,
   PlantKind,
   PortalDef,
@@ -80,6 +136,16 @@ import type {
 } from './zones';
 import { setCurrentZone } from './worldState';
 import { consumePad } from './touchPad';
+import { pollGamepad } from './gamepad';
+import { currentAccessToken } from '../net/auth';
+import {
+  buyServerItem,
+  claimServerQuestReward,
+  sellServerItem,
+} from '../net/economy';
+import { grantLoot } from './systems/LootSystem';
+import { canEnterZone } from './systems/ZoneLoader';
+import { npcsInZone, type NpcDefinition } from './systems/NpcSystem';
 
 const HIT_RADIUS = 64;
 /** Muted grey-blue so your own numbers stay readable in a four-player pile-on. */
@@ -102,9 +168,13 @@ const STONE_HP = 160;
 const BOLT_LIFT = 52;
 const RESPAWN_MS = 5000;
 const SHRINE_RADIUS = 80;
+/** Mobs will not chase or stand inside this circle around the respawn shrine. */
+const SHRINE_SAFE_RADIUS = 180;
+const STORAGE_RADIUS = 72;
 const PORTAL_RADIUS = 48;
 const LOOT_RADIUS = 42;
 const RESOURCE_RADIUS = 64;
+const FARM_PLOT_RADIUS = 56;
 const PLANT_RESPAWN_MS = 30000;
 const CHEST_RESPAWN_MS = 90000;
 const MOB_RESPAWN_MS = 12000;
@@ -135,10 +205,18 @@ interface HarvestNode {
   readyAt: number;
 }
 
+interface FarmPlotNode {
+  def: FarmPlotDef;
+  soil: Phaser.GameObjects.Image;
+  crop: Phaser.GameObjects.Image;
+  label: Phaser.GameObjects.Text;
+}
+
 interface TreasureNode {
   kind: 'chest';
   def: ChestDef;
   sprite: Phaser.GameObjects.Image;
+  shadow: Phaser.GameObjects.Ellipse;
   readyAt: number;
 }
 
@@ -172,6 +250,8 @@ interface MobPack {
   mob: Mob;
   ai: EnemyAI;
   respawnAt: number | null;
+  /** Heavenly tribulation wave — no zone respawn. */
+  tribulation?: boolean;
 }
 
 const BOSS_AI: AiProfile = {
@@ -208,15 +288,26 @@ export class WorldScene extends Phaser.Scene {
   private packs: MobPack[] = [];
   private loot: LootPile[] = [];
   private resources: WorldResource[] = [];
+  private farmPlots: FarmPlotNode[] = [];
+  private farmDecorSprites: Phaser.GameObjects.Image[] = [];
+  private farmGround: Phaser.GameObjects.GameObject[] = [];
+  private selectedFarmSeed = 'spirit-herb-seed';
   private portals: Array<{
     def: PortalDef;
     sprite: Phaser.GameObjects.Sprite;
     label: Phaser.GameObjects.Text;
   }> = [];
   private decals: Phaser.GameObjects.Image[] = [];
+  private npcs: Array<{
+    def: NpcDefinition;
+    sprite: Phaser.GameObjects.Rectangle;
+    label: Phaser.GameObjects.Text;
+  }> = [];
   private shrineSprite?: Phaser.GameObjects.Sprite;
   private shrineLabel?: Phaser.GameObjects.Text;
   private shrineRing?: Phaser.GameObjects.Graphics;
+  private storageSprite?: Phaser.GameObjects.Sprite;
+  private storageLabel?: Phaser.GameObjects.Text;
   private waypointSprite?: Phaser.GameObjects.Sprite;
   private waypointLabel?: Phaser.GameObjects.Text;
   private waypointRing?: Phaser.GameObjects.Graphics;
@@ -241,6 +332,12 @@ export class WorldScene extends Phaser.Scene {
   private zone: ZoneDef = zoneOf(DEFAULT_ZONE);
   private progress = new Progression();
   private bag = new Inventory();
+  private attributes: AttributeState = createAttributeState();
+  private skills = new SkillSystem('nhuyen');
+  private quests = new QuestSystem();
+  private trackedQuests: string[] = [];
+  private farm: FarmState = createFarmState(DEFAULT_FARM_PLOTS);
+  private rpgEventSeq = 0;
   private net!: Multiplayer;
   private deathAt: number | null = null;
   private lastDeathSecond: number | null = null;
@@ -262,6 +359,8 @@ export class WorldScene extends Phaser.Scene {
   /** Lobby pick waiting to be applied on enter (id + kit + name). */
   private pendingAvatar: AvatarChosenPayload | null = null;
   private applyingAvatar = false;
+  private tribulation: TribulationState = idleTribulation();
+  private tribulationHudTimer = 0;
 
   constructor() {
     super('WorldScene');
@@ -297,7 +396,14 @@ export class WorldScene extends Phaser.Scene {
     GameBus.on(GameEvent.NetSession, this.onNetSession, this);
     GameBus.on(GameEvent.AvatarChosen, this.onAvatarChosen, this);
     GameBus.on(GameEvent.InventoryCommand, this.onHudInventory, this);
+    GameBus.on(GameEvent.CharacterBuildCommand, this.onCharacterBuild, this);
+    GameBus.on(GameEvent.QuestCommand, this.onQuestCommand, this);
+    GameBus.on(GameEvent.ShopCommand, this.onShopCommand, this);
+    GameBus.on(GameEvent.FarmCommand, this.onFarmCommand, this);
+    GameBus.on(GameEvent.FarmSelectSeed, this.onFarmSelectSeed, this);
+    GameBus.on(GameEvent.StorageCommand, this.onStorageCommand, this);
     GameBus.on(GameEvent.WarpCommand, this.onWarpCommand, this);
+    GameBus.on(GameEvent.AlchemyCommand, this.onAlchemyCommand, this);
     GameBus.on(GameEvent.NetWorld, this.onWorldEvent, this);
     GameBus.on(GameEvent.NetHost, this.onHostChanged, this);
     peekSession()?.followZone(DEFAULT_ZONE);
@@ -307,11 +413,13 @@ export class WorldScene extends Phaser.Scene {
     };
     window.addEventListener('pagehide', this.flushProgress);
     window.addEventListener('visibilitychange', this.onHidden);
+    this.emitRpgPanels();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.teardown, this);
     this.events.once(Phaser.Scenes.Events.DESTROY, this.teardown, this);
   }
 
   update(time: number, delta: number): void {
+    pollGamepad({ gated: isInputGated() });
     this.player.update(time, delta);
     this.net.tick(time, delta, this.player);
     this.player.sprite.setDepth(this.player.footY());
@@ -325,8 +433,10 @@ export class WorldScene extends Phaser.Scene {
       this.tickPortals();
     }
     this.tickResources(time);
+    this.tickFarm(time);
     this.tickLootPrompt();
     this.tickFrost(time);
+    this.tickTribulation(time, delta);
     this.tickKeys();
     this.tickWorld(delta);
     this.tickMinimap(delta);
@@ -340,6 +450,7 @@ export class WorldScene extends Phaser.Scene {
   /* --------------------------------------------------------------- zone */
 
   private loadZone(id: ZoneId, at?: Vector2Like, first = false): void {
+    if (this.tribulation.phase === 'active') this.failTribulation('zone');
     this.clearZone();
     this.zone = zoneOf(id);
     setCurrentZone(this.zone.id);
@@ -357,8 +468,11 @@ export class WorldScene extends Phaser.Scene {
     for (const [x, y] of this.zone.rocks) this.addProp(kit.rock, x, y);
 
     this.placeShrine();
+    this.placeStorageChest();
     this.placeWaypoint();
+    this.placeNpcs();
     this.placeArena();
+    this.placeFarm();
     this.placeResources();
 
     for (const [x, y] of this.zone.stones) {
@@ -405,8 +519,78 @@ export class WorldScene extends Phaser.Scene {
     peekSession()?.followZone(this.zone.id);
     this.hosting = this.net ? this.net.hosting : !peekSession() || Boolean(peekSession()?.isHost);
     if (!this.spawn) this.spawn = { zone: this.zone.id, x: this.zone.shrine.x, y: this.zone.shrine.y };
+    this.syncZoneReach();
     this.emitProgress();
+    this.emitRpgPanels();
     void this.hydrateZone();
+  }
+
+  private syncZoneReach(): void {
+    if (!this.quests || !this.progress) return;
+    const result = this.quests.creditReach(this.zone.id, this.progress.level);
+    if (result.ok && result.changedQuestIds.length) {
+      GameBus.emit(GameEvent.Notice, 'Tiến độ nhiệm vụ đã cập nhật');
+      this.emitQuests();
+    }
+  }
+
+  private placeNpcs(): void {
+    for (const def of npcsInZone(this.zone.id)) {
+      const tint =
+        def.role === 'merchant'
+          ? 0xc9a24a
+          : def.role === 'gem'
+            ? 0x9b6bd6
+            : def.role === 'alchemy'
+              ? 0x6bcf8e
+              : 0x6fd8ff;
+      const sprite = this.add
+        .rectangle(def.x, def.y - 22, 28, 44, tint, 0.9)
+        .setStrokeStyle(2, 0xe9f3ff, 0.7)
+        .setDepth(def.y);
+      const label = this.add
+        .text(def.x, def.y - 54, def.name, {
+          fontFamily: 'monospace',
+          fontSize: '10px',
+          color: '#e9f3ff',
+          stroke: '#05070d',
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(def.y + 1);
+      this.npcs.push({ def, sprite, label });
+    }
+  }
+
+  private nearestNpc(): NpcDefinition | null {
+    if (!this.player) return null;
+    const foot = this.player.hitPoint();
+    let nearest: { def: NpcDefinition; distance: number } | null = null;
+    for (const npc of this.npcs) {
+      const distance = Phaser.Math.Distance.Between(foot.x, foot.y, npc.def.x, npc.def.y);
+      if (distance <= RESOURCE_RADIUS && (!nearest || distance < nearest.distance)) {
+        nearest = { def: npc.def, distance };
+      }
+    }
+    return nearest?.def ?? null;
+  }
+
+  private interactNpc(npc: NpcDefinition): void {
+    this.applyQuestEvent('talk', npc.id);
+    if (npc.role === 'merchant') {
+      this.emitShop();
+      GameBus.emit(GameEvent.ShopToggle);
+    } else if (npc.role === 'gem') {
+      GameBus.emit(GameEvent.InventoryToggle);
+      GameBus.emit(GameEvent.Notice, 'Chọn ngọc trong túi để khảm hoặc tháo');
+    } else if (npc.role === 'alchemy') {
+      this.emitInventory();
+      this.emitProgress();
+      GameBus.emit(GameEvent.AlchemyToggle, { forceOpen: true });
+    } else {
+      this.emitQuests();
+      GameBus.emit(GameEvent.QuestToggle);
+    }
   }
 
   private placeShrine(): void {
@@ -438,6 +622,32 @@ export class WorldScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
     });
+  }
+
+  private storageAnchor(): Vector2Like {
+    return { x: this.zone.shrine.x - 118, y: this.zone.shrine.y + 28 };
+  }
+
+  private placeStorageChest(): void {
+    const { x, y } = this.storageAnchor();
+    this.add
+      .ellipse(x, y - 2, 54, 18, 0x05070d, 0.4)
+      .setDepth(y - 1);
+    this.storageSprite = this.add
+      .sprite(x, y, WorldResourceTexture.ChestLegendary)
+      .setOrigin(0.5, 1)
+      .setDepth(y)
+      .setDisplaySize(58, 46);
+    this.storageLabel = this.add
+      .text(x, y - 54, 'Rương trữ đồ', {
+        fontFamily: 'monospace',
+        fontSize: '10px',
+        color: '#f0d090',
+        stroke: '#05070d',
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(y + 2);
   }
 
   private placeWaypoint(): void {
@@ -486,13 +696,271 @@ export class WorldScene extends Phaser.Scene {
       this.resources.push({ kind: 'plant', def, sprite, readyAt: 0 });
     }
     for (const def of this.zone.chests) {
+      const shadow = this.add
+        .ellipse(def.x, def.y - 2, 52, 16, 0x05070d, 0.38)
+        .setDepth(def.y - 1);
       const sprite = this.add
         .image(def.x, def.y, CHEST_TEXTURE[def.tier])
         .setOrigin(0.5, 1)
-        .setDisplaySize(124, 82)
+        .setDisplaySize(54, 42)
         .setDepth(def.y);
-      this.resources.push({ kind: 'chest', def, sprite, readyAt: 0 });
+      this.resources.push({ kind: 'chest', def, sprite, shadow, readyAt: 0 });
     }
+  }
+
+  private placeFarm(): void {
+    this.purgeDecalsOverFarm();
+
+    const bed = this.zone.farmBed;
+    const road = this.zone.farmPath;
+    const bedKey = this.textures.exists(FarmTexture.Bed)
+      ? FarmTexture.Bed
+      : this.textures.exists(FarmTexture.Soil)
+        ? FarmTexture.Soil
+        : FarmTexture.Path;
+    const rimKey = this.textures.exists(FarmTexture.BedRim) ? FarmTexture.BedRim : bedKey;
+    const pathKey = this.textures.exists(FarmTexture.Path) ? FarmTexture.Path : bedKey;
+    const bankKey = this.textures.exists(FarmTexture.PathBank) ? FarmTexture.PathBank : rimKey;
+    const rim = 28;
+    const bank = 20;
+
+    if (bed && this.textures.exists(rimKey)) {
+      // Grass→dirt skirt so the court does not cut the map with a hard rectangle.
+      const skirt = this.add
+        .tileSprite(bed.x - rim, bed.y - rim, bed.width + rim * 2, bed.height + rim * 2, rimKey)
+        .setOrigin(0, 0)
+        .setDepth(-960);
+      this.farmGround.push(skirt);
+    }
+
+    if (bed && this.textures.exists(bedKey)) {
+      const court = this.add
+        .tileSprite(bed.x, bed.y, bed.width, bed.height, bedKey)
+        .setOrigin(0, 0)
+        .setDepth(-950);
+      this.farmGround.push(court);
+    }
+
+    // Soft bank then centre lane — road grows out of the grass instead of a stripe.
+    if (road && this.textures.exists(bankKey)) {
+      const bankStrip = this.add
+        .tileSprite(road.x - bank, road.y, road.width + bank * 2, road.height, bankKey)
+        .setOrigin(0, 0)
+        .setDepth(-915);
+      this.farmGround.push(bankStrip);
+    }
+    if (road && this.textures.exists(pathKey)) {
+      const lane = this.add
+        .tileSprite(road.x, road.y, road.width, road.height, pathKey)
+        .setOrigin(0, 0)
+        .setDepth(-900);
+      this.farmGround.push(lane);
+    }
+
+    for (const def of this.zone.farmDecor ?? []) {
+      if (def.kind === 'soil-pad' || def.kind === 'path') continue;
+      this.spawnFarmDecor(def);
+    }
+
+    for (const def of this.zone.farmPlots ?? []) {
+      const soilKey = this.textures.exists(FarmTexture.Soil) ? FarmTexture.Soil : bedKey;
+      const soil = this.add
+        .image(def.x, def.y - 2, soilKey)
+        .setOrigin(0.5, 1)
+        .setDisplaySize(40, 36)
+        .setDepth(-930)
+        .setTint(0xa89068);
+      const crop = this.add
+        .image(def.x, def.y - 8, soilKey)
+        .setOrigin(0.5, 1)
+        .setDisplaySize(36, 36)
+        .setDepth(def.y)
+        .setVisible(false);
+      const label = this.add
+        .text(def.x, def.y - 52, '', {
+          fontFamily: 'monospace',
+          fontSize: '10px',
+          color: '#d7f0c8',
+          stroke: '#05070d',
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(def.y + 2);
+      this.farmPlots.push({ def, soil, crop, label });
+    }
+
+    if ((this.zone.farmPlots?.length ?? 0) > 0 && bed) {
+      this.add
+        .text(bed.x + bed.width / 2, bed.y - rim - 6, 'Linh Điền', {
+          fontFamily: 'monospace',
+          fontSize: '12px',
+          color: '#c8d8b0',
+          stroke: '#05070d',
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(bed.y + 4);
+    }
+    this.refreshFarmPlots();
+  }
+
+  /** Mana-seed clutter must not sit on the tilled court, rim, or entry road. */
+  private purgeDecalsOverFarm(): void {
+    const bed = this.zone.farmBed;
+    const road = this.zone.farmPath;
+    if ((!bed && !road) || this.decals.length === 0) return;
+    const rim = 36;
+    const bank = 28;
+    this.decals = this.decals.filter((sprite) => {
+      const onBed =
+        !!bed &&
+        sprite.x >= bed.x - rim &&
+        sprite.x <= bed.x + bed.width + rim &&
+        sprite.y >= bed.y - rim &&
+        sprite.y <= bed.y + bed.height + rim;
+      const onRoad =
+        !!road &&
+        sprite.x >= road.x - bank &&
+        sprite.x <= road.x + road.width + bank &&
+        sprite.y >= road.y - 12 &&
+        sprite.y <= road.y + road.height + 12;
+      if (onBed || onRoad) {
+        sprite.destroy();
+        return false;
+      }
+      return true;
+    });
+  }
+
+  private spawnFarmDecor(def: FarmDecorDef): void {
+    const texture =
+      def.kind === 'house'
+        ? FarmTexture.House
+        : def.kind === 'fence-h'
+          ? FarmTexture.FenceH
+          : def.kind === 'fence-v'
+            ? FarmTexture.FenceV
+            : def.kind === 'fence-post'
+              ? FarmTexture.FencePost
+              : def.kind === 'chicken'
+                ? FarmTexture.Chicken
+                : def.kind === 'path'
+                  ? FarmTexture.Path
+                  : FarmTexture.Soil;
+    if (!this.textures.exists(texture)) return;
+    const sprite = this.add.image(def.x, def.y, texture).setOrigin(0.5, 1);
+    if (def.kind === 'house') {
+      sprite.setDisplaySize(144, 192).setDepth(def.y);
+    } else if (def.kind === 'chicken') {
+      sprite.setDisplaySize(36, 36).setDepth(def.y);
+    } else if (def.kind === 'path') {
+      sprite.setDisplaySize(48, 48).setDepth(-900);
+    } else {
+      sprite.setDisplaySize(48, 48).setDepth(def.y).setTint(0xd8c8a0);
+    }
+    this.farmDecorSprites.push(sprite);
+  }
+
+  private refreshFarmPlots(): void {
+    const now = Date.now();
+    this.farm = growFarm(this.farm, now);
+    const foot = this.player?.hitPoint() ?? null;
+    for (const node of this.farmPlots) {
+      const near =
+        !!foot && Phaser.Math.Distance.Between(foot.x, foot.y, node.def.x, node.def.y) <= 140;
+      const plot = this.farm.plots.find((candidate) => candidate.id === node.def.id);
+      if (!plot || plot.status === 'empty' || !plot.seedId) {
+        node.crop.setVisible(false);
+        node.soil.setTexture(
+          this.textures.exists(FarmTexture.Soil) ? FarmTexture.Soil : node.soil.texture.key,
+        );
+        node.soil.setTint(0xa89068);
+        node.label.setText(near ? 'Đất trống' : '');
+        node.label.setColor('#d7f0c8');
+        continue;
+      }
+
+      const needsWater = plot.status === 'growing' && !plot.watered;
+      const wetKey = FarmTexture.SoilWet;
+      const dryKey = FarmTexture.Soil;
+      if (needsWater) {
+        if (this.textures.exists(dryKey)) node.soil.setTexture(dryKey);
+        node.soil.setTint(0xd4b896);
+      } else {
+        if (this.textures.exists(wetKey)) node.soil.setTexture(wetKey);
+        else if (this.textures.exists(dryKey)) node.soil.setTexture(dryKey);
+        node.soil.clearTint();
+        if (!this.textures.exists(wetKey)) node.soil.setTint(0x8fbc8f);
+      }
+
+      const kind = cropKindFromSeed(plot.seedId);
+      const progress = plotGrowth(plot, now);
+      const ready = plot.status === 'ready';
+      const stage = needsWater ? 0 : growthStage(progress, ready);
+      if (kind && this.textures.exists(farmGrowTexture(kind, stage))) {
+        node.crop.setTexture(farmGrowTexture(kind, stage));
+        node.crop.setVisible(true);
+        node.crop.setDisplaySize(ready ? 44 : 36, ready ? 44 : 36);
+      } else if (kind && this.textures.exists(PLANT_TEXTURE[kind])) {
+        node.crop.setTexture(PLANT_TEXTURE[kind]);
+        node.crop.setVisible(true);
+      } else {
+        node.crop.setVisible(false);
+      }
+      const cropName = SEED_CATALOG[plot.seedId]?.name ?? plot.seedId;
+      if (!near) {
+        node.label.setText('');
+      } else if (needsWater) {
+        node.label.setText(`Cần tưới · ${cropName}`);
+        node.label.setColor('#f0d080');
+      } else if (ready) {
+        node.label.setText(`Thu hoạch · ${cropName}`);
+        node.label.setColor('#ffe6a0');
+      } else {
+        node.label.setText(`${cropName} · ${Math.round(progress * 100)}%`);
+        node.label.setColor('#c8e4b0');
+      }
+    }
+  }
+
+  private nearestFarmPlot(): FarmPlotNode | null {
+    if (!this.player || this.zone.id !== 'linh-dien' || this.farmPlots.length === 0) return null;
+    const foot = this.player.hitPoint();
+    let best: { node: FarmPlotNode; distance: number } | null = null;
+    for (const node of this.farmPlots) {
+      const distance = Phaser.Math.Distance.Between(foot.x, foot.y, node.def.x, node.def.y);
+      if (distance > FARM_PLOT_RADIUS) continue;
+      if (!best || distance < best.distance) best = { node, distance };
+    }
+    return best?.node ?? null;
+  }
+
+  private interactFarmPlot(node: FarmPlotNode): void {
+    const plot = this.farm.plots.find((candidate) => candidate.id === node.def.id);
+    if (!plot) return;
+    if (plot.status === 'ready') {
+      this.onFarmCommand({ action: 'harvest', plotId: plot.id });
+      return;
+    }
+    if (plot.status === 'growing' && !plot.watered) {
+      this.onFarmCommand({ action: 'water', plotId: plot.id });
+      return;
+    }
+    if (plot.status === 'growing') {
+      const progress = Math.round(plotGrowth(plot, Date.now()) * 100);
+      GameBus.emit(GameEvent.Notice, `Đang lớn · ${progress}%`);
+      return;
+    }
+    if (this.bag.count(this.selectedFarmSeed) < 1) {
+      GameBus.emit(GameEvent.Notice, 'Thiếu hạt giống — mở panel Linh Điền để chọn');
+      GameBus.emit(GameEvent.FarmToggle);
+      return;
+    }
+    this.onFarmCommand({
+      action: 'plant',
+      plotId: plot.id,
+      seedId: this.selectedFarmSeed,
+    });
   }
 
   private placeArena(): void {
@@ -536,6 +1004,29 @@ export class WorldScene extends Phaser.Scene {
     return Phaser.Math.Distance.Between(foot.x, foot.y, this.zone.shrine.x, this.zone.shrine.y) <= SHRINE_RADIUS;
   }
 
+  private nearStorage(): boolean {
+    const foot = this.player.hitPoint();
+    const chest = this.storageAnchor();
+    return Phaser.Math.Distance.Between(foot.x, foot.y, chest.x, chest.y) <= STORAGE_RADIUS;
+  }
+
+  private inShrineSafe(point: Vector2Like): boolean {
+    return (
+      Phaser.Math.Distance.Between(point.x, point.y, this.zone.shrine.x, this.zone.shrine.y) <=
+      SHRINE_SAFE_RADIUS
+    );
+  }
+
+  private keepMobOutOfShrine(mob: Phaser.Physics.Arcade.Sprite): void {
+    const { x: sx, y: sy } = this.zone.shrine;
+    const d = Phaser.Math.Distance.Between(mob.x, mob.y, sx, sy);
+    if (d >= SHRINE_SAFE_RADIUS || d < 1) return;
+    const nx = (mob.x - sx) / d;
+    const ny = (mob.y - sy) / d;
+    mob.setPosition(sx + nx * SHRINE_SAFE_RADIUS, sy + ny * SHRINE_SAFE_RADIUS);
+    mob.setVelocity(0, 0);
+  }
+
   private nearWaypoint(): boolean {
     const foot = this.player.hitPoint();
     return Phaser.Math.Distance.Between(foot.x, foot.y, this.zone.waypoint.x, this.zone.waypoint.y) <= SHRINE_RADIUS;
@@ -552,6 +1043,31 @@ export class WorldScene extends Phaser.Scene {
     if (!this.nearShrine()) return;
     this.spawn = { zone: this.zone.id, x: this.zone.shrine.x, y: this.zone.shrine.y };
     GameBus.emit(GameEvent.Notice, `Đã đặt điểm hồi sinh · ${this.zone.name}`);
+    void this.persist();
+  }
+
+  private openStorage(): void {
+    this.emitInventory();
+    GameBus.emit(GameEvent.StorageToggle, { forceOpen: true });
+  }
+
+  private onStorageCommand(payload: { action?: string; index?: number; quantity?: number }): void {
+    if (!payload?.action || payload.index === undefined) return;
+    if (!this.nearStorage()) {
+      GameBus.emit(GameEvent.Notice, 'Hãy đứng gần rương trữ đồ');
+      return;
+    }
+    const amount = payload.quantity;
+    let ok = false;
+    if (payload.action === 'deposit') {
+      ok = this.bag.deposit(payload.index, amount);
+      if (!ok) GameBus.emit(GameEvent.Notice, 'Rương đầy hoặc không gửi được');
+    } else if (payload.action === 'withdraw') {
+      ok = this.bag.withdraw(payload.index, amount);
+      if (!ok) GameBus.emit(GameEvent.Notice, 'Túi đầy hoặc không lấy được');
+    }
+    if (!ok) return;
+    this.emitInventory();
     void this.persist();
   }
 
@@ -625,6 +1141,7 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.fadeOut(280, 6, 8, 15);
     await new Promise<void>((resolve) => this.cameras.main.once('camerafadeoutcomplete', () => resolve()));
     this.loadZone(zone, warpStand(zone));
+    this.applyQuestEvent('reach', zone);
     this.cameras.main.fadeIn(280, 6, 8, 15);
     this.crossing = false;
     GameBus.emit(GameEvent.Notice, `Dịch chuyển · ${this.zone.name}`);
@@ -639,13 +1156,31 @@ export class WorldScene extends Phaser.Scene {
     this.bossAi = undefined;
     for (const pile of this.loot) this.destroyPile(pile);
     this.loot = [];
-    for (const resource of this.resources) resource.sprite.destroy();
+    for (const resource of this.resources) {
+      if (resource.kind === 'chest') resource.shadow.destroy();
+      resource.sprite.destroy();
+    }
     this.resources = [];
+    for (const node of this.farmPlots) {
+      node.soil.destroy();
+      node.crop.destroy();
+      node.label.destroy();
+    }
+    this.farmPlots = [];
+    for (const sprite of this.farmDecorSprites) sprite.destroy();
+    this.farmDecorSprites = [];
+    for (const ground of this.farmGround) ground.destroy();
+    this.farmGround = [];
     for (const portal of this.portals) {
       portal.sprite.destroy();
       portal.label.destroy();
     }
     this.portals = [];
+    for (const npc of this.npcs) {
+      npc.sprite.destroy();
+      npc.label.destroy();
+    }
+    this.npcs = [];
     this.stones = [];
     this.targets = [];
     // Mob indices belong to the zone that produced them.
@@ -656,6 +1191,10 @@ export class WorldScene extends Phaser.Scene {
     this.shrineLabel = undefined;
     this.shrineRing?.destroy();
     this.shrineRing = undefined;
+    this.storageSprite?.destroy();
+    this.storageSprite = undefined;
+    this.storageLabel?.destroy();
+    this.storageLabel = undefined;
     this.waypointSprite?.destroy();
     this.waypointSprite = undefined;
     this.waypointLabel?.destroy();
@@ -693,10 +1232,29 @@ export class WorldScene extends Phaser.Scene {
 
   private async enterPortal(def: PortalDef): Promise<void> {
     if (this.crossing) return;
+    const questState = this.quests.snapshot();
+    const access = canEnterZone(def.to, {
+      level: this.progress.level,
+      finishedQuests: new Set(
+        Object.entries(questState.quests)
+          .filter(([, progress]) => progress.status === 'completed' || progress.status === 'claimed')
+          .map(([id]) => id),
+      ),
+    });
+    if (!access.allowed) {
+      GameBus.emit(GameEvent.Notice, access.reason ?? 'Khu vực chưa mở');
+      return;
+    }
     this.crossing = true;
     this.cameras.main.fadeOut(280, 6, 8, 15);
     await new Promise<void>((resolve) => this.cameras.main.once('camerafadeoutcomplete', () => resolve()));
     this.loadZone(def.to, def.spawn);
+    this.applyQuestEvent('reach', def.to);
+    if (def.to === 'ngoai-mon') {
+      this.applyQuestEvent('talk', 'truong-lao');
+      this.applyQuestEvent('talk', 'duoc-su');
+    }
+    if (def.to === 'huyet-ma-coc') this.applyQuestEvent('talk', 'de-tu-bi-thuong');
     this.cameras.main.fadeIn(280, 6, 8, 15);
     this.crossing = false;
     if (this.zone.arena) {
@@ -708,9 +1266,11 @@ export class WorldScene extends Phaser.Scene {
   /* ------------------------------------------------------------ player */
 
   private spawnPlayer(id: PlayerId, at: Vector2Like): void {
-    const derived = this.progress.derive(id, this.bag.bonuses());
+    if (this.skills.snapshot().classId !== id) this.skills = new SkillSystem(id as SkillClass);
+    const derived = this.progress.derive(id, this.buildBonuses());
     this.player = PLAYER_FACTORIES[id](this, at.x, at.y, derived);
     this.player.sprite.y -= this.player.footY() - at.y;
+    this.syncCombatKit();
     this.hookColliders();
     this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
     GameBus.emit(GameEvent.CharacterChanged, this.player.profile);
@@ -745,10 +1305,36 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private applyGrowth(fill: boolean): void {
-    const derived = this.progress.derive(ROSTER[this.playerIndex], this.bag.bonuses());
+    const derived = this.progress.derive(ROSTER[this.playerIndex], this.buildBonuses());
     writeDerived(this.player.stats, derived, fill);
+    this.syncCombatKit();
     emitStats(this.player.stats);
     this.emitProgress();
+  }
+
+  /** Push skill-tree ranks into the live combat kit (locks + scaling). */
+  private syncCombatKit(): void {
+    if (!this.player) return;
+    const state = this.skills.snapshot();
+    const kit = buildCombatKit(state.classId, state.ranks);
+    this.player.combat.replaceSkills(kit);
+  }
+
+  private buildBonuses(): Partial<import('../types').CharacterStats> {
+    const total = { ...this.bag.bonuses() };
+    const add = (bonuses: Partial<import('../types').CharacterStats>) => {
+      for (const [key, value] of Object.entries(bonuses)) {
+        const field = key as keyof import('../types').CharacterStats;
+        total[field] = (total[field] ?? 0) + (value ?? 0);
+      }
+    };
+    add(deriveAttributeBonuses(this.attributes.values));
+    const learned = this.skills.snapshot().ranks;
+    for (const [id, rank] of Object.entries(learned)) {
+      const effect = SKILL_CATALOG[id]?.effect;
+      if (effect?.stat && effect.value) add({ [effect.stat]: effect.value * rank });
+    }
+    return total;
   }
 
   private grantXp(amount: number, x: number, y: number, toId?: string): void {
@@ -760,17 +1346,26 @@ export class WorldScene extends Phaser.Scene {
     const gained = this.progress.grant(amount);
     this.floatingNumber(x, y - 40, 0, 0xffe9a8, false, `+${amount} KN`);
     if (gained > 0) {
+      this.attributes.availablePoints += gained * 2;
+      this.skills.grantPoints(gained);
       this.applyGrowth(true);
       this.floatingNumber(x, y - 64, 0, 0x9fe8ff, true, this.progress.title);
     } else {
       this.emitProgress();
     }
+    this.emitRpgPanels();
     void this.persist();
   }
 
   /* --------------------------------------------------------------- mobs */
 
-  private spawnMob(kind: Mob['kind'], x: number, y: number, index: number): void {
+  private spawnMob(
+    kind: Mob['kind'],
+    x: number,
+    y: number,
+    index: number,
+    opts?: { tribulation?: boolean; hpScale?: number },
+  ): void {
     const mob = new Mob(this, { x, y }, kind, {
       onStrike: (_mob, strike) => this.onMobStrike(strike),
       onDeath: (dead) => this.onMobDeath(dead),
@@ -780,29 +1375,51 @@ export class WorldScene extends Phaser.Scene {
         else this.fx.frostBurst(p.x, p.y);
       },
     });
+    if (opts?.hpScale && opts.hpScale > 1) {
+      mob.maxHp = Math.round(mob.maxHp * opts.hpScale);
+      mob.hp = mob.maxHp;
+    }
+    if (opts?.tribulation) mob.setTint(0xffe08a);
     this.physics.add.collider(mob, this.props);
     if (this.player) {
       this.enemyColliders.push(this.physics.add.collider(this.player.sprite, mob));
     }
-    this.packs.push({ index, mob, ai: new EnemyAI(mob, MOB_AI[kind]), respawnAt: null });
+    this.packs.push({
+      index,
+      mob,
+      ai: new EnemyAI(mob, MOB_AI[kind]),
+      respawnAt: null,
+      tribulation: opts?.tribulation,
+    });
     this.targets.push(mob);
   }
 
   private onMobDeath(mob: Mob): void {
     if (!this.hosting) return;
     const foot = mob.hitPoint();
-    this.grantXp(MOB_XP[mob.kind], foot.x, foot.y, this.lastHit.get(mob));
-    const drops = rollDrops(MOB_DROPS[mob.kind]);
-    if (drops.length) this.dropLoot(foot.x, foot.y, drops);
     const pack = this.packs.find((p) => p.mob === mob);
-    if (pack) pack.respawnAt = this.time.now + MOB_RESPAWN_MS;
+    const isTrib = pack?.tribulation === true;
+    if (!isTrib) {
+      this.grantXp(MOB_XP[mob.kind], foot.x, foot.y, this.lastHit.get(mob));
+      this.applyQuestEvent('kill', mob.kind);
+      const drops = rollDrops(MOB_DROPS[mob.kind]);
+      if (drops.length) this.dropLoot(foot.x, foot.y, drops);
+    }
+    if (pack) {
+      if (isTrib) {
+        pack.respawnAt = null;
+        this.onTribulationKill();
+      } else {
+        pack.respawnAt = this.time.now + MOB_RESPAWN_MS;
+      }
+    }
   }
 
   private onMobStrike(strike: MobStrike): void {
     if (!this.hosting) return;
     const end = { x: strike.x + strike.aim.x * strike.reach, y: strike.y + strike.aim.y * strike.reach };
     for (const prey of this.preyList()) {
-      if (!prey.alive) continue;
+      if (!prey.alive || this.inShrineSafe(prey.position)) continue;
       const distance =
         strike.kind === 'bolt'
           ? distanceToSegment(prey.position, { x: strike.x, y: strike.y }, end)
@@ -822,6 +1439,7 @@ export class WorldScene extends Phaser.Scene {
       pack.mob.tick(time, delta);
       if (!this.hosting || !pack.mob.alive || pack.mob.frozen) continue;
       pack.ai.update(time, delta, this.nearestPrey(pack.mob.hitPoint()));
+      this.keepMobOutOfShrine(pack.mob);
     }
   }
 
@@ -839,21 +1457,26 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private spawnBoss(x: number, y: number): void {
+    const windLord = this.zone.id === 'thanh-phong-coc';
     const boss = new Boss1(this, x, y, {
       onStrike: (strike) => this.onBossStrike(strike),
       onAct: (act, aim) => {
+        this.telegraphBossAct(act, aim);
         if (this.hosting) peekSession()?.publishWorld({ kind: 'boss-act', act, ax: aim.x, ay: aim.y });
       },
       onDeath: () => {
-        // Everyone in the arena earned the banner, even though only the host
-        // hands out the kill.
-        this.floatingNumber(x, y - 120, 0, 0xffd070, true, 'HẠ GỤC');
+        this.floatingNumber(x, y - 120, 0, 0xffd070, true, windLord ? 'PHONG MA HẠ' : 'HẠ GỤC');
         if (!this.hosting) return;
+        this.applyQuestEvent('boss', windLord ? 'phong-ma-chu' : 'huyet-ma-coc-chu');
         this.grantXp(BOSS_XP, x, y - 40, this.boss ? this.lastHit.get(this.boss) : undefined);
-        const drops = rollDrops(BOSS_DROPS);
+        const drops = rollDrops(windLord ? WIND_BOSS_DROPS : BOSS_DROPS);
         if (drops.length) this.dropLoot(x, y, drops);
       },
     });
+    if (windLord) {
+      boss.setTint(0xa8e6ff);
+      boss.setScale(boss.scaleX * 1.05, boss.scaleY * 1.05);
+    }
     this.physics.add.collider(boss, this.props);
     this.boss = boss;
     this.bossAi = new EnemyAI(boss, this.bossProfile());
@@ -863,11 +1486,28 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  private telegraphBossAct(act: string, aim: Vector2Like): void {
+    if (!this.boss) return;
+    const foot = this.boss.hitPoint();
+    if (act === 'nova') {
+      this.bossFx.telegraph(foot.x, foot.y, BOSS1_ACTIONS.nova.radius * 0.92, 0xff8866);
+    } else if (act === 'melee') {
+      const reach = BOSS1_ACTIONS.melee.reach;
+      this.bossFx.telegraph(
+        foot.x + aim.x * reach * 0.55,
+        foot.y + aim.y * reach * 0.55,
+        BOSS1_ACTIONS.melee.radius * 1.6,
+        0xffaa77,
+      );
+    }
+  }
+
   private tickBoss(time: number, delta: number): void {
     if (!this.boss) return;
     this.boss.tick(time, delta);
     if (this.hosting) {
       this.bossAi?.update(time, delta, this.nearestPrey(this.boss.hitPoint()));
+      this.keepMobOutOfShrine(this.boss);
     }
   }
 
@@ -891,7 +1531,7 @@ export class WorldScene extends Phaser.Scene {
             if (!prey.alive || spent.has(prey.id)) continue;
             if (distanceToSegment(prey.position, previous, { x, y }) > strike.radius + prey.radius) continue;
             spent.add(prey.id);
-            this.inflict(prey, strike.damage, strike.aim);
+            this.inflict(prey, strike.damage, strike.aim, true);
             this.bossFx.burst(x, y, 0.7);
           }
           previous = { x, y };
@@ -910,7 +1550,7 @@ export class WorldScene extends Phaser.Scene {
         if (Phaser.Math.Distance.Between(strike.x, strike.y, prey.position.x, prey.position.y) > strike.radius + prey.radius) {
           continue;
         }
-        this.inflict(prey, strike.damage, strike.aim);
+        this.inflict(prey, strike.damage, strike.aim, true);
       }
       return;
     }
@@ -925,11 +1565,11 @@ export class WorldScene extends Phaser.Scene {
       if (Phaser.Math.Distance.Between(centre.x, centre.y, prey.position.x, prey.position.y) > strike.radius + prey.radius) {
         continue;
       }
-      this.inflict(prey, strike.damage, strike.aim);
+      this.inflict(prey, strike.damage, strike.aim, true);
     }
   }
 
-  private hurtPlayer(damage: number, aim: Vector2Like): void {
+  private hurtPlayer(damage: number, aim: Vector2Like, heavy = false): void {
     if (!this.player.alive) return;
     if (this.player.invulnerable) {
       const spot = this.player.hitPoint();
@@ -939,12 +1579,14 @@ export class WorldScene extends Phaser.Scene {
     this.player.applyHit({ damage, aim, side: 'enemy' });
     const spot = this.player.hitPoint();
     this.floatingNumber(spot.x, spot.y - 120, damage, 0xff8b96, false);
-    this.cameras.main.shake(120, 0.004);
+    const hard = heavy || damage >= 16;
+    this.cameras.main.shake(hard ? 180 : 120, hard ? 0.01 : 0.004);
   }
 
   /* -------------------------------------------------------- death / loot */
 
   private onDeath(): void {
+    if (this.tribulation.phase === 'active') this.failTribulation('death');
     this.beginRespawn();
   }
 
@@ -1011,6 +1653,10 @@ export class WorldScene extends Phaser.Scene {
       if (resource.sprite.active || time < resource.readyAt) continue;
       resource.readyAt = 0;
       resource.sprite.setActive(true).setVisible(true).setAlpha(0);
+      if (resource.kind === 'chest') {
+        resource.shadow.setVisible(true).setAlpha(0);
+        this.tweens.add({ targets: resource.shadow, alpha: 0.38, duration: 320 });
+      }
       this.tweens.add({ targets: resource.sprite, alpha: 1, duration: 320 });
     }
   }
@@ -1041,6 +1687,7 @@ export class WorldScene extends Phaser.Scene {
       resource.readyAt = this.time.now + PLANT_RESPAWN_MS;
       resource.sprite.setActive(false).setVisible(false);
       GameBus.emit(GameEvent.Notice, `Đã hái · ${itemOf(resource.def.kind)?.name ?? resource.def.kind}`);
+      this.applyQuestEvent('collect', resource.def.kind);
       this.emitInventory();
       void this.persist();
       return;
@@ -1049,6 +1696,7 @@ export class WorldScene extends Phaser.Scene {
     const reward = CHEST_REWARD[resource.def.tier];
     resource.readyAt = this.time.now + CHEST_RESPAWN_MS;
     resource.sprite.setActive(false).setVisible(false);
+    resource.shadow.setVisible(false);
     this.dropLoot(resource.def.x, resource.def.y, [reward.stone]);
     this.grantXp(reward.xp, resource.def.x, resource.def.y);
     GameBus.emit(
@@ -1063,6 +1711,21 @@ export class WorldScene extends Phaser.Scene {
       GameBus.emit(GameEvent.LootPrompt, { label: `F · nhặt (${near.pile.items.length})` });
       return;
     }
+    const farmPlot = this.nearestFarmPlot();
+    if (farmPlot) {
+      const plot = this.farm.plots.find((candidate) => candidate.id === farmPlot.def.id);
+      const status = plot?.status ?? 'empty';
+      const label =
+        status === 'ready'
+          ? 'F · thu hoạch'
+          : status === 'growing' && plot && !plot.watered
+            ? 'F · tưới nước'
+            : status === 'growing'
+              ? `F · đang lớn ${Math.round(plotGrowth(plot!, Date.now()) * 100)}%`
+              : `F · gieo ${SEED_CATALOG[this.selectedFarmSeed]?.name ?? 'hạt'}`;
+      GameBus.emit(GameEvent.LootPrompt, { label });
+      return;
+    }
     const resource = this.nearestResource();
     if (resource) {
       GameBus.emit(GameEvent.LootPrompt, {
@@ -1071,6 +1734,17 @@ export class WorldScene extends Phaser.Scene {
             ? `F · hái ${itemOf(resource.resource.def.kind)?.name ?? 'linh dược'}`
             : `F · mở ${CHEST_REWARD[resource.resource.def.tier].label}`,
       });
+      return;
+    }
+    const npc = this.nearestNpc();
+    if (npc) {
+      GameBus.emit(GameEvent.LootPrompt, {
+        label: `F · ${npc.role === 'merchant' ? 'giao dịch' : 'đối thoại'} ${npc.name}`,
+      });
+      return;
+    }
+    if (this.nearStorage()) {
+      GameBus.emit(GameEvent.LootPrompt, { label: 'F · mở rương trữ đồ' });
       return;
     }
     if (this.nearShrine()) {
@@ -1104,9 +1778,23 @@ export class WorldScene extends Phaser.Scene {
   private pickLoot(): void {
     const near = this.nearestLoot();
     if (!near) {
+      const farmPlot = this.nearestFarmPlot();
+      if (farmPlot) {
+        this.interactFarmPlot(farmPlot);
+        return;
+      }
       const resource = this.nearestResource();
       if (resource) {
         this.gatherResource(resource.resource);
+        return;
+      }
+      const npc = this.nearestNpc();
+      if (npc) {
+        this.interactNpc(npc);
+        return;
+      }
+      if (this.nearStorage()) {
+        this.openStorage();
         return;
       }
       if (this.nearShrine()) this.bindSpawn();
@@ -1126,16 +1814,14 @@ export class WorldScene extends Phaser.Scene {
 
   private giveLoot(pile: LootPile, playerId: string): void {
     if (playerId === this.selfId()) {
-      const leftover: string[] = [];
-      for (const id of pile.items) {
-        if (this.bag.add(id)) {
-          const item = itemOf(id);
-          GameBus.emit(GameEvent.Notice, `${item?.name ?? id} vào túi`);
-        } else leftover.push(id);
+      const granted = grantLoot(this.bag, pile.items);
+      for (const id of granted.added) {
+        const item = itemOf(id);
+        GameBus.emit(GameEvent.Notice, `${item?.name ?? id} vào túi`);
       }
-      if (leftover.length) {
+      if (granted.leftover.length) {
         GameBus.emit(GameEvent.Notice, 'Túi đã đầy');
-        pile.items = leftover;
+        pile.items = granted.leftover;
         return;
       }
       this.emitInventory();
@@ -1174,14 +1860,16 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private tickKeys(): void {
-    if (isInputGated()) return;
+    if (isInputGated() || isUiTyping()) return;
+    if (consumePad('menu')) GameBus.emit(GameEvent.MenuToggle);
+    if (isSystemMenuOpen()) return;
     if (Phaser.Input.Keyboard.JustDown(this.keys.bag) || consumePad('bag')) {
       GameBus.emit(GameEvent.InventoryToggle);
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.pick) || consumePad('pick')) this.pickLoot();
-    if (Phaser.Input.Keyboard.JustDown(this.keys.warp)) this.toggleWarp();
+    if (Phaser.Input.Keyboard.JustDown(this.keys.warp) || consumePad('warp')) this.toggleWarp();
     if (Phaser.Input.Keyboard.JustDown(this.keys.envArt) || consumePad('envArt')) this.swapEnvArt();
-    if (Phaser.Input.Keyboard.JustDown(this.keys.swap)) this.trySwap();
+    if (Phaser.Input.Keyboard.JustDown(this.keys.swap) || consumePad('swap')) this.trySwap();
     if (this.keys.hurt && Phaser.Input.Keyboard.JustDown(this.keys.hurt)) this.player.hurt(25);
     if (this.keys.respawn && Phaser.Input.Keyboard.JustDown(this.keys.respawn)) {
       this.finishRespawn();
@@ -1288,11 +1976,36 @@ export class WorldScene extends Phaser.Scene {
     if (!saved) {
       this.emitInventory();
       this.emitProgress();
+      this.emitRpgPanels();
       return;
     }
     this.progress.restore({ level: saved.level, xp: saved.xp });
     this.bag = new Inventory(saved.inventory);
     const wanted = saved.character;
+    this.attributes = saved.attributes
+      ? createAttributeState(saved.attributes.availablePoints, saved.attributes.values)
+      : createAttributeState((this.progress.level - 1) * 2);
+    const expectedAttributePoints = (this.progress.level - 1) * 2;
+    const accountedAttributes =
+      this.attributes.availablePoints +
+      Object.values(this.attributes.values).reduce((sum, value) => sum + value, 0);
+    this.attributes.availablePoints += Math.max(0, expectedAttributePoints - accountedAttributes);
+    this.skills = new SkillSystem(
+      wanted as SkillClass,
+      Math.max(0, this.progress.level - 1),
+      saved.skills,
+    );
+    const restoredSkills = this.skills.snapshot();
+    const accountedSkills =
+      restoredSkills.availablePoints +
+      Object.entries(restoredSkills.ranks).reduce(
+        (sum, [id, rank]) => sum + rank * (SKILL_CATALOG[id]?.costPerRank ?? 1),
+        0,
+      );
+    this.skills.grantPoints(Math.max(0, this.progress.level - 1 - accountedSkills));
+    this.quests = new QuestSystem(saved.quests);
+    this.farm = ensureFarmPlots(saved.farm ?? createFarmState(DEFAULT_FARM_PLOTS), DEFAULT_FARM_PLOTS);
+    this.trackedQuests = saved.trackedQuests ?? [];
     const index = ROSTER.indexOf(wanted);
     if (index >= 0 && ROSTER[this.playerIndex] !== wanted) {
       this.playerIndex = index;
@@ -1320,6 +2033,7 @@ export class WorldScene extends Phaser.Scene {
     emitStats(this.player.stats);
     this.emitInventory();
     this.emitProgress();
+    this.emitRpgPanels();
   }
 
   private onHidden = (): void => {
@@ -1347,6 +2061,11 @@ export class WorldScene extends Phaser.Scene {
         hp: this.player.stats.hp,
         spiritualPower: this.player.stats.spiritualPower,
         inventory: this.bag.snapshot(),
+        attributes: this.attributes,
+        skills: this.skills.snapshot(),
+        quests: this.quests.snapshot(),
+        farm: this.farm,
+        trackedQuests: this.trackedQuests,
         zone: this.zone.id,
         x: foot.x,
         y: foot.y,
@@ -1364,27 +2083,48 @@ export class WorldScene extends Phaser.Scene {
     action?: string;
     index?: number;
     slot?: EquipSlot;
-    kind?: 'hp' | 'sp';
+    quantity?: number;
+    kinds?: readonly string[];
   }): void {
     if (!payload?.action) return;
-    if (payload.action === 'equip' && payload.index !== undefined) this.bag.equip(payload.index);
-    if (payload.action === 'unequip' && payload.slot) this.bag.unequip(payload.slot);
-    if (payload.action === 'use-quick' && payload.kind) {
-      const index = this.bag.findQuickUseIndex(payload.kind);
-      if (index < 0) {
-        GameBus.emit(
-          GameEvent.Notice,
-          payload.kind === 'hp' ? 'Không còn đan hồi máu' : 'Không còn đan hồi linh lực',
-        );
-        this.emitInventory();
+    if (payload.action === 'equip' && payload.index !== undefined) {
+      const item = itemOf(this.bag.bag[payload.index]);
+      if (item && this.progress.level < (item.requiredLevel ?? 1)) {
+        GameBus.emit(GameEvent.Notice, `Cần Luyện Khí ${item.requiredLevel}`);
         return;
       }
-      payload = { ...payload, action: 'use', index };
+      this.bag.equip(payload.index);
+    }
+    if (payload.action === 'unequip' && payload.slot) this.bag.unequip(payload.slot);
+    if (payload.action === 'socket' && payload.slot && payload.index !== undefined) {
+      const state = this.bag.sockets[payload.slot];
+      const socketIndex = state?.gems.findIndex((gem) => !gem) ?? -1;
+      if (socketIndex < 0 || !this.bag.socket(payload.slot, socketIndex, payload.index)) {
+        GameBus.emit(GameEvent.Notice, 'Không thể khảm ngọc vào trang bị này');
+        return;
+      }
+      GameBus.emit(GameEvent.Notice, 'Khảm ngọc thành công');
+    }
+    if (
+      payload.action === 'unsocket' &&
+      payload.slot &&
+      typeof (payload as { socketIndex?: number }).socketIndex === 'number'
+    ) {
+      const socketIndex = (payload as { socketIndex: number }).socketIndex;
+      if (!this.bag.unsocket(payload.slot, socketIndex)) {
+        GameBus.emit(GameEvent.Notice, 'Túi đầy hoặc ô ngọc trống');
+        return;
+      }
     }
     if (payload.action === 'use' && payload.index !== undefined) {
       const chosen = itemOf(this.bag.bag[payload.index]);
-      if (chosen?.cultivationXp && this.progress.atCap) {
-        GameBus.emit(GameEvent.Notice, 'Đã đạt đỉnh Luyện Khí — hãy bán linh thạch');
+      if (chosen?.cultivationXp && (this.progress.atCap || this.progress.atRealmCap)) {
+        GameBus.emit(
+          GameEvent.Notice,
+          this.progress.atCap
+            ? 'Đã đạt đỉnh cảnh giới — hãy bán linh thạch'
+            : `Đã đạt đỉnh ${this.progress.title.replace(' · đỉnh', '')} — cần đột phá`,
+        );
         return;
       }
       const used = this.bag.use(payload.index);
@@ -1399,10 +2139,7 @@ export class WorldScene extends Phaser.Scene {
       if (used?.restoreHp && this.player.alive) {
         stats.hp = Math.min(stats.maxHp, stats.hp + used.restoreHp);
       }
-      if (used?.restoreSp || used?.restoreHp) {
-        emitStats(stats);
-        if (used) GameBus.emit(GameEvent.Notice, `Dùng ${used.name}`);
-      }
+      if (used?.restoreSp || used?.restoreHp) emitStats(stats);
       if (used?.cultivationXp) {
         const foot = this.player.hitPoint();
         this.grantXp(used.cultivationXp, foot.x, foot.y);
@@ -1410,18 +2147,624 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     if (payload.action === 'sell' && payload.index !== undefined) {
-      const sold = this.bag.sell(payload.index);
-      if (sold) {
-        GameBus.emit(GameEvent.Notice, `Đã bán ${sold.item.name} · +${sold.gained} tiền đồng`);
-      }
+      void this.sellInventory(payload.index, payload.quantity);
+      return;
+    }
+    if (payload.action === 'sell-all') {
+      void this.sellAllSellable(payload.kinds);
+      return;
     }
     this.applyGrowth(false);
+    this.emitInventory();
+    this.emitShop();
+    void this.persist();
+  }
+
+  private async sellInventory(index: number, quantity?: number): Promise<void> {
+    const chosen = itemOf(this.bag.bag[index]);
+    if (!chosen?.sellValue) return;
+    const have = this.bag.quantities[index] || 1;
+    const amount = Math.min(have, Math.max(1, Math.floor(quantity ?? have)));
+    if (currentAccessToken()) {
+      try {
+        const receipt = await sellServerItem(this.avatarId, chosen.id, amount);
+        this.bag.sell(index, amount);
+        this.bag.coins = receipt.coins;
+      } catch (error) {
+        GameBus.emit(
+          GameEvent.Notice,
+          error instanceof Error ? error.message : 'Không thể bán vật phẩm',
+        );
+        return;
+      }
+      GameBus.emit(
+        GameEvent.Notice,
+        `Đã bán ${chosen.name} ×${amount} · +${chosen.sellValue * amount} tiền đồng`,
+      );
+    } else {
+      const sold = this.bag.sell(index, amount);
+      if (!sold) return;
+      GameBus.emit(
+        GameEvent.Notice,
+        `Đã bán ${sold.item.name} ×${sold.quantity} · +${sold.gained} tiền đồng`,
+      );
+    }
+    this.applyGrowth(false);
+    this.emitInventory();
+    this.emitShop();
+    await this.persist();
+  }
+
+  /** Sells every bag stack whose kind is allowed (default: consumable + material). */
+  private async sellAllSellable(kinds?: readonly string[]): Promise<void> {
+    const allow = new Set(kinds?.length ? kinds : ['consumable', 'material']);
+    let gained = 0;
+    let soldCount = 0;
+    for (let index = this.bag.bag.length - 1; index >= 0; index -= 1) {
+      const item = itemOf(this.bag.bag[index]);
+      if (!item?.sellValue || !allow.has(item.kind)) continue;
+      const amount = this.bag.quantities[index] || 1;
+      if (currentAccessToken()) {
+        try {
+          const receipt = await sellServerItem(this.avatarId, item.id, amount);
+          const sold = this.bag.sell(index, amount);
+          this.bag.coins = receipt.coins;
+          if (sold) {
+            gained += sold.gained;
+            soldCount += sold.quantity;
+          }
+        } catch (error) {
+          GameBus.emit(
+            GameEvent.Notice,
+            error instanceof Error ? error.message : 'Không thể bán vật phẩm',
+          );
+          break;
+        }
+      } else {
+        const sold = this.bag.sell(index, amount);
+        if (!sold) continue;
+        gained += sold.gained;
+        soldCount += sold.quantity;
+      }
+    }
+    if (soldCount <= 0) {
+      GameBus.emit(GameEvent.Notice, 'Không có vật phẩm để bán');
+      return;
+    }
+    GameBus.emit(GameEvent.Notice, `Đã bán ${soldCount} vật phẩm · +${gained} tiền đồng`);
+    this.applyGrowth(false);
+    this.emitInventory();
+    this.emitShop();
+    await this.persist();
+  }
+
+  private onCharacterBuild(payload: { action?: string; id?: string }): void {
+    if (!payload?.action) return;
+    if (payload.action === 'attribute' && payload.id) {
+      const result = allocateAttribute(
+        this.attributes,
+        payload.id as import('../systems/Attributes').AttributeKey,
+      );
+      if (!result.ok) {
+        GameBus.emit(GameEvent.Notice, 'Không đủ điểm chỉ số');
+        return;
+      }
+      this.attributes = result.state;
+    } else if (payload.action === 'skill' && payload.id) {
+      const result = this.skills.spend(payload.id, this.progress.level);
+      if (!result.ok) {
+        GameBus.emit(GameEvent.Notice, 'Chưa đủ cấp, điểm hoặc kỹ năng tiên quyết');
+        return;
+      }
+      this.syncCombatKit();
+      const bind = result.node ? kitBindHint(result.node.id, this.skills.snapshot().classId) : null;
+      if (bind) {
+        GameBus.emit(GameEvent.Notice, `${result.node.name} · gắn phím ${bind}`);
+        if (bind === 'U') {
+          const foot = this.player.hitPoint();
+          this.floatingNumber(foot.x, foot.y - 72, 0, 0xffe08a, true, result.node.name);
+        }
+      }
+    } else if (payload.action === 'reset-attributes') {
+      const cost = this.progress.level * 20;
+      if (this.bag.coins < cost) {
+        GameBus.emit(GameEvent.Notice, `Cần ${cost} tiền đồng để tẩy điểm`);
+        return;
+      }
+      this.bag.coins -= cost;
+      this.attributes = createAttributeState((this.progress.level - 1) * 2);
+    } else if (payload.action === 'breakthrough') {
+      if (this.tribulation.phase === 'active') {
+        GameBus.emit(GameEvent.Notice, 'Đang trong Thiên Kiếp — hãy vượt qua trước');
+        return;
+      }
+      if (this.time.now < this.tribulation.cooldownUntil) {
+        const wait = Math.ceil((this.tribulation.cooldownUntil - this.time.now) / 1000);
+        GameBus.emit(GameEvent.Notice, `Thiên Kiếp còn CD ${wait}s`);
+        return;
+      }
+      const gate = canBreakThrough(this.progress, this.bag);
+      if (!gate.ok) {
+        const notice =
+          gate.error === 'missing-materials'
+            ? `Thiếu nguyên liệu: ${(gate.missing ?? []).map((row) => costLabel(row)).join(', ')}`
+            : gate.error === 'not-at-peak'
+              ? 'Cần đạt đỉnh cảnh giới hiện tại mới đột phá'
+              : gate.error === 'absolute-cap'
+                ? 'Đã đạt đỉnh Kết Đan'
+                : 'Chưa có công pháp đột phá cho cảnh giới này';
+        GameBus.emit(GameEvent.Notice, notice);
+        this.emitRpgPanels();
+        return;
+      }
+      this.beginTribulation();
+      return;
+    }
+    this.applyGrowth(false);
+    this.emitRpgPanels();
     this.emitInventory();
     void this.persist();
   }
 
+  private onAlchemyCommand(payload: { id?: string }): void {
+    if (!payload?.id) return;
+    const result = craftAlchemy(this.bag, payload.id, this.progress.level);
+    if (!result.ok) {
+      const notice =
+        result.error === 'level'
+          ? 'Cảnh giới chưa đủ để luyện công thức này'
+          : result.error === 'missing'
+            ? `Thiếu: ${(result.missing ?? []).map((row) => alchemyCostLabel(row)).join(', ')}`
+            : result.error === 'full'
+              ? 'Túi đã đầy'
+              : 'Không luyện được';
+      GameBus.emit(GameEvent.Notice, notice);
+      return;
+    }
+    GameBus.emit(GameEvent.Notice, `Luyện thành · ${result.recipe.name}`);
+    this.applyQuestEvent('collect', result.recipe.outputId);
+    this.emitInventory();
+    this.emitProgress();
+    void this.persist();
+  }
+
+  private beginTribulation(): void {
+    const plan = planTribulation(this.progress.level);
+    const foot = this.player.hitPoint();
+    this.tribulation = {
+      phase: 'active',
+      endsAt: this.time.now + TRIBULATION_DURATION_MS,
+      cooldownUntil: 0,
+      remaining: plan.count,
+      label: plan.label,
+    };
+    const baseIndex = 9000;
+    for (let i = 0; i < plan.count; i += 1) {
+      const kind = plan.mobKinds[i % plan.mobKinds.length]!;
+      const angle = (Math.PI * 2 * i) / plan.count;
+      const x = Phaser.Math.Clamp(foot.x + Math.cos(angle) * 140, 80, this.zone.width - 80);
+      const y = Phaser.Math.Clamp(foot.y + Math.sin(angle) * 110, 80, this.zone.height - 80);
+      this.spawnMob(kind, x, y, baseIndex + i, { tribulation: true, hpScale: 1.45 });
+    }
+    this.floatingNumber(foot.x, foot.y - 80, 0, 0xffe08a, true, 'THIÊN KIẾP');
+    GameBus.emit(GameEvent.Notice, `${plan.label} · tiêu diệt sóng yêu trong 45s`);
+    this.emitTribulationHud();
+  }
+
+  private onTribulationKill(): void {
+    if (this.tribulation.phase !== 'active') return;
+    this.tribulation = {
+      ...this.tribulation,
+      remaining: Math.max(0, this.tribulation.remaining - 1),
+    };
+    this.emitTribulationHud();
+    if (this.tribulation.remaining <= 0) this.completeTribulation();
+  }
+
+  private completeTribulation(): void {
+    this.clearTribulationMobs();
+    const result = breakThrough(this.progress, this.bag);
+    this.tribulation = idleTribulation();
+    this.emitTribulationHud();
+    if (!result.ok) {
+      GameBus.emit(GameEvent.Notice, 'Vượt Thiên Kiếp nhưng đột phá thất bại (thiếu vật liệu?)');
+      this.emitRpgPanels();
+      return;
+    }
+    this.attributes = {
+      ...this.attributes,
+      availablePoints: this.attributes.availablePoints + 2,
+    };
+    this.skills.grantPoints(1);
+    GameBus.emit(GameEvent.Notice, `Vượt Thiên Kiếp · ${titleForLevel(result.toLevel)}`);
+    const foot = this.player.hitPoint();
+    this.floatingNumber(foot.x, foot.y - 64, 0, 0xffd27a, true, titleForLevel(result.toLevel));
+    this.applyGrowth(false);
+    this.emitRpgPanels();
+    this.emitInventory();
+    void this.persist();
+  }
+
+  private failTribulation(reason: 'death' | 'timeout' | 'zone'): void {
+    if (this.tribulation.phase !== 'active') return;
+    this.clearTribulationMobs();
+    this.tribulation = {
+      phase: 'cooldown',
+      endsAt: 0,
+      cooldownUntil: this.time.now + TRIBULATION_FAIL_COOLDOWN_MS,
+      remaining: 0,
+      label: '',
+    };
+    this.emitTribulationHud();
+    const tip =
+      reason === 'death'
+        ? 'Thiên Kiếp thất bại · nguyên liệu giữ lại'
+        : reason === 'timeout'
+          ? 'Hết giờ Thiên Kiếp · thử lại sau'
+          : 'Rời vùng · Thiên Kiếp hủy';
+    GameBus.emit(GameEvent.Notice, tip);
+  }
+
+  private clearTribulationMobs(): void {
+    const keep: MobPack[] = [];
+    for (const pack of this.packs) {
+      if (!pack.tribulation) {
+        keep.push(pack);
+        continue;
+      }
+      this.targets = this.targets.filter((t) => t !== pack.mob);
+      pack.mob.destroy();
+    }
+    this.packs = keep;
+  }
+
+  private tickTribulation(time: number, delta: number): void {
+    if (this.tribulation.phase === 'cooldown' && time >= this.tribulation.cooldownUntil) {
+      this.tribulation = idleTribulation();
+      this.emitTribulationHud();
+    }
+    if (this.tribulation.phase !== 'active') return;
+    if (time >= this.tribulation.endsAt) {
+      this.failTribulation('timeout');
+      return;
+    }
+    this.tribulationHudTimer += delta;
+    if (this.tribulationHudTimer >= 250) {
+      this.tribulationHudTimer = 0;
+      this.emitTribulationHud();
+    }
+  }
+
+  private emitTribulationHud(): void {
+    const active = this.tribulation.phase === 'active';
+    GameBus.emit(GameEvent.TribulationState, {
+      active,
+      label: this.tribulation.label,
+      secondsLeft: active
+        ? Math.max(0, Math.ceil((this.tribulation.endsAt - this.time.now) / 1000))
+        : 0,
+      remaining: this.tribulation.remaining,
+    });
+  }
+
+  private async onQuestCommand(payload: { action?: string; id?: string }): Promise<void> {
+    if (!payload?.id || !payload.action) return;
+    if (payload.action === 'accept') {
+      const result = this.quests.start(payload.id, this.progress.level);
+      if (!result.ok) {
+        GameBus.emit(GameEvent.Notice, 'Chưa đủ điều kiện nhận nhiệm vụ');
+        return;
+      }
+      const reach = this.quests.creditReach(this.zone.id, this.progress.level);
+      if (reach.ok && reach.changedQuestIds.length) {
+        GameBus.emit(GameEvent.Notice, 'Tiến độ nhiệm vụ đã cập nhật');
+      }
+      if (this.zone.id === 'ngoai-mon' && payload.id === 'q01-nhap-mon') {
+        this.applyQuestEvent('talk', 'truong-lao');
+      }
+    } else if (payload.action === 'complete') {
+      const beforeClaim = this.quests.snapshot();
+      const result = this.quests.claim(payload.id, this.progress.level);
+      if (!result.ok || !result.reward) {
+        GameBus.emit(GameEvent.Notice, 'Mục tiêu nhiệm vụ chưa hoàn thành');
+        return;
+      }
+      let reward = result.reward;
+      if (currentAccessToken()) {
+        await this.persist();
+        try {
+          const receipt = await claimServerQuestReward(this.avatarId, payload.id);
+          this.bag.coins = receipt.coins;
+          reward = { xp: receipt.xp, coins: 0, items: receipt.items };
+        } catch (error) {
+          this.quests = new QuestSystem(beforeClaim);
+          this.emitQuests();
+          GameBus.emit(
+            GameEvent.Notice,
+            error instanceof Error ? error.message : 'Không nhận được thưởng nhiệm vụ',
+          );
+          return;
+        }
+      } else {
+        this.bag.coins += reward.coins;
+      }
+      for (const [id, quantity] of Object.entries(reward.items ?? {})) {
+        this.bag.add(id, quantity);
+      }
+      const foot = this.player.hitPoint();
+      this.grantXp(reward.xp, foot.x, foot.y);
+      GameBus.emit(GameEvent.Notice, `Hoàn thành nhiệm vụ · +${result.reward.coins} tiền đồng`);
+    } else if (payload.action === 'track') {
+      this.trackedQuests = [
+        payload.id,
+        ...this.trackedQuests.filter((id) => id !== payload.id),
+      ].slice(0, 3);
+    }
+    this.emitRpgPanels();
+    this.emitInventory();
+    void this.persist();
+  }
+
+  private async onShopCommand(payload: { action?: string; id?: string }): Promise<void> {
+    if (payload.action !== 'buy' || !payload.id) return;
+    if (this.zone.id !== 'ngoai-mon') {
+      GameBus.emit(GameEvent.Notice, 'Chỉ giao dịch tại hub Ngoại Môn');
+      return;
+    }
+    const offer = SHOP_CATALOG.find(({ id }) => id === payload.id);
+    if (!offer || this.progress.level < (offer.requiredLevel ?? 1)) {
+      GameBus.emit(GameEvent.Notice, 'Vật phẩm chưa được mở bán');
+      return;
+    }
+    if (this.bag.coins < offer.buyPrice) {
+      GameBus.emit(GameEvent.Notice, 'Không đủ tiền đồng');
+      return;
+    }
+    if (!this.bag.canAdd(offer.itemId)) {
+      GameBus.emit(GameEvent.Notice, 'Túi đã đầy');
+      return;
+    }
+    if (currentAccessToken()) {
+      try {
+        const receipt = await buyServerItem(this.avatarId, offer.itemId);
+        this.bag.coins = receipt.coins;
+      } catch (error) {
+        GameBus.emit(
+          GameEvent.Notice,
+          error instanceof Error ? error.message : 'Không thể mua vật phẩm',
+        );
+        return;
+      }
+    } else {
+      this.bag.coins -= offer.buyPrice;
+    }
+    if (!this.bag.add(offer.itemId)) return;
+    this.applyQuestEvent('talk', 'duoc-su');
+    GameBus.emit(GameEvent.Notice, `Đã mua ${offer.name}`);
+    this.emitInventory();
+    this.emitShop();
+    await this.persist();
+  }
+
+  private onFarmSelectSeed(payload: { seedId?: string }): void {
+    if (!payload.seedId || !SEED_CATALOG[payload.seedId]) return;
+    this.selectedFarmSeed = payload.seedId;
+    this.emitFarm();
+  }
+
+  private onFarmCommand(payload: { action?: string; plotId?: string; seedId?: string }): void {
+    if (!payload.plotId || this.zone.id !== 'linh-dien') {
+      GameBus.emit(GameEvent.Notice, 'Hãy đến Linh Điền để canh tác');
+      return;
+    }
+    const now = Date.now();
+    if (payload.action === 'plant' && payload.seedId) {
+      const available = this.bag.count(payload.seedId);
+      const result = plantSeed(this.farm, payload.plotId, payload.seedId, now, available);
+      if (!result.ok || !this.bag.take(payload.seedId)) {
+        GameBus.emit(GameEvent.Notice, 'Thiếu hạt giống hoặc ô đất đang bận');
+        return;
+      }
+      this.farm = result.state;
+      this.selectedFarmSeed = payload.seedId;
+      GameBus.emit(GameEvent.Notice, 'Đã gieo — hãy tưới nước');
+    } else if (payload.action === 'water') {
+      const result = waterPlot(this.farm, payload.plotId, now);
+      if (!result.ok) {
+        GameBus.emit(
+          GameEvent.Notice,
+          result.error === 'already-watered' ? 'Ô này đã tưới' : 'Không thể tưới ô này',
+        );
+        return;
+      }
+      this.farm = result.state;
+      GameBus.emit(GameEvent.Notice, 'Đã tưới — linh dược bắt đầu lớn');
+    } else if (payload.action === 'harvest') {
+      const result = harvestPlot(this.farm, payload.plotId, now);
+      if (!result.ok) {
+        GameBus.emit(
+          GameEvent.Notice,
+          result.error === 'needs-water' ? 'Cần tưới trước khi thu' : 'Linh dược chưa thể thu hoạch',
+        );
+        return;
+      }
+      const [itemId, quantity] = Object.entries(result.inventoryDelta)[0] ?? [];
+      if (!itemId || !this.bag.add(itemId, quantity)) {
+        GameBus.emit(GameEvent.Notice, 'Túi đã đầy');
+        return;
+      }
+      this.farm = result.state;
+      this.applyQuestEvent('collect', itemId, quantity);
+      GameBus.emit(GameEvent.Notice, `Thu hoạch ${itemOf(itemId)?.name ?? itemId} ×${quantity}`);
+    }
+    this.refreshFarmPlots();
+    this.emitInventory();
+    this.emitFarm();
+    void this.persist();
+  }
+
+  private tickFarm(_time: number): void {
+    const next = growFarm(this.farm, Date.now());
+    const statusChanged = next.plots.some(
+      (plot, index) =>
+        plot.status !== this.farm.plots[index]?.status ||
+        plot.watered !== this.farm.plots[index]?.watered,
+    );
+    const stageChanged = this.farmPlots.some((node) => {
+      const plot = next.plots.find((candidate) => candidate.id === node.def.id);
+      if (!plot || plot.status !== 'growing' || !plot.seedId || !plot.watered) return false;
+      const progress = plotGrowth(plot, Date.now());
+      const stage = growthStage(progress, false);
+      const kind = cropKindFromSeed(plot.seedId);
+      if (!kind) return false;
+      return node.crop.visible && node.crop.texture.key !== farmGrowTexture(kind, stage);
+    });
+    this.farm = next;
+    if (statusChanged || stageChanged || this.zone.id === 'linh-dien') {
+      this.refreshFarmPlots();
+    }
+    if (statusChanged || stageChanged) this.emitFarm();
+  }
+
   private emitInventory(): void {
     GameBus.emit(GameEvent.Inventory, this.bag.snapshot());
+  }
+
+  private emitRpgPanels(): void {
+    const skillState = this.skills.snapshot();
+    GameBus.emit(GameEvent.CharacterBuild, {
+      character: skillState.classId,
+      level: this.progress.level,
+      title: this.progress.title,
+      attributePoints: this.attributes.availablePoints,
+      skillPoints: skillState.availablePoints,
+      attributes: { ...this.attributes.values },
+      skills: Object.fromEntries(
+        SKILL_TREES[skillState.classId].map((node) => [node.id, skillState.ranks[node.id] ?? 0]),
+      ),
+      breakthrough: this.breakthroughView(),
+    });
+    this.emitQuests();
+    this.emitShop();
+    this.emitFarm();
+  }
+
+  private breakthroughView() {
+    const check = canBreakThrough(this.progress, this.bag);
+    const recipe = recipeForLevel(this.progress.level);
+    const costs = (recipe?.costs ?? []).map((cost) => ({
+      id: cost.id,
+      name: itemOf(cost.id)?.name ?? cost.id,
+      need: cost.quantity,
+      have: this.bag.count(cost.id),
+      icon: itemOf(cost.id)?.icon,
+    }));
+    if (check.ok) {
+      return {
+        available: true,
+        recipeName: recipe?.name ?? check.title,
+        costs,
+      };
+    }
+    const lockedReason =
+      check.error === 'missing-materials'
+        ? 'Chưa đủ nguyên liệu đột phá'
+        : check.error === 'not-at-peak'
+          ? 'Tu luyện đến đỉnh cảnh giới để mở đột phá'
+          : check.error === 'absolute-cap'
+            ? 'Đã đạt đỉnh Kết Đan'
+            : 'Công pháp đột phá tiếp theo chưa mở';
+    return {
+      available: false,
+      lockedReason,
+      recipeName: recipe?.name,
+      costs,
+    };
+  }
+
+  private emitQuests(): void {
+    const state = refreshQuestAvailability(this.quests.snapshot(), this.progress.level);
+    const views = QUESTS.map((quest) => {
+      const progress = state.quests[quest.id];
+      const completed = quest.objectives.reduce(
+        (sum, objective) => sum + Math.min(objective.required, progress.objectives[objective.id] ?? 0),
+        0,
+      );
+      const required = quest.objectives.reduce((sum, objective) => sum + objective.required, 0);
+      const status =
+        progress.status === 'completed'
+          ? 'ready'
+          : progress.status === 'claimed'
+            ? 'completed'
+            : progress.status;
+      return {
+        id: quest.id,
+        title: quest.name,
+        summary: quest.objectives.map(({ description }) => description).join(' '),
+        status,
+        progress: `${completed}/${required}`,
+        minLevel: quest.level,
+        reward: `${quest.rewards.xp} KN · ${quest.rewards.coins} đồng`,
+      };
+    });
+    GameBus.emit(GameEvent.QuestState, {
+      quests: views,
+      tracked: views.filter(({ id }) => this.trackedQuests.includes(id)),
+    });
+  }
+
+  private emitShop(): void {
+    GameBus.emit(GameEvent.ShopState, {
+      merchant: 'Dược Sư Ngoại Môn',
+      coins: this.bag.coins,
+      offers: SHOP_CATALOG.map((offer) => ({
+        id: offer.id,
+        itemId: offer.itemId,
+        name: offer.name,
+        price: offer.buyPrice,
+        minLevel: offer.requiredLevel ?? 1,
+        available:
+          this.zone.id === 'ngoai-mon' &&
+          this.progress.level >= (offer.requiredLevel ?? 1),
+      })),
+    });
+  }
+
+  private emitFarm(): void {
+    const now = Date.now();
+    this.farm = growFarm(this.farm, now);
+    GameBus.emit(GameEvent.FarmState, {
+      available: this.zone.id === 'linh-dien',
+      selectedSeed: this.selectedFarmSeed,
+      seeds: Object.values(SEED_CATALOG).map((seed) => ({
+        id: seed.id,
+        name: seed.name,
+        quantity: this.bag.count(seed.seedItemId),
+      })),
+      plots: this.farm.plots.map((plot) => ({
+        id: plot.id,
+        status: plot.status,
+        watered: plot.watered,
+        crop: plot.seedId ? SEED_CATALOG[plot.seedId]?.name ?? plot.seedId : '',
+        progress: plotGrowth(plot, now),
+      })),
+    });
+  }
+
+  private applyQuestEvent(type: QuestEvent['type'], target: string, amount = 1): void {
+    const result = this.quests.apply(
+      {
+        id: `${this.avatarId}:${type}:${target}:${Date.now()}:${this.rpgEventSeq++}`,
+        type,
+        target,
+        amount,
+      },
+      this.progress.level,
+    );
+    if (result.ok && result.changedQuestIds.length) {
+      GameBus.emit(GameEvent.Notice, 'Tiến độ nhiệm vụ đã cập nhật');
+      this.emitQuests();
+    }
   }
 
   private emitProgress(): void {
@@ -1464,7 +2807,11 @@ export class WorldScene extends Phaser.Scene {
         label: portal.label,
       })),
       boss: this.zone.boss
-        ? { x: this.zone.boss.x, y: this.zone.boss.y, label: 'Boss' }
+        ? {
+            x: this.zone.boss.x,
+            y: this.zone.boss.y,
+            label: this.zone.id === 'thanh-phong-coc' ? 'Phong Ma' : 'Boss',
+          }
         : this.zone.arena
           ? { x: this.zone.arena.x, y: this.zone.arena.y, label: this.zone.arena.label ?? 'Boss' }
           : null,
@@ -1510,26 +2857,31 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private nearestPrey(from: Vector2Like): { position: Vector2Like; alive: boolean } {
-    let best = { position: this.player.hitPoint(), alive: this.player.alive };
-    let bestD = best.alive ? Phaser.Math.Distance.Between(from.x, from.y, best.position.x, best.position.y) : 1e9;
-    for (const prey of this.net.prey()) {
-      if (!prey.alive) continue;
-      const d = Phaser.Math.Distance.Between(from.x, from.y, prey.position.x, prey.position.y);
+    let best: { position: Vector2Like; alive: boolean } | null = null;
+    let bestD = 1e9;
+    const consider = (position: Vector2Like, alive: boolean) => {
+      if (!alive || this.inShrineSafe(position)) return;
+      const d = Phaser.Math.Distance.Between(from.x, from.y, position.x, position.y);
       if (d < bestD) {
-        best = { position: prey.position, alive: true };
+        best = { position, alive: true };
         bestD = d;
       }
+    };
+    consider(this.player.hitPoint(), this.player.alive);
+    for (const prey of this.net.prey()) {
+      consider(prey.position, prey.alive);
     }
-    return best;
+    return best ?? { position: from, alive: false };
   }
 
   private inflict(
     prey: { id: string; self: boolean },
     damage: number,
     aim: Vector2Like,
+    heavy = false,
   ): void {
     if (prey.self) {
-      this.hurtPlayer(damage, aim);
+      this.hurtPlayer(damage, aim, heavy);
       return;
     }
     peekSession()?.publishWorld({
@@ -1642,7 +2994,10 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     if (event.kind === 'boss-act') {
-      if (!this.hosting) this.boss?.replicateAct(event.act, { x: event.ax, y: event.ay });
+      if (!this.hosting) {
+        this.telegraphBossAct(event.act, { x: event.ax, y: event.ay });
+        this.boss?.replicateAct(event.act, { x: event.ax, y: event.ay });
+      }
       return;
     }
     if (event.kind === 'hurt' && event.playerId === this.selfId()) {
@@ -1752,10 +3107,34 @@ export class WorldScene extends Phaser.Scene {
     };
 
     const clear = (x: number, y: number) => {
-      const { shrine, arena, portals } = this.zone;
-      if (Phaser.Math.Distance.Between(x, y, shrine.x, shrine.y) < 120) return false;
+      const { shrine, arena, portals, farmBed } = this.zone;
+      if (Phaser.Math.Distance.Between(x, y, shrine.x, shrine.y) < SHRINE_SAFE_RADIUS) return false;
       if (arena && Phaser.Math.Distance.Between(x, y, arena.x, arena.y) < arena.radius + 40) return false;
-      return portals.every((p) => Phaser.Math.Distance.Between(x, y, p.x, p.y) > 140);
+      if (!portals.every((p) => Phaser.Math.Distance.Between(x, y, p.x, p.y) > 140)) return false;
+      if (farmBed) {
+        const pad = 40;
+        if (
+          x >= farmBed.x - pad &&
+          x <= farmBed.x + farmBed.width + pad &&
+          y >= farmBed.y - pad &&
+          y <= farmBed.y + farmBed.height + pad
+        ) {
+          return false;
+        }
+      }
+      const farmPath = this.zone.farmPath;
+      if (farmPath) {
+        const pad = 36;
+        if (
+          x >= farmPath.x - pad &&
+          x <= farmPath.x + farmPath.width + pad &&
+          y >= farmPath.y - 16 &&
+          y <= farmPath.y + farmPath.height + 16
+        ) {
+          return false;
+        }
+      }
+      return true;
     };
 
     const count = Math.round((this.zone.width * this.zone.height) / 26000);
@@ -1801,24 +3180,40 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private onSkill(payload: SkillPayload): void {
+    // Kit damage already scaled from tree ranks in syncCombatKit.
     switch (payload.name) {
       case BANG_PHACH_TRAM.name:
+      case 'Hàn Băng Chưởng':
+      case 'Thiên Lý Băng Phong':
         this.castQiSlash(payload);
+        this.juiceHitStop(50);
         return;
       case BANG_TINH_TRAN.name:
+      case 'Băng Liên':
         this.castIceArray(payload);
+        this.juiceHitStop(60);
         return;
       case HUYET_DIEM_TRAM.name:
+      case 'Huyết Trảm':
+      case 'Ma Thần Giáng Thế':
         this.castMagmaSlash(payload);
+        this.juiceHitStop(50);
         return;
       case TAM_THU_HONG.name:
+      case 'Huyết Bạo':
         this.castRoar(payload);
+        this.juiceHitStop(60);
         return;
       case TINH_MANG_TRAM.name:
+      case 'Âm Nhận':
+      case 'Vạn Âm Triều Tông':
         this.castStarSlash(payload);
+        this.juiceHitStop(50);
         return;
       case TINH_KHONG_TRAN.name:
+      case 'Thất Huyền Khúc':
         this.castStarArray(payload);
+        this.juiceHitStop(60);
         return;
       default:
         this.spawnQiBurst(payload);
@@ -1826,11 +3221,20 @@ export class WorldScene extends Phaser.Scene {
           damage: payload.damage,
           tint: 0x6fd8ff,
           sweep: 150,
-          radius: HIT_RADIUS,
+          radius: HIT_RADIUS * (payload.name.includes('Vạn') || payload.name.includes('Phá') ? 1.35 : 1),
           frost: 0,
           knockback: 0,
         });
+        this.juiceHitStop(45);
     }
+  }
+
+  private juiceHitStop(ms: number): void {
+    if (!this.player?.alive) return;
+    this.time.timeScale = 0.35;
+    this.time.delayedCall(ms, () => {
+      this.time.timeScale = 1;
+    });
   }
 
   private castQiSlash(payload: SkillPayload): void {
@@ -2296,7 +3700,14 @@ export class WorldScene extends Phaser.Scene {
     GameBus.off(GameEvent.NetSession, this.onNetSession, this);
     GameBus.off(GameEvent.AvatarChosen, this.onAvatarChosen, this);
     GameBus.off(GameEvent.InventoryCommand, this.onHudInventory, this);
+    GameBus.off(GameEvent.CharacterBuildCommand, this.onCharacterBuild, this);
+    GameBus.off(GameEvent.QuestCommand, this.onQuestCommand, this);
+    GameBus.off(GameEvent.ShopCommand, this.onShopCommand, this);
+    GameBus.off(GameEvent.FarmCommand, this.onFarmCommand, this);
+    GameBus.off(GameEvent.FarmSelectSeed, this.onFarmSelectSeed, this);
+    GameBus.off(GameEvent.StorageCommand, this.onStorageCommand, this);
     GameBus.off(GameEvent.WarpCommand, this.onWarpCommand, this);
+    GameBus.off(GameEvent.AlchemyCommand, this.onAlchemyCommand, this);
     GameBus.off(GameEvent.NetWorld, this.onWorldEvent, this);
     GameBus.off(GameEvent.NetHost, this.onHostChanged, this);
     if (this.flushProgress) window.removeEventListener('pagehide', this.flushProgress);

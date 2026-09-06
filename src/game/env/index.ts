@@ -9,6 +9,8 @@ import {
 import { MANA_SEED_TEXTURES, manaSeedKit, manaSeedLoaded, paintManaSeedEnv } from './manaSeedArt';
 import { paintMonsterFallbacks } from './monsterArt';
 import { paintItemDrops, paintLootChest } from './itemArt';
+import { paintFarmArt } from './farmArt';
+import { paintChestArt } from './chestArt';
 import type { EnvKit } from './kit';
 import type { GroundKind } from '../zones/types';
 
@@ -17,12 +19,15 @@ export { MANA_SEED_SOURCE, MANA_SEED_SOURCE_URL } from './manaSeedArt';
 export { MONSTER_TEXTURES, monsterArt } from './monsterArt';
 export { CHEST_SOURCE, CHEST_SOURCE_URL, ITEM_ICON_SOURCES, dropTexture } from './itemArt';
 export { WORLD_RESOURCE_TEXTURES, WorldResourceTexture } from './worldResourceArt';
+export { paintChestArt } from './chestArt';
 export {
   FARM_TEXTURES,
   FarmTexture,
   cropKindFromSeed,
   farmGrowTexture,
   growthStage,
+  paintFarmArt,
+  paintFarmFallbacks,
 } from './farmArt';
 export type { FarmCropKind } from './farmArt';
 export type { DecalArt, EnvKit, PropArt, PropBox } from './kit';
@@ -117,6 +122,10 @@ export function paintEnvironment(scene: Phaser.Scene): void {
   if (!paintLootChest(scene)) paintPlaceholderLoot(scene);
   paintItemDrops(scene);
   paintPlaceholderEnv(scene);
+  // Magnify staged farm cuts (or bake stand-ins) — 16px tiles blur without this.
+  paintFarmArt(scene);
+  // Pixel chests always — CDN paintings clash with the map scale/style.
+  paintChestArt(scene);
 
   const scale = scaleOf(envArt());
   if (scale !== null && manaSeedLoaded(scene)) {
