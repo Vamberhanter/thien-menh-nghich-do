@@ -103,6 +103,7 @@ const SHEETS = [
     rows: FOUR,
     cols: 7,
     labelWidth: 92,
+    split: 'cells',
     texture: 'kiemtien-skill1.png',
   },
   // The ray. Its two vertical rows are eight poses on a clean grid — the beam
@@ -114,9 +115,11 @@ const SHEETS = [
     file: 'kiemtien-skill2.png',
     clip: (dir) => `skill2_${dir}`,
     rows: FOUR,
-    cols: [8, 8, 5, 5],
+    cols: [8, 8, 5, 4],
     labelWidth: 92,
-    split: ['grid', 'grid', 'chars', 'chars'],
+    // Vertical rows on the sheet's own 192px grid; sideways rows on the
+    // character, because there the ray runs along the cut.
+    split: ['cells', 'cells', 'chars', 'chars'],
     texture: 'kiemtien-skill2.png',
   },
   // One drawn pose per heading rather than a cycle: these read as the held
@@ -266,24 +269,36 @@ function runsOf(img, band, labelWidth) {
  * her, and the bloom where it lands — is split on gaps, which work again out
  * there because there is no longer a character in the way.
  */
-function characterRuns(img, band, cols) {
+function characterRuns(img, band, cols, labelWidth) {
+  // Tuned against rows whose true pose count is known by eye: skill1 is seven
+  // per row and skill2 eight in both its vertical rows. A downward beam is
+  // bright white and washes over her, so the threshold has to be generous
+  // enough to still find the head underneath it — at the strict values that
+  // suited the sideways rows it lost one pose in every down row.
+  const DARK_SUM = 200;
+  const MIN_COLUMN = 3;
+  const MIN_CLUSTER = 10;
+  const JOIN = 40;
+  /** A head's strip opens a little before her, so her leading arm comes too. */
+  const LEAD = 24;
+
   const dark = new Int32Array(img.width);
-  for (let x = 0; x < img.width; x++) {
+  for (let x = labelWidth; x < img.width; x++) {
     let n = 0;
     for (let y = band.top; y <= band.bottom; y++) {
-      if (alphaAt(img, x, y) < 230) continue;
+      if (alphaAt(img, x, y) < 200) continue;
       const i = (y * img.width + x) * 4;
-      if (img.data[i] + img.data[i + 1] + img.data[i + 2] < 150) n++;
+      if (img.data[i] + img.data[i + 1] + img.data[i + 2] < DARK_SUM) n++;
     }
     dark[x] = n;
   }
   const clusters = [];
   let start = -1;
   for (let x = 0; x <= img.width; x++) {
-    const on = x < img.width && dark[x] >= 6;
+    const on = x < img.width && dark[x] >= MIN_COLUMN;
     if (on && start < 0) start = x;
     if (!on && start >= 0) {
-      if (x - start >= 12) clusters.push({ x0: start, x1: x - 1 });
+      if (x - start >= MIN_CLUSTER) clusters.push({ x0: start, x1: x - 1 });
       start = -1;
     }
   }
@@ -291,27 +306,32 @@ function characterRuns(img, band, cols) {
   const heads = [];
   for (const c of clusters) {
     const last = heads[heads.length - 1];
-    if (last && c.x0 - last.x1 < 30) last.x1 = c.x1;
+    if (last && c.x0 - last.x1 < JOIN) last.x1 = c.x1;
     else heads.push({ ...c });
   }
   if (!heads.length) return [];
 
-  // Give each head the strip that starts a little before her and runs to just
-  // before the next one, so her ray stays with her.
-  const LEAD = 24;
   const runs = [];
   for (let i = 0; i < heads.length; i++) {
-    const x0 = i === 0 ? 0 : Math.max(0, heads[i].x0 - LEAD);
+    const x0 = i === 0 ? labelWidth : Math.max(labelWidth, heads[i].x0 - LEAD);
     const x1 = i + 1 < heads.length ? Math.max(x0, heads[i + 1].x0 - LEAD - 1) : img.width - 1;
     runs.push({ x0, x1 });
   }
-  // Then the tail: everything past the last character, split on its own gaps.
-  const tailFrom = runs[runs.length - 1].x0;
-  const tail = runsOf(img, band, 0).filter((r) => r.x0 > tailFrom);
-  if (tail.length) {
-    runs[runs.length - 1].x1 = tail[0].x0 - 1;
-    runs.push(...tail);
-  }
+
+  /*
+   * Stop the last frame where the effect leaves her.
+   *
+   * Past the last character these rows carry the ray still travelling and the
+   * bloom where it lands. Those are not poses: pulled into the clip they play
+   * as frames she is absent from — she blinks out and a flower appears at her
+   * feet, because a frame with nobody in it puts its pivot under the bloom.
+   * The bloom belongs in the world, out at the end of the ray, and
+   * `castSwordRay` already puts one there.
+   */
+  const last = runs[runs.length - 1];
+  const tail = runsOf(img, band, labelWidth).filter((r) => r.x0 > last.x0);
+  if (tail.length) last.x1 = tail[0].x0 - 1;
+
   if (runs.length !== cols) {
     console.log(
       `    character split found ${runs.length} poses, expected ${cols}` +
@@ -319,6 +339,27 @@ function characterRuns(img, band, cols) {
     );
   }
   return runs;
+}
+
+/**
+ * Even division of the whole sheet width, ignoring where paint happens to fall.
+ *
+ * The difference from `gridRuns` matters more than it sounds. That one divides
+ * the *painted* span, so a row whose effect reaches further than its neighbours
+ * gets wider cells and every boundary after the first drifts. On skill2's
+ * downward row the drift was about 14px per cell, which is nothing until a
+ * character standing 9px from a boundary is sliced down the middle — five of
+ * its eight frames came out with no one in them.
+ *
+ * This divides the sheet the way the artist laid it out: 1536 across 8 is 192,
+ * whatever the beams do. Checked by hand against both vertical rows — every
+ * character sits inside its own cell.
+ */
+function cellRuns(img, cols) {
+  return Array.from({ length: cols }, (_, i) => ({
+    x0: Math.round((i * img.width) / cols),
+    x1: Math.round(((i + 1) * img.width) / cols) - 1,
+  }));
 }
 
 /** Even division of a band's painted span — the fallback when effects fuse. */
@@ -542,9 +583,11 @@ function readSheet(sheet) {
     let runs =
       mode === 'grid'
         ? gridRuns(img, band, sheet.labelWidth, cols)
-        : mode === 'chars'
-          ? characterRuns(img, band, cols)
-          : runsOf(img, band, sheet.labelWidth);
+        : mode === 'cells'
+          ? cellRuns(img, cols)
+          : mode === 'chars'
+            ? characterRuns(img, band, cols, sheet.labelWidth)
+            : runsOf(img, band, sheet.labelWidth);
     if (runs.length !== cols) {
       const found = runs.length;
       runs = gridRuns(img, band, sheet.labelWidth, cols);

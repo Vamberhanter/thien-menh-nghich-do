@@ -126,7 +126,7 @@ const CLIPS: readonly ClipSpec[] = [
   { clip: 'skill2_up', frames: 8, frameRate: 14, repeat: 0 },
   { clip: 'skill2_down', frames: 8, frameRate: 14, repeat: 0 },
   { clip: 'skill2_left', frames: 5, frameRate: 9, repeat: 0 },
-  { clip: 'skill2_right', frames: 5, frameRate: 9, repeat: 0 },
+  { clip: 'skill2_right', frames: 4, frameRate: 8, repeat: 0 },
   // 8fps rather than 1: these are single frames, and the rate is what decides
   // how long the clip claims to run. At 1fps each claimed a full second, which
   // `castHoldUntil` then added its recovery on top of — nearly two seconds
@@ -280,7 +280,7 @@ const IMPACT_FRAME: Record<string, number> = {
   skill2_up: 6,
   skill2_down: 6,
   skill2_left: 4,
-  skill2_right: 4,
+  skill2_right: 3,
   skill3: 1,
   skill4: 1,
 };
