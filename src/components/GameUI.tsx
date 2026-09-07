@@ -14,11 +14,10 @@ import type {
 import type { RosterPayload } from '../net/types';
 import { DEFAULT_NHU_YEN_STATS } from '../game/types';
 import type { CharacterState } from '../game/types';
-import { HU_VO_KIEM_KHI } from '../game/systems/CombatSystem';
-import { LAM_UYEN_PROFILE } from '../game/entities/playerHandle';
 import { NHU_YEN_PROFILE } from '../game/entities/NhuYen';
 import { HUYET_LANG_PROFILE } from '../game/entities/HuyetLang';
 import { MIKU_PROFILE } from '../game/entities/Miku';
+import { WUKONG_PROFILE } from '../game/entities/Wukong';
 import { CHARACTER_NAME } from '../net/types';
 
 const STATE_LABEL: Record<CharacterState, string> = {
@@ -34,20 +33,22 @@ const STATE_LABEL: Record<CharacterState, string> = {
 
 /** Keys the skill bar labels, in the same slot order each character exposes. */
 const SKILL_KEYS: Record<string, readonly string[]> = {
-  [LAM_UYEN_PROFILE.id]: ['K'],
   [NHU_YEN_PROFILE.id]: ['K', 'L', 'Space'],
   [HUYET_LANG_PROFILE.id]: ['K', 'L', 'Space'],
   [MIKU_PROFILE.id]: ['K', 'L', 'Space'],
+  // five, not three — he is the only kit carrying a third and fourth technique
+  [WUKONG_PROFILE.id]: ['K', 'L', 'U', 'O', 'Space'],
 };
 
 const HINTS: Record<string, string> = {
-  [LAM_UYEN_PROFILE.id]: `WASD di chuyển · J kiếm chiêu · K ${HU_VO_KIEM_KHI.name} · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch`,
   [NHU_YEN_PROFILE.id]:
     'WASD di chuyển · Shift chạy · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
   [HUYET_LANG_PROFILE.id]:
     'WASD di chuyển · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
   [MIKU_PROFILE.id]:
     'WASD di chuyển · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
+  [WUKONG_PROFILE.id]:
+    'WASD di chuyển · Shift chạy · J liên chiêu · K / L / U / O / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
 };
 
 const SEGMENTS = 12;

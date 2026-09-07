@@ -14,7 +14,7 @@
 //                 r1 c2-c3 ice eruption FX only
 //   hurt&death    r0 hurt (3), r1 knocked down (5), r2 lying + dissolve (6)
 //
-// Two things differ from the Lâm Uyên builder:
+// Two things worth knowing about this builder:
 //
 //  * Only the *unique* frame sets are baked. Facing left reuses the right-hand
 //    art through `flipX` at runtime (see src/game/animations/nhuYenAnimations.ts),
@@ -30,7 +30,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Surface } from './pixel.mjs';
-import { encodePNG } from './png.mjs';
+import { encodeWebP } from './image-io.mjs';
 import { packFrames } from './atlas-pack.mjs';
 import { SHEET_DIR, SHEETS, analyseSheet, cutFrame, frameExtent } from './extract-nhuyen.mjs';
 
@@ -40,9 +40,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  * Output lives in its own directory, NOT next to the sheets.
  *
  * The source sheets are already named `nhuyen-idle.png`, `nhuyen-skill.png`, …
- * so writing per-action sheets beside them (the way the Lâm Uyên builder does,
- * where the single source is `lamuyen.png`) silently overwrites the hand-made
- * art. `assertNotSource` below is the belt to this braces.
+ * so writing per-action sheets beside them would silently overwrite the
+ * hand-made art. `assertNotSource` below is the belt to this braces.
  */
 const OUT_DIR = join(ROOT, 'public', 'assets', 'characters', 'nhuyen', 'atlas');
 
@@ -114,13 +113,13 @@ const CLIPS = [
 
 /** One output PNG per group; every clip inside a group shares its frame box. */
 const FILES = [
-  { file: 'nhuyen-idle.png', match: /^idle_/ },
-  { file: 'nhuyen-walk.png', match: /^(walk|run)_/ },
-  { file: 'nhuyen-attack.png', match: /^atk\d_/ },
-  { file: 'nhuyen-skill.png', match: /^cast_/ },
-  { file: 'nhuyen-hurt.png', match: /^(hurt|death)$/ },
-  { file: 'nhuyen-fx.png', match: /^fx_(crescent|shards)$/ },
-  { file: 'nhuyen-fx-ice.png', match: /^fx_eruption$/ },
+  { file: 'nhuyen-idle.webp', match: /^idle_/ },
+  { file: 'nhuyen-walk.webp', match: /^(walk|run)_/ },
+  { file: 'nhuyen-attack.webp', match: /^atk\d_/ },
+  { file: 'nhuyen-skill.webp', match: /^cast_/ },
+  { file: 'nhuyen-hurt.webp', match: /^(hurt|death)$/ },
+  { file: 'nhuyen-fx.webp', match: /^fx_(crescent|shards)$/ },
+  { file: 'nhuyen-fx-ice.webp', match: /^fx_eruption$/ },
 ];
 
 /* ------------------------------------------------------------------- build */
@@ -183,7 +182,7 @@ for (const spec of FILES) {
 
   const { surface, frames } = packFrames(entries);
 
-  writeFileSync(assertNotSource(join(OUT_DIR, spec.file)), encodePNG(surface));
+  writeFileSync(assertNotSource(join(OUT_DIR, spec.file)), await encodeWebP(surface));
   textures.push({
     image: spec.file,
     format: 'RGBA8888',

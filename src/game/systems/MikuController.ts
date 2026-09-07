@@ -62,14 +62,20 @@ export class MikuController {
       return;
     }
 
+    // Actions are checked before movement so a press wins the frame. That is
+    // also why every one of them is handed the heading held right now: `move`
+    // has not run yet this frame, so the facing on the sprite is one frame old,
+    // and pressing a direction and a skill together used to fire the skill the
+    // way the character was already looking.
+    const steer = this.readSteer();
     if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
-      this.player.dash(this.readSteer());
+      this.player.dash(steer);
     } else if (anyJustDown(this.keys.starArray) || consumePad('skill1')) {
-      this.player.castStarArray();
+      this.player.castStarArray(steer);
     } else if (anyJustDown(this.keys.starSlash) || consumePad('skill0')) {
-      this.player.castStarSlash();
+      this.player.castStarSlash(steer);
     } else if (anyJustDown(this.keys.attack) || consumePad('attack')) {
-      this.player.attack();
+      this.player.attack(steer);
     }
 
     if (this.player.isBusy) {

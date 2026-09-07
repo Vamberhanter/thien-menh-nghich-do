@@ -9,6 +9,15 @@ export const NGOAI_MON: ZoneDef = {
   width: W,
   height: H,
   ground: 'grass',
+  /*
+   * Open ground under the sky, but not full white, and the reason is the whole
+   * bargain of lighting: a light can only be *seen* against something less
+   * than fully lit. At 0xffffff every lit surface is already at its maximum,
+   * so a flash has nowhere to go and clamps away to nothing — measured, not
+   * assumed. 0xd4d4d4 costs about a sixth of the base brightness and buys the
+   * headroom that makes a technique light the grass it goes off on.
+   */
+  ambient: 0xd4d4d4,
   shrine: { x: W / 2, y: H / 2 + 40 },
   trees: [
     [630, 540], [780, 450], [960, 630], [1350, 480], [1620, 600],

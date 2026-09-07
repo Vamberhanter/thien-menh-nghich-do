@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { flatY } from './groundPlane';
 import { HUYET_LANG_FX, HUYET_LANG_TEXTURE } from '../animations/huyetLangAnimations';
 import { aimAngle } from '../types';
 import type { Vector2Like } from '../types';
@@ -133,13 +134,13 @@ export class HuyetLangEffects {
       .sprite(x, y, HUYET_LANG_TEXTURE, HUYET_LANG_FX.pillar)
       .setDepth(y + 251)
       // flattened into a shockwave; the base pivot keeps it on the ground
-      .setScale(0.35, 0.16)
+      .setScale(0.35, flatY(0.35))
       .setAlpha(0.85)
       .setTint(0xffc070);
     this.scene.tweens.add({
       targets: ring,
       scaleX: 1.5,
-      scaleY: 0.5,
+      scaleY: flatY(1.5),
       alpha: 0,
       duration: 420,
       onComplete: () => ring.destroy(),

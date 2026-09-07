@@ -12,7 +12,7 @@
 //   * do the feet agree — the ground line should sit under them in every frame.
 import { readFileSync, openSync, writeSync, closeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { decodePNG } from './png-decode.mjs';
+import { decodeImage } from './image-io.mjs';
 import { Surface } from './pixel.mjs';
 import { encodePNG } from './png.mjs';
 
@@ -28,7 +28,7 @@ const dir = dirname(atlasPath);
 /** Every frame, keyed by clip, in frame order. */
 const clips = new Map();
 for (const texture of atlas.textures) {
-  const image = decodePNG(join(dir, texture.image));
+  const image = await decodeImage(join(dir, texture.image));
   for (const frame of texture.frames) {
     const match = /^(.*)_(\d+)$/.exec(frame.filename);
     const clip = match ? match[1] : frame.filename;

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { flatY } from './groundPlane';
 import { MIKU_FX, MIKU_TEXTURE } from '../animations/mikuAnimations';
 import { aimAngle } from '../types';
 import type { Vector2Like } from '../types';
@@ -114,13 +115,13 @@ export class MikuEffects {
     const ring = this.scene.add
       .sprite(x, y, MIKU_TEXTURE, MIKU_FX.star)
       .setDepth(y + 251)
-      .setScale(0.35, 0.16)
+      .setScale(0.35, flatY(0.35))
       .setAlpha(0.85)
       .setTint(0xc9a0ff);
     this.scene.tweens.add({
       targets: ring,
       scaleX: 1.5,
-      scaleY: 0.5,
+      scaleY: flatY(1.5),
       alpha: 0,
       duration: 420,
       onComplete: () => ring.destroy(),

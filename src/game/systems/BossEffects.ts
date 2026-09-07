@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { flatY } from './groundPlane';
 import { BOSS1_FX, BOSS1_TEXTURE } from '../animations/bossAnimations';
 import { aimAngle } from '../types';
 import type { Vector2Like } from '../types';
@@ -97,13 +98,13 @@ export class BossEffects {
       .setAlpha(0.9);
     // the drawn ring is about 200px across at scale 1
     const scale = (radius * 2) / 200;
-    sprite.setScale(scale * 0.35, scale * 0.28);
+    sprite.setScale(scale * 0.35, flatY(scale * 0.35));
     sprite.play(BOSS1_FX.ringAnim);
 
     this.scene.tweens.add({
       targets: sprite,
       scaleX: scale,
-      scaleY: scale * 0.8,
+      scaleY: flatY(scale),
       alpha: 0,
       duration: 620,
       ease: 'Quad.easeOut',

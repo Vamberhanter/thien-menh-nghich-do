@@ -10,7 +10,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { decodePNG } from './png-decode.mjs';
+import { decodeImage } from './image-io.mjs';
 
 const [atlasPath, referencePath] = process.argv.slice(2);
 if (!atlasPath) {
@@ -21,7 +21,7 @@ if (!atlasPath) {
 const dir = dirname(atlasPath);
 
 /** Loads an atlas from disk, or out of git HEAD when `fromGit` is set. */
-function loadAtlas(path, fromGit) {
+async function loadAtlas(path, fromGit) {
   const read = (file) =>
     fromGit
       ? execSync(`git show HEAD:"${file.replace(/\\/g, '/')}"`, {
@@ -35,13 +35,13 @@ function loadAtlas(path, fromGit) {
   for (const texture of atlas.textures) {
     const file = join(dirname(path), texture.image);
     if (fromGit) {
-      // decodePNG reads from disk, so stage the blob in .tmp first
+      // decodeImage reads from disk, so stage the blob in .tmp first
       const staged = join('.tmp', 'atlas-ref', texture.image);
       mkdirSync(dirname(staged), { recursive: true });
       writeFileSync(staged, read(file));
-      images.set(texture.image, decodePNG(staged));
+      images.set(texture.image, await decodeImage(staged));
     } else {
-      images.set(texture.image, decodePNG(file));
+      images.set(texture.image, await decodeImage(file));
     }
   }
   return { atlas, images };
@@ -73,10 +73,10 @@ function rebuild(frame, image) {
   return { w, h, data: out };
 }
 
-const current = loadAtlas(atlasPath, false);
+const current = await loadAtlas(atlasPath, false);
 const reference = referencePath
-  ? loadAtlas(referencePath, false)
-  : loadAtlas(atlasPath, true);
+  ? await loadAtlas(referencePath, false)
+  : await loadAtlas(atlasPath, true);
 
 const byName = new Map();
 for (const texture of reference.atlas.textures) {
@@ -121,10 +121,19 @@ for (const texture of current.atlas.textures) {
       worstFrame = frame.filename;
       continue;
     }
+    // Per pixel, not per byte: a WebP-encoded texture is free to repaint the
+    // RGB of a fully transparent pixel (libwebp does, to compress better) since
+    // nothing ever draws it. Skip the RGB compare when both sides agree the
+    // pixel is invisible, or invisible pixels the encoder is allowed to alter
+    // would read as a broken frame.
     let delta = 0;
-    for (let i = 0; i < mine.data.length; i++) {
-      const d = Math.abs(mine.data[i] - theirs.data[i]);
-      if (d > delta) delta = d;
+    for (let i = 0; i < mine.data.length; i += 4) {
+      const bothInvisible = mine.data[i + 3] === 0 && theirs.data[i + 3] === 0;
+      const start = bothInvisible ? 3 : 0;
+      for (let c = start; c < 4; c++) {
+        const d = Math.abs(mine.data[i + c] - theirs.data[i + c]);
+        if (d > delta) delta = d;
+      }
     }
     if (delta > worst) {
       worst = delta;

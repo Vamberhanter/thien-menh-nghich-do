@@ -1,6 +1,12 @@
 import Phaser from 'phaser';
+import { RENDER_SCALE } from '../config/gameConfig';
 import { Boss1, BOSS1_ACTIONS } from '../entities/Boss1';
 import type { BossStrike } from '../entities/Boss1';
+import {
+  BOSS1_ATLAS_PATH,
+  BOSS1_ATLAS_URL,
+  BOSS1_TEXTURE,
+} from '../animations/bossAnimations';
 import { EnemyAI } from '../systems/EnemyAI';
 import type { AiProfile } from '../systems/EnemyAI';
 import { BossEffects } from '../systems/BossEffects';
@@ -16,23 +22,28 @@ import type {
   WarpCommandPayload,
 } from '../events';
 import { WorldTexture } from './BootScene';
-import { LIN_YUAN_TEXTURE, QI_SLASH_FRAME } from '../animations/linYuanAnimations';
 import { NhuYenEffects } from '../systems/NhuYenEffects';
 import { HuyetLangEffects } from '../systems/HuyetLangEffects';
 import { MikuEffects } from '../systems/MikuEffects';
+import { WukongEffects } from '../systems/WukongEffects';
+import { WorldLights } from '../systems/WorldLights';
+import { WukongClip, castScaleOf } from '../animations/wukongAnimations';
 import { FrostMark } from '../systems/FrostMark';
 import {
   BANG_PHACH_TRAM,
   BANG_TINH_TRAN,
+  CUU_U_NO_DIEM,
+  HANG_MA_CHAN_LOI,
   HUYET_DIEM_TRAM,
+  MA_NGUYET_TRAM,
+  PHAN_THIEN_MA_DIEM,
   TAM_THU_HONG,
   TINH_MANG_TRAM,
   TINH_KHONG_TRAN,
 } from '../systems/CombatSystem';
-import { PLAYER_FACTORIES } from '../entities/playerHandle';
+import { PLAYER_FACTORIES, PLAYER_TEXTURES } from '../entities/playerHandle';
 import type { PlayerHandle, PlayerId } from '../entities/playerHandle';
-import { DIRECTION_VECTORS } from '../types';
-import type { Direction, Vector2Like } from '../types';
+import type { Vector2Like } from '../types';
 import { Multiplayer } from '../systems/Multiplayer';
 import { isInputGated, loadSavedJoin, peekSession } from '../../net/bind';
 import { newPlayerId } from '../../net/supabase';
@@ -75,6 +86,73 @@ const MAGMA_ARRAY_SPREAD = ICE_ARRAY_SPREAD;
 const MAGMA_ARRAY_POINTS = ICE_ARRAY_POINTS;
 const MAGMA_ARRAY_STAGGER = ICE_ARRAY_STAGGER;
 const MAGMA_ARRAY_REACH = ICE_ARRAY_REACH;
+/*
+ * Tôn Ngộ Không's three techniques.
+ *
+ * These are the only skill numbers in the file taken off the *art* rather than
+ * off the other two kits: none of his techniques travels, so each one covers
+ * exactly the ground its last drawn frame covers, and the numbers are that
+ * frame measured. At his baked scale the dragon arcs about 300px out in front
+ * of him, the pillar blooms about 200px across, and the lance runs the better
+ * part of 420px.
+ *
+ * They still have to sit in the same world as Băng Tinh Trận and Tam Thủ Hống,
+ * which is what the multipliers in CombatSystem are for: the dragon reaches
+ * further than anything either of them has, and is paid for by hitting softer.
+ */
+const QI_DRAGON_REACH = 300;
+const QI_DRAGON_RADIUS = 84;
+/*
+ * Cửu U Nộ Diễm runs the flame out along the ground he is facing rather than
+ * blooming around him: a lane, not a pool. Narrower than the dragon's sweep and
+ * shorter than the lance, so it sits between them — the answer to a line of
+ * enemies at close range.
+ */
+const QI_NOVA_RANGE = 320;
+const QI_NOVA_RADIUS = 72;
+/** Scorch marks that carry the eruption down the lane — count and spacing. */
+/**
+ * The run of lotuses that carries Cửu U Nộ Diễm out to its eruption: how many,
+ * and how far apart in time. Seven rather than the five the scorch marks used,
+ * because a flower reads as a step on a path and wants to be a path, and 34ms
+ * apart puts the last of them opening just as the eruption takes over.
+ */
+const NOVA_TRAIL_STEPS = 7;
+const NOVA_TRAIL_GAP = 34;
+/*
+ * Phần Thiên Ma Diễm is the wider of his two ground techniques, and the slower:
+ * seven drawn stages of flame climbing into a demon's face, against Cửu U Nộ
+ * Diễm's four-beat eruption. It reaches further and hits harder per cast, and
+ * pays for it in cooldown and spirit.
+ */
+const QI_WRATH_RADIUS = 260;
+/**
+ * Measured off the art rather than picked, and it moved when the art did.
+ *
+ * The cast art itself only covers the first 260px — the orbs circle him and the
+ * beam head sits on the end of his staff. What carries the technique the rest of
+ * the way is `fx_lance`, the travelling bolt off the first lance sheet, spawned
+ * at that beam head (148px out) and reaching 447 more. Its impact star therefore
+ * lands about 595px from his feet, and 560 keeps the lane inside the bright part
+ * of it rather than out on the fringe.
+ *
+ * The number has moved three times and always for the same reason: it is read
+ * off whatever the art actually draws, never picked.
+ */
+const QI_BEAM_RANGE = 560;
+/**
+ * The bolt is blown up by the same factor as the cast that throws it. Read off
+ * the clip rather than written down, so the two cannot drift apart.
+ */
+const LANCE_FX_SCALE = castScaleOf(WukongClip.lance('right'));
+const QI_BEAM_RADIUS = 54;
+/**
+ * Depth added to a flying character, chosen to clear the map rather than to
+ * look right: the tallest zone is 1800px, so a foot Y can never reach 4000 and
+ * a flyer is always above everything standing on the ground. The HUD sits at
+ * 10000 and stays above him.
+ */
+const FLY_DEPTH_BAND = 4000;
 const FX_LIFT = 34;
 const STONE_HP = 160;
 const BOLT_LIFT = 52;
@@ -83,7 +161,7 @@ const SHRINE_RADIUS = 80;
 const PORTAL_RADIUS = 48;
 const LOOT_RADIUS = 42;
 const MOB_RESPAWN_MS = 12000;
-const ROSTER: readonly PlayerId[] = ['nhuyen', 'lamuyen', 'huyetlang', 'miku'];
+const ROSTER: readonly PlayerId[] = ['nhuyen', 'huyetlang', 'miku', 'wukong'];
 
 interface TrainingStone {
   sprite: Phaser.Physics.Arcade.Sprite;
@@ -131,7 +209,9 @@ export class WorldScene extends Phaser.Scene {
   private fx!: NhuYenEffects;
   private magmaFx!: HuyetLangEffects;
   private starFx!: MikuEffects;
+  private qiFx!: WukongEffects;
   private bossFx!: BossEffects;
+  private lighting!: WorldLights;
   private props!: Phaser.Physics.Arcade.StaticGroup;
   private stones: TrainingStone[] = [];
   private targets: Damageable[] = [];
@@ -163,6 +243,7 @@ export class WorldScene extends Phaser.Scene {
     boss?: Phaser.Input.Keyboard.Key;
   };
   private zone: ZoneDef = zoneOf(DEFAULT_ZONE);
+  private bossAtlasLoading = false;
   private progress = new Progression();
   private bag = new Inventory();
   private net!: Multiplayer;
@@ -189,7 +270,9 @@ export class WorldScene extends Phaser.Scene {
     this.fx = new NhuYenEffects(this);
     this.magmaFx = new HuyetLangEffects(this);
     this.starFx = new MikuEffects(this);
+    this.qiFx = new WukongEffects(this);
     this.bossFx = new BossEffects(this);
+    this.lighting = new WorldLights(this);
     this.avatarId = peekSession()?.profile.id ?? newPlayerId();
 
     const joined = peekSession()?.profile.character ?? loadSavedJoin().character;
@@ -232,7 +315,7 @@ export class WorldScene extends Phaser.Scene {
   update(time: number, delta: number): void {
     this.player.update(time, delta);
     this.net.tick(time, delta, this.player);
-    this.player.sprite.setDepth(this.player.footY());
+    this.tickAltitude();
     this.emitCooldowns();
     if (!this.player.alive && this.deathAt === null) this.beginRespawn();
     this.tickDeath(time);
@@ -269,6 +352,15 @@ export class WorldScene extends Phaser.Scene {
           : WorldTexture.Grass;
     this.ground = this.add.tileSprite(0, 0, this.zone.width, this.zone.height, ground).setOrigin(0, 0).setDepth(-1000);
 
+    /*
+     * Lighting goes on per zone, before anything else is placed, so every
+     * sprite made below can be handed the pipeline as it is created rather
+     * than swept up afterwards. `ambient` defaults to white, which leaves a
+     * zone looking exactly as it did unlit — lights then only ever add.
+     */
+    this.lighting.enable(this.zone.ambient ?? 0xffffff);
+    this.lighting.light(this.ground);
+
     this.props = this.physics.add.staticGroup();
     for (const [x, y] of this.zone.trees) this.addProp(WorldTexture.Tree, x, y, 30, 20, 38);
     for (const [x, y] of this.zone.rocks) this.addProp(WorldTexture.Rock, x, y, 40, 20, 0);
@@ -284,7 +376,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.zone.mobs.forEach((spawn, index) => this.spawnMob(spawn.kind, spawn.x, spawn.y, index));
-    if (this.zone.boss) this.spawnBoss(this.zone.boss.x, this.zone.boss.y);
+    if (this.zone.boss) this.ensureBossAtlas(this.zone.boss.x, this.zone.boss.y);
 
     for (const def of this.zone.portals) {
       const sprite = this.add.sprite(def.x, def.y, WorldTexture.Portal).setDepth(def.y);
@@ -307,14 +399,24 @@ export class WorldScene extends Phaser.Scene {
     };
 
     if (first) {
-      this.spawnPlayer(ROSTER[this.playerIndex], stand);
+      const kit = this.resolveKit(ROSTER[this.playerIndex]);
+      if (!kit) throw new Error('no playable character: every atlas failed to load');
+      this.playerIndex = ROSTER.indexOf(kit);
+      this.spawnPlayer(kit, stand);
     } else {
       this.placePlayer(stand.x, stand.y);
       this.hookColliders();
     }
 
     this.cameras.main.setBounds(0, 0, this.zone.width, this.zone.height);
-    this.cameras.main.setRoundPixels(true);
+    /*
+     * The canvas is sized in device pixels, so the camera is zoomed by the same
+     * factor to put the visible world back where it was. Bounds and every
+     * position in this file stay in world units — the zoom is the only place
+     * the two ever meet.
+     */
+    this.cameras.main.setZoom(RENDER_SCALE);
+    this.cameras.main.setRoundPixels(Number.isInteger(RENDER_SCALE));
     this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
     GameBus.emit(GameEvent.ZoneChanged, { id: this.zone.id, name: this.zone.name });
     this.discoverWarp(this.zone.id);
@@ -329,6 +431,11 @@ export class WorldScene extends Phaser.Scene {
     const { x, y } = this.zone.shrine;
     this.shrineSprite = this.add.sprite(x, y, WorldTexture.Shrine).setDepth(y).setScale(1.4);
     this.shrineRing = this.add.graphics().setDepth(y - 2);
+    this.lighting.light(this.shrineSprite);
+    // A huyết mạch is the one thing on the map that is *supposed* to glow, and
+    // until now it glowed only in its own pixels. This is what makes it a
+    // landmark you can see from across a dark zone.
+    this.lighting.standing(x, y - 20, 260, 0x8fd8ff, 1.3);
     this.shrineRing.lineStyle(2, 0x6fd8ff, 0.7);
     this.shrineRing.strokeCircle(x, y + 10, 22);
     this.shrineRing.lineStyle(1, 0x9fe8ff, 0.35);
@@ -497,6 +604,7 @@ export class WorldScene extends Phaser.Scene {
     }
     this.portals = [];
     this.stones = [];
+    this.lighting?.destroy();
     this.targets = [];
     this.shrineSprite?.destroy();
     this.shrineSprite = undefined;
@@ -551,6 +659,10 @@ export class WorldScene extends Phaser.Scene {
     const derived = this.progress.derive(id, this.bag.bonuses());
     this.player = PLAYER_FACTORIES[id](this, at.x, at.y, derived);
     this.player.sprite.y -= this.player.footY() - at.y;
+    // Here rather than at zone entry: a character swap builds a new sprite, and
+    // one that missed the pipeline is the only object in the world that ignores
+    // the lighting — which shows up as him staying bright in a dark cave.
+    this.lighting.light(this.player.sprite);
     this.hookColliders();
     this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
     GameBus.emit(GameEvent.CharacterChanged, this.player.profile);
@@ -620,6 +732,7 @@ export class WorldScene extends Phaser.Scene {
         else this.fx.frostBurst(p.x, p.y);
       },
     });
+    this.lighting.light(mob);
     this.physics.add.collider(mob, this.props);
     if (this.player) {
       this.enemyColliders.push(this.physics.add.collider(this.player.sprite, mob));
@@ -678,6 +791,28 @@ export class WorldScene extends Phaser.Scene {
     };
   }
 
+  /**
+   * Boss 1's atlas is not preloaded in BootScene (it only ever appears in one
+   * zone) — fetch it the first time it is actually needed, then spawn.
+   * Re-checks `this.zone.boss` once the load resolves: the player may have
+   * warped back out of huyết mạ cốc while the fetch was still in flight.
+   */
+  private ensureBossAtlas(x: number, y: number): void {
+    if (this.textures.exists(BOSS1_TEXTURE)) {
+      this.spawnBoss(x, y);
+      return;
+    }
+    if (this.bossAtlasLoading) return;
+    this.bossAtlasLoading = true;
+    this.load.multiatlas(BOSS1_TEXTURE, BOSS1_ATLAS_URL, BOSS1_ATLAS_PATH);
+    this.load.once(`filecomplete-multiatlas-${BOSS1_TEXTURE}`, () => {
+      this.bossAtlasLoading = false;
+      this.textures.get(BOSS1_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
+      if (this.zone.boss && !this.boss) this.spawnBoss(this.zone.boss.x, this.zone.boss.y);
+    });
+    this.load.start();
+  }
+
   private spawnBoss(x: number, y: number): void {
     const boss = new Boss1(this, x, y, {
       onStrike: (strike) => this.onBossStrike(strike),
@@ -690,6 +825,7 @@ export class WorldScene extends Phaser.Scene {
       },
     });
     this.physics.add.collider(boss, this.props);
+    this.lighting.light(boss);
     this.boss = boss;
     this.bossAi = new EnemyAI(boss, this.bossProfile());
     this.targets.push(boss);
@@ -710,6 +846,9 @@ export class WorldScene extends Phaser.Scene {
     if (strike.kind === 'bolt') {
       const spent = new Set<string>();
       let previous = { x: strike.x, y: strike.y };
+      // The bolt crosses the arena, so its light crosses with it rather than
+      // waiting to go off where it lands.
+      const rider = this.lighting.travelling(strike.x, strike.y, 260, 0xff7040, 2.2, 620);
       this.bossFx.bolt({
         x: strike.x,
         y: strike.y - BOLT_LIFT,
@@ -718,6 +857,7 @@ export class WorldScene extends Phaser.Scene {
         duration: 620,
         lift: BOLT_LIFT,
         onStep: (x, y) => {
+          rider.moveTo(x, y);
           if (!this.hosting) {
             previous = { x, y };
             return;
@@ -728,11 +868,15 @@ export class WorldScene extends Phaser.Scene {
             spent.add(prey.id);
             this.inflict(prey, strike.damage, strike.aim);
             this.bossFx.burst(x, y, 0.7);
+            this.lighting.flash(x, y, 260, 0xff7040, 2, 380);
           }
           previous = { x, y };
         },
         onLand: (x, y) => {
-          if (!spent.size) this.bossFx.burst(x, y, 0.85);
+          if (!spent.size) {
+            this.bossFx.burst(x, y, 0.85);
+            this.lighting.flash(x, y, 300, 0xff7040, 2.3, 420);
+          }
         },
       });
       return;
@@ -939,7 +1083,7 @@ export class WorldScene extends Phaser.Scene {
       }
       this.boss = undefined;
       this.bossAi = undefined;
-      this.spawnBoss(this.zone.boss.x, this.zone.boss.y);
+      this.ensureBossAtlas(this.zone.boss.x, this.zone.boss.y);
     }
   }
 
@@ -954,6 +1098,31 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Whether a kit can actually be built right now.
+   *
+   * False when its atlas did not load. That happens for real: a character can
+   * be merged into the roster before its art is uploaded, and in dev the art
+   * is read off disk, where a contributor only has the sheets they built
+   * themselves. Phaser reports a failed multiatlas as a *successful* load of
+   * nothing, so the first sign of trouble used to be `new Miku(...)` throwing
+   * out of `play()` and taking `WorldScene.create()` with it — the game hung
+   * on the loading bar with no error a player could act on.
+   */
+  private playable(id: PlayerId): boolean {
+    return this.textures.exists(PLAYER_TEXTURES[id]);
+  }
+
+  /** The wanted kit, or the nearest one whose art is actually there. */
+  private resolveKit(wanted: PlayerId): PlayerId | null {
+    if (this.playable(wanted)) return wanted;
+    const fallback = ROSTER.find((id) => this.playable(id));
+    if (fallback) {
+      GameBus.emit(GameEvent.Notice, `Thiếu sprite ${wanted} — tạm dùng ${fallback}`);
+    }
+    return fallback ?? null;
+  }
+
   private trySwap(): void {
     const foot = this.player.hitPoint();
     const d = Phaser.Math.Distance.Between(foot.x, foot.y, this.zone.shrine.x, this.zone.shrine.y);
@@ -961,7 +1130,18 @@ export class WorldScene extends Phaser.Scene {
       GameBus.emit(GameEvent.Notice, 'Chỉ đổi nhân vật tại huyết mạch');
       return;
     }
-    this.playerIndex = (this.playerIndex + 1) % ROSTER.length;
+    // step over any kit whose art is missing rather than dying on it — one
+    // un-uploaded character used to make every kit behind it unreachable
+    let next = this.playerIndex;
+    for (let step = 0; step < ROSTER.length; step++) {
+      next = (next + 1) % ROSTER.length;
+      if (this.playable(ROSTER[next])) break;
+    }
+    if (next === this.playerIndex) {
+      GameBus.emit(GameEvent.Notice, 'Không có nhân vật nào khác để đổi');
+      return;
+    }
+    this.playerIndex = next;
     this.replacePlayer(ROSTER[this.playerIndex]);
     peekSession()?.setCharacter(ROSTER[this.playerIndex]);
     void this.persist();
@@ -1080,6 +1260,26 @@ export class WorldScene extends Phaser.Scene {
       need: this.progress.need,
       title: this.progress.title,
     });
+  }
+
+  /**
+   * Sorts and collides the player against the ground, or over it.
+   *
+   * Everything standing on the map sorts by its foot Y, which is what puts a
+   * character behind a tree he is above and in front of one he is below. A
+   * character in the air is not in that ordering at all: `FLY_DEPTH_BAND` lifts
+   * him clear of every ground object at once — it is more than the height of
+   * the map, so no foot Y can reach it — while staying far below the HUD. He
+   * still sorts among other flyers by his own foot Y inside that band.
+   *
+   * The prop collider goes with it. Being drawn over a rock and still walking
+   * into it is worse than either on its own, and Cân Đẩu Vân is the only thing
+   * in the game that leaves the ground, so nothing else changes.
+   */
+  private tickAltitude(): void {
+    const airborne = this.player.airborne;
+    this.player.sprite.setDepth(this.player.footY() + (airborne ? FLY_DEPTH_BAND : 0));
+    if (this.playerCollider) this.playerCollider.active = !airborne;
   }
 
   private emitCooldowns(): void {
@@ -1307,6 +1507,7 @@ export class WorldScene extends Phaser.Scene {
     boxOffsetY: number,
   ): Phaser.Physics.Arcade.Sprite {
     const sprite = this.props.create(x, y, texture) as Phaser.Physics.Arcade.Sprite;
+    this.lighting.light(sprite);
     sprite.setDepth(y);
     const body = sprite.body as Phaser.Physics.Arcade.StaticBody;
     body.setSize(boxWidth, boxHeight);
@@ -1368,22 +1569,33 @@ export class WorldScene extends Phaser.Scene {
       case TINH_KHONG_TRAN.name:
         this.castStarArray(payload);
         return;
-      default:
-        this.spawnQiBurst(payload);
-        this.resolveHit(payload, {
-          damage: payload.damage,
-          tint: 0x6fd8ff,
-          sweep: 150,
-          radius: HIT_RADIUS,
-          frost: 0,
-          knockback: 0,
-        });
+      case MA_NGUYET_TRAM.name:
+        this.castQiDragon(payload);
+        return;
+      case CUU_U_NO_DIEM.name:
+        this.castQiNova(payload);
+        return;
+      case HANG_MA_CHAN_LOI.name:
+        this.castQiThunder(payload);
+        return;
+      case PHAN_THIEN_MA_DIEM.name:
+        this.castQiWrath(payload);
+        return;
     }
   }
 
   private castQiSlash(payload: SkillPayload): void {
     const hitAlready = new Set<Damageable>();
     let previous = { x: payload.x, y: payload.y };
+    // Hàn Quang Trảm is a lit thing crossing the ground, not a flash at either end.
+    const rider = this.lighting.travelling(
+      payload.x,
+      payload.y,
+      240,
+      0x9fe8ff,
+      2.1,
+      380,
+    );
     this.fx.qiCrescent({
       x: payload.x,
       y: payload.y,
@@ -1392,6 +1604,7 @@ export class WorldScene extends Phaser.Scene {
       duration: 380,
       lift: FX_LIFT,
       onStep: (x, y) => {
+        rider.moveTo(x, y);
         const now = { x, y };
         for (const target of this.targets) {
           if (!target.alive || hitAlready.has(target)) continue;
@@ -1417,12 +1630,16 @@ export class WorldScene extends Phaser.Scene {
 
   private castIceArray(payload: SkillPayload): void {
     this.fx.iceEruption(payload.x, payload.y, 1, 0.006);
+    this.lighting.flash(payload.x, payload.y, 300, 0x9fe8ff, 2.2, 420);
     const base = Math.atan2(payload.aim.y, payload.aim.x);
     for (let i = 0; i < ICE_ARRAY_POINTS; i++) {
       const angle = base + (i / ICE_ARRAY_POINTS) * Math.PI * 2;
       const x = payload.x + Math.cos(angle) * ICE_ARRAY_SPREAD;
       const y = payload.y + Math.sin(angle) * ICE_ARRAY_SPREAD;
-      this.time.delayedCall(ICE_ARRAY_STAGGER * (i + 1), () => this.fx.iceEruption(x, y, 0.78, 0));
+      this.time.delayedCall(ICE_ARRAY_STAGGER * (i + 1), () => {
+        this.fx.iceEruption(x, y, 0.78, 0);
+        this.lighting.flash(x, y, 240, 0x9fe8ff, 1.6, 380);
+      });
     }
     const caught = new Set<Damageable>();
     const waves = ICE_ARRAY_POINTS + 1;
@@ -1456,6 +1673,15 @@ export class WorldScene extends Phaser.Scene {
 
   private castMagmaSlash(payload: SkillPayload): void {
     const hitAlready = new Set<Damageable>();
+    // Huyết Diễm Trảm is a lit thing crossing the ground, not a flash at either end.
+    const rider = this.lighting.travelling(
+      payload.x,
+      payload.y,
+      240,
+      0xffa040,
+      2.3,
+      360,
+    );
     this.magmaFx.magmaCrescent({
       x: payload.x,
       y: payload.y,
@@ -1464,6 +1690,7 @@ export class WorldScene extends Phaser.Scene {
       duration: 380,
       lift: FX_LIFT,
       onStep: (x, y) => {
+        rider.moveTo(x, y);
         for (const target of this.targets) {
           if (!target.alive || hitAlready.has(target)) continue;
           const spot = target.hitPoint();
@@ -1488,6 +1715,7 @@ export class WorldScene extends Phaser.Scene {
 
   private castRoar(payload: SkillPayload): void {
     this.magmaFx.magmaPillar(payload.x, payload.y, 1, 0.007);
+    this.lighting.flash(payload.x, payload.y, 320, 0xffa040, 2.4, 460);
     this.magmaFx.magmaNova(payload.x, payload.y);
     const base = Math.atan2(payload.aim.y, payload.aim.x);
     for (let i = 0; i < MAGMA_ARRAY_POINTS; i++) {
@@ -1496,6 +1724,7 @@ export class WorldScene extends Phaser.Scene {
       const y = payload.y + Math.sin(angle) * MAGMA_ARRAY_SPREAD;
       this.time.delayedCall(MAGMA_ARRAY_STAGGER * (i + 1), () => {
         this.magmaFx.magmaPillar(x, y, 0.82, 0);
+        this.lighting.flash(x, y, 260, 0xffa040, 1.7, 400);
         this.magmaFx.magmaBurst(x, y, 0.8);
       });
     }
@@ -1532,6 +1761,15 @@ export class WorldScene extends Phaser.Scene {
 
   private castStarSlash(payload: SkillPayload): void {
     const hitAlready = new Set<Damageable>();
+    // Tinh Mang Trảm is a lit thing crossing the ground, not a flash at either end.
+    const rider = this.lighting.travelling(
+      payload.x,
+      payload.y,
+      240,
+      0xc9a0ff,
+      2.1,
+      360,
+    );
     this.starFx.starCrescent({
       x: payload.x,
       y: payload.y,
@@ -1540,6 +1778,7 @@ export class WorldScene extends Phaser.Scene {
       duration: 380,
       lift: FX_LIFT,
       onStep: (x, y) => {
+        rider.moveTo(x, y);
         for (const target of this.targets) {
           if (!target.alive || hitAlready.has(target)) continue;
           const spot = target.hitPoint();
@@ -1564,6 +1803,7 @@ export class WorldScene extends Phaser.Scene {
 
   private castStarArray(payload: SkillPayload): void {
     this.starFx.starPillar(payload.x, payload.y, 1, 0.007);
+    this.lighting.flash(payload.x, payload.y, 320, 0xc9a0ff, 2.4, 460);
     this.starFx.starNova(payload.x, payload.y);
     const base = Math.atan2(payload.aim.y, payload.aim.x);
     for (let i = 0; i < MAGMA_ARRAY_POINTS; i++) {
@@ -1572,6 +1812,7 @@ export class WorldScene extends Phaser.Scene {
       const y = payload.y + Math.sin(angle) * MAGMA_ARRAY_SPREAD;
       this.time.delayedCall(MAGMA_ARRAY_STAGGER * (i + 1), () => {
         this.starFx.starPillar(x, y, 0.82, 0);
+        this.lighting.flash(x, y, 260, 0xc9a0ff, 1.7, 400);
         this.starFx.starBurst(x, y, 0.8);
       });
     }
@@ -1606,8 +1847,196 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Ma Nguyệt Trảm. The qi dragon is not a projectile — it is the last frame of
+   * the cast, drawn arcing a long way out in front of him — so there is nothing
+   * to fly and nothing to spawn. The damage is resolved once, on the frame the
+   * dragon appears, over the ground the dragon is drawn covering: a swept band
+   * from his boots out to `QI_DRAGON_REACH`.
+   */
+  private castQiDragon(payload: SkillPayload): void {
+    const from = { x: payload.x, y: payload.y };
+    const to = {
+      x: payload.x + payload.aim.x * QI_DRAGON_REACH,
+      y: payload.y + payload.aim.y * QI_DRAGON_REACH,
+    };
+    this.qiFx.scorch(payload.x, payload.y, 0.7);
+    this.lighting.flash(
+      (from.x + to.x) / 2,
+      (from.y + to.y) / 2,
+      460,
+      0xc060ff,
+      2.4,
+      420,
+    );
+    this.sweepQi(payload, from, to, QI_DRAGON_RADIUS, 10, 0xc060ff);
+  }
+
+  /**
+   * Cửu U Nộ Diễm. The flame breaks out from under him and runs along the way
+   * he is facing, erupting into the drawn pillar at the far end — so it
+   * resolves as a lane out to `QI_NOVA_RANGE`, everything within
+   * `QI_NOVA_RADIUS` of that segment hit on the same frame, like the lance.
+   *
+   * The run is a line of lotuses opening outward, `NOVA_TRAIL_GAP` apart and
+   * each a little wider than the last, with the eruption landing on the far end
+   * of them. Damage is dealt at once rather than
+   * chasing the marks: the technique is a single eruption, and making the far
+   * end land later would let a target walk out of a hit already drawn.
+   */
+  private castQiNova(payload: SkillPayload): void {
+    const from = { x: payload.x, y: payload.y };
+    const to = {
+      x: payload.x + payload.aim.x * QI_NOVA_RANGE,
+      y: payload.y + payload.aim.y * QI_NOVA_RANGE,
+    };
+
+    // The first flower opens at his own feet, on the beat he thrusts.
+    this.qiFx.novaBloom(from.x, from.y, 0.6);
+    for (let step = 1; step <= NOVA_TRAIL_STEPS; step++) {
+      const t = step / NOVA_TRAIL_STEPS;
+      const x = from.x + payload.aim.x * QI_NOVA_RANGE * t;
+      const y = from.y + payload.aim.y * QI_NOVA_RANGE * t;
+      // They grow along the run rather than fading out: the flame is gathering
+      // as it travels, and the eruption is where that ends up.
+      const size = 0.5 + t * 0.5;
+      this.time.delayedCall(step * NOVA_TRAIL_GAP, () => this.qiFx.novaBloom(x, y, size));
+    }
+
+    // the flame arrives where the run ends and opens there
+    this.time.delayedCall(NOVA_TRAIL_STEPS * NOVA_TRAIL_GAP, () => {
+      // A little over life size, unlike the body: the eruption is the end of the
+      // technique and the only part of it that should overrun what he is. It was
+      // 1.5 while the cast was too, and dropping the body back to its own size
+      // left the flame looking thrown by someone else.
+      this.qiFx.novaFlame(to.x, to.y, 1.2);
+      this.lighting.flash(to.x, to.y, 380, 0xc060ff, 2.6, 480);
+      this.qiFx.shake(0.008);
+    });
+
+    this.sweepQi(payload, from, to, QI_NOVA_RADIUS, 8, 0xa040ff);
+  }
+
+  /**
+   * Damage everything within `radius` of where he stands, once each.
+   *
+   * Both of his ground techniques end on qi breaking out of the floor beneath
+   * him, so both resolve as a disc rather than as a ring of fanned-out copies.
+   * The drawn eruption is the technique; a fan would be the scene talking over
+   * it.
+   */
+  private discQi(payload: SkillPayload, radius: number, tint: number): void {
+    const caught = new Set<Damageable>();
+    for (const target of this.targets) {
+      if (!target.alive || caught.has(target)) continue;
+      const spot = target.hitPoint();
+      const distance = Phaser.Math.Distance.Between(payload.x, payload.y, spot.x, spot.y);
+      if (distance > radius + target.hitRadius()) continue;
+      caught.add(target);
+      this.qiFx.qiBurst(spot.x, spot.y, 0.9);
+      if (this.hosting) {
+        this.lastHit.set(target, this.net.actorId());
+        target.applyHit({
+          damage: payload.damage,
+          aim: payload.aim,
+          frost: 0,
+          knockback: 0,
+          tint,
+          side: 'player',
+        });
+      }
+    }
+  }
+
+  /**
+   * Phần Thiên Ma Diễm. The same shape of answer as Cửu U Nộ Diễm — a disc
+   * centred on the ground he is standing on — drawn much bigger, so it reaches
+   * further and shakes harder. Sharing `discQi` with the nova keeps the two
+   * honestly comparable: what differs between them is the numbers and the
+   * seven-stage climb the art does on its way there.
+   */
+  private castQiWrath(payload: SkillPayload): void {
+    this.qiFx.scorch(payload.x, payload.y, 1.9);
+    this.qiFx.shake(0.012, 260);
+    this.lighting.flash(payload.x, payload.y, 520, 0xff5ad0, 3, 620);
+    this.discQi(payload, QI_WRATH_RADIUS, 0xff4ad0);
+  }
+
+  /**
+   * Hàng Ma Chân Lôi. The lance is drawn already spanning its whole length, so
+   * it resolves the moment it appears rather than travelling: everything within
+   * `QI_BEAM_RADIUS` of the segment is hit on the same frame. That is what makes
+   * it the reliable answer to a line of enemies, and why it costs more spirit
+   * than the dragon.
+   */
+  private castQiThunder(payload: SkillPayload): void {
+    const from = { x: payload.x, y: payload.y };
+    const to = {
+      x: payload.x + payload.aim.x * QI_BEAM_RANGE,
+      y: payload.y + payload.aim.y * QI_BEAM_RANGE,
+    };
+    // The cast clip draws the orbs and the beam head; this is what leaves the
+    // staff and crosses the lane. Rotated to the aim, so one drawn beam serves
+    // all eight headings.
+    this.qiFx.lanceBolt(payload.x, payload.y, payload.aim, LANCE_FX_SCALE);
+    // Hàng Ma Chân Lôi throws a beam down a lane, so the light goes where the
+    // beam ends up rather than where it left: half a lane out, and wide.
+    this.lighting.flash(
+      payload.x + payload.aim.x * (QI_BEAM_RANGE / 2),
+      payload.y + payload.aim.y * (QI_BEAM_RANGE / 2),
+      520,
+      0xff4a8a,
+      2.8,
+      760,
+    );
+    this.sweepQi(payload, from, to, QI_BEAM_RADIUS, 6, 0xff70e0);
+  }
+
+  /**
+   * Damage everything within `radius` of a segment, once each.
+   *
+   * Shared by the dragon and the lance because both are the same question asked
+   * of two differently shaped drawings: what did this reach. Neither moves, so
+   * neither needs the per-step tracking Như Yên's travelling crescent does.
+   */
+  private sweepQi(
+    payload: SkillPayload,
+    from: Vector2Like,
+    to: Vector2Like,
+    radius: number,
+    knockback: number,
+    tint: number,
+  ): void {
+    const hitAlready = new Set<Damageable>();
+    for (const target of this.targets) {
+      if (!target.alive || hitAlready.has(target)) continue;
+      const spot = target.hitPoint();
+      if (distanceToSegment(spot, from, to) > radius + target.hitRadius()) continue;
+      hitAlready.add(target);
+      this.qiFx.qiBurst(spot.x, spot.y, 0.8);
+      if (this.hosting) {
+        this.lastHit.set(target, this.net.actorId());
+        target.applyHit({
+          damage: payload.damage,
+          aim: payload.aim,
+          frost: 0,
+          knockback,
+          tint,
+          side: 'player',
+        });
+      }
+    }
+  }
+
   private onDash(payload: DashPayload, actor?: Phaser.GameObjects.Sprite): void {
     const sprite = actor ?? this.player.sprite;
+    if (sprite.texture.key === 'wukong') {
+      // Cân Đẩu Vân leaves the ground, so the scorch he pushed off is drawn
+      // where he started rather than trailing him the whole way.
+      this.qiFx.scorch(payload.x, payload.y, 0.6);
+      this.qiFx.shadowTrail(sprite, 6, payload.duration / 6);
+      return;
+    }
     if (sprite.texture.key === 'huyetlang') {
       this.magmaFx.shadowTrail(sprite, 6, payload.duration / 6);
       return;
@@ -1644,6 +2073,13 @@ export class WorldScene extends Phaser.Scene {
         tint: options.tint,
         side: 'player',
       });
+      /*
+       * A spark of light where the blow lands. Small and brief on purpose — a
+       * swing is not a technique — and it borrows the hit's own tint, so each
+       * character strikes in its own colour without this having to know which
+       * character is swinging.
+       */
+      this.lighting.flash(spot.x, spot.y, 130, options.tint, 1.2, 200);
     }
   }
 
@@ -1726,26 +2162,6 @@ export class WorldScene extends Phaser.Scene {
       alpha: 0,
       duration: 600,
       onComplete: () => text.destroy(),
-    });
-  }
-
-  private spawnQiBurst(payload: SkillPayload): void {
-    const vector = DIRECTION_VECTORS[payload.direction];
-    const blade = this.add
-      .sprite(payload.x, payload.y, LIN_YUAN_TEXTURE, QI_SLASH_FRAME)
-      .setDepth(payload.y + 200)
-      .setScale(0.8, 1.1);
-    const angles: Record<Direction, number> = { right: 0, left: 180, up: -90, down: 90 };
-    blade.setAngle(angles[payload.direction]);
-    this.tweens.add({
-      targets: blade,
-      x: payload.x + vector.x * 150,
-      y: payload.y + vector.y * 150,
-      scaleX: 1.5,
-      scaleY: 1.6,
-      alpha: 0,
-      duration: 420,
-      onComplete: () => blade.destroy(),
     });
   }
 

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { GroundShadow } from '../systems/GroundShadow';
 import {
   BOSS1_TEXTURE,
   Boss1Clip,
@@ -136,6 +137,7 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
   private now = 0;
   private nextFlinchAt = 0;
   private bar: Phaser.GameObjects.Graphics;
+  private readonly shadow: GroundShadow;
 
   constructor(
     scene: Phaser.Scene,
@@ -156,6 +158,9 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
     (this.body as Phaser.Physics.Arcade.Body | null)?.setSize(BODY_WIDTH, BODY_HEIGHT, false);
 
     this.bar = scene.add.graphics().setDepth(20000);
+    // Wide and heavy: he is several times a character across, and a shadow
+    // that ignores that is the one thing that makes a big sprite look pasted on.
+    this.shadow = new GroundShadow(scene, { size: { w: 96, h: 34 }, lift: 0 });
 
     this.on(Phaser.Animations.Events.ANIMATION_UPDATE, this.onAnimationUpdate, this);
     this.on(Phaser.Animations.Events.ANIMATION_COMPLETE, this.onAnimationComplete, this);
@@ -291,6 +296,8 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
   /* ---------------------------------------------------------------- update */
 
   tick(time: number, _delta: number): void {
+    if (this.visible) this.shadow.sync(this.x, this.y);
+    else this.shadow.hide();
     this.now = time;
 
     // Frame boxes differ per clip, so the feet-relative body offset only holds
@@ -352,6 +359,7 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
   }
 
   destroy(fromScene?: boolean): void {
+    this.shadow.destroy();
     this.bar.destroy();
     super.destroy(fromScene);
   }

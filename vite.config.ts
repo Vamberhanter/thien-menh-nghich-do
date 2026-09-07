@@ -8,7 +8,7 @@ import react from '@vitejs/plugin-react';
  * Drops the hand-made source sheets from the build.
  *
  * The sheets live under `public/` because that is where they are authored and
- * where `npm run build:lamuyen` / `build:nhuyen` / `build:boss` read them from,
+ * where `npm run build:nhuyen` / `build:huyetlang` / `build:boss` read them from,
  * but the game only ever loads the atlases cut out of them — so Vite copying
  * them into `dist/` ships megabytes nothing fetches.
  *

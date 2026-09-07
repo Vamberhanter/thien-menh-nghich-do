@@ -1,9 +1,39 @@
 import type { CharacterStats } from '../types';
-import { DEFAULT_LIN_YUAN_STATS, DEFAULT_NHU_YEN_STATS, DEFAULT_HUYET_LANG_STATS, DEFAULT_MIKU_STATS } from '../types';
+import {
+  DEFAULT_NHU_YEN_STATS,
+  DEFAULT_HUYET_LANG_STATS,
+  DEFAULT_MIKU_STATS,
+  DEFAULT_WUKONG_STATS,
+} from '../types';
 import type { PlayerId } from '../entities/playerHandle';
 
 /** Slice cap: Luyện Khí 9. Trúc Cơ is named but locked. */
 export const MAX_LEVEL = 9;
+
+/**
+ * Base kit per character, and how much attack each rank adds to it.
+ *
+ * Tables rather than a chain of ternaries: with three kits the conditional form
+ * had already stopped saying which character got which number, and a fourth
+ * would have been a third nested branch in two separate expressions.
+ *
+ * Huyết Lang gains the most per rank because his kit is one weapon; Tôn Ngộ
+ * Không the least, because his scales off three techniques rather than off the
+ * attack stat alone.
+ */
+const BASE_STATS: Record<PlayerId, CharacterStats> = {
+  nhuyen: DEFAULT_NHU_YEN_STATS,
+  huyetlang: DEFAULT_HUYET_LANG_STATS,
+  miku: DEFAULT_MIKU_STATS,
+  wukong: DEFAULT_WUKONG_STATS,
+};
+
+const ATTACK_PER_RANK: Record<PlayerId, number> = {
+  nhuyen: 1.6,
+  huyetlang: 2.2,
+  miku: 1.8,
+  wukong: 1.4,
+};
 
 /** XP to leave each rank. Index 0 is Luyện Khí 1 → 2. Last rank needs none. */
 const XP_TO_NEXT: readonly number[] = [50, 80, 120, 180, 260, 360, 480, 620, 0];
@@ -69,23 +99,9 @@ export class Progression {
 
   /** Base kit + rank bonuses. Equipment is added by the caller. */
   derive(character: PlayerId, gear: Partial<CharacterStats> = {}): CharacterStats {
-    const base =
-      character === 'lamuyen'
-        ? DEFAULT_LIN_YUAN_STATS
-        : character === 'huyetlang'
-          ? DEFAULT_HUYET_LANG_STATS
-          : character === 'miku'
-            ? DEFAULT_MIKU_STATS
-            : DEFAULT_NHU_YEN_STATS;
+    const base = BASE_STATS[character];
     const ranks = this.level - 1;
-    const atk =
-      character === 'nhuyen'
-        ? Math.floor(ranks * 1.6)
-        : character === 'huyetlang'
-          ? Math.floor(ranks * 2.2)
-          : character === 'miku'
-            ? Math.floor(ranks * 1.8)
-            : ranks * 2;
+    const atk = Math.floor(ranks * ATTACK_PER_RANK[character]);
     return {
       maxHp: base.maxHp + ranks * 8 + (gear.maxHp ?? 0),
       hp: base.hp + ranks * 8 + (gear.maxHp ?? 0),

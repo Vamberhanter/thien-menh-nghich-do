@@ -1,9 +1,5 @@
 import Phaser from 'phaser';
-import {
-  LIN_YUAN_ATLAS_PATH,
-  LIN_YUAN_ATLAS_URL,
-  LIN_YUAN_TEXTURE,
-} from '../animations/linYuanAnimations';
+import { RENDER_SCALE, viewHeight, viewWidth } from '../config/gameConfig';
 import {
   NHU_YEN_ATLAS_PATH,
   NHU_YEN_ATLAS_URL,
@@ -19,6 +15,11 @@ import {
   MIKU_ATLAS_URL,
   MIKU_TEXTURE,
 } from '../animations/mikuAnimations';
+import {
+  WUKONG_ATLAS_PATH,
+  WUKONG_ATLAS_URL,
+  WUKONG_TEXTURE,
+} from '../animations/wukongAnimations';
 import {
   BOSS1_ATLAS_PATH,
   BOSS1_ATLAS_URL,
@@ -54,14 +55,24 @@ export class BootScene extends Phaser.Scene {
 
   preload(): void {
     this.load.setCORS('anonymous');
-    this.load.multiatlas(LIN_YUAN_TEXTURE, LIN_YUAN_ATLAS_URL, LIN_YUAN_ATLAS_PATH);
+    // The three playable kits: any of them can walk on screen as a remote
+    // avatar the moment another player joins, in any zone, so all load up
+    // front. Boss
+    // 1's atlas does not — it only exists in one zone (huyết mạ cốc) and is
+    // fetched on demand by WorldScene.ensureBossAtlas the first time a player
+    // actually warps there.
     this.load.multiatlas(NHU_YEN_TEXTURE, NHU_YEN_ATLAS_URL, NHU_YEN_ATLAS_PATH);
     this.load.multiatlas(HUYET_LANG_TEXTURE, HUYET_LANG_ATLAS_URL, HUYET_LANG_ATLAS_PATH);
     this.load.multiatlas(MIKU_TEXTURE, MIKU_ATLAS_URL, MIKU_ATLAS_PATH);
+    this.load.multiatlas(WUKONG_TEXTURE, WUKONG_ATLAS_URL, WUKONG_ATLAS_PATH);
     this.load.multiatlas(BOSS1_TEXTURE, BOSS1_ATLAS_URL, BOSS1_ATLAS_PATH);
 
-    const width = this.scale.width;
-    const height = this.scale.height;
+    // World units, not canvas pixels: the canvas is `RENDER_SCALE` times larger
+    // than the world and the camera is zoomed to match, so a bar placed at
+    // `scale.width / 2` would sit off the right of the screen.
+    this.cameras.main.setZoom(RENDER_SCALE);
+    const width = viewWidth(this);
+    const height = viewHeight(this);
     const bar = this.add.rectangle(width / 2, height / 2, 320, 6, 0x2f9fd8).setOrigin(0.5);
     bar.setScale(0, 1);
     this.add
@@ -79,10 +90,10 @@ export class BootScene extends Phaser.Scene {
 
   create(): void {
     // Nearest-neighbour keeps every sprite pixel-sharp when the canvas scales.
-    this.textures.get(LIN_YUAN_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.textures.get(NHU_YEN_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.textures.get(HUYET_LANG_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.textures.get(MIKU_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
+    this.textures.get(WUKONG_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.textures.get(BOSS1_TEXTURE).setFilter(Phaser.Textures.FilterMode.NEAREST);
 
     this.bakeGrass();

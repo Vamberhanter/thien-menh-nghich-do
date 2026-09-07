@@ -7,16 +7,16 @@ import { CHARACTER_NAME, type NetCharacter } from '../net/types';
 
 const KITS: Array<{ id: NetCharacter; name: string; sect: string }> = [
   { id: 'nhuyen', name: 'Như Yên', sect: 'Băng Cung' },
-  { id: 'lamuyen', name: 'Lâm Uyên', sect: 'Hư Vô Kiếm' },
   { id: 'huyetlang', name: 'Huyết Lang', sect: 'Tam Thủ Môn' },
   { id: 'miku', name: 'Miku', sect: 'Ảo Âm Các' },
+  { id: 'wukong', name: 'Tôn Ngộ Không', sect: 'Hoa Quả Sơn' },
 ];
 
 const SECT: Record<NetCharacter, string> = {
   nhuyen: 'Băng Cung',
-  lamuyen: 'Hư Vô Kiếm',
   huyetlang: 'Tam Thủ Môn',
   miku: 'Ảo Âm Các',
+  wukong: 'Hoa Quả Sơn',
 };
 
 /**

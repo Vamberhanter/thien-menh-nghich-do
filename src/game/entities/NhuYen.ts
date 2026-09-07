@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { GroundShadow } from '../systems/GroundShadow';
 import {
   NHU_YEN_TEXTURE,
   NhuYenClip,
@@ -29,7 +30,7 @@ import type {
 /**
  * Như Yên of Băng Cung.
  *
- * Two things work differently from {@link LinYuan}:
+ * Two things about her set the shape of this entity:
  *
  *  * **The sprite's (x, y) is the point she stands on.** Her atlas frames each
  *    carry a pivot on her feet, so there is no half-frame offset to add for
@@ -70,6 +71,17 @@ const ICE_ARRAY_REACH = 0;
 /** How far into a swing a press starts being buffered for the next one. */
 const INPUT_BUFFER_FROM = 0.45;
 
+/**
+ * Shortest gap between two stagger animations.
+ *
+ * Every hit flashes the character; only some of them play the flinch. Without
+ * the gap a pack of three mobs restarts the animation on top of itself several
+ * times a second, and it reads as juddering in place even though nothing is
+ * actually holding them — the same rate limit the boss has had since it could
+ * be stun-locked out of its own fight.
+ */
+const FLINCH_GAP = 900;
+
 export const NHU_YEN_PROFILE = {
   id: 'nhuyen',
   name: 'Như Yên',
@@ -87,6 +99,12 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
   readonly stats: CharacterStats;
   readonly combat: CombatSystem;
   readonly combo: ComboChain;
+  /**
+   * The mark he leaves on the floor. Nothing in this kit leaves the ground, so
+   * it never lifts — it is here to attach the sprite to the tile it stands on,
+   * which is what stops it reading as a picture laid over the world.
+   */
+  private readonly shadow = new GroundShadow(this.scene, { size: { w: 38, h: 15 }, lift: 0 });
 
   private currentState: CharacterState = 'idle';
   private facing: Direction = 'down';
@@ -107,6 +125,8 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
   /** A combo press taken during a swing, spent when that swing ends. */
   private bufferedAttack = false;
   private pending: PendingImpact | null = null;
+  /** Earliest time another hit may play the stagger — see `FLINCH_GAP`. */
+  private nextFlinchAt = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number, stats?: Partial<CharacterStats>) {
     super(scene, x, y, NHU_YEN_TEXTURE, 'idle_down_0');
@@ -156,7 +176,6 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
       this.currentState === 'attack' ||
       this.currentState === 'skill' ||
       this.currentState === 'dash' ||
-      this.currentState === 'hurt' ||
       this.currentState === 'dead'
     );
   }
@@ -169,6 +188,8 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
   /* ---------------------------------------------------------------- update */
 
   tick(time: number, delta: number): void {
+    if (this.isDead) this.shadow.hide();
+    else this.shadow.sync(this.x, this.y);
     if (this.combat.update(time, delta)) emitStats(this.stats);
 
     if (this.combo.update(time)) this.emitComboState();
@@ -216,6 +237,10 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
     const length = Math.hypot(direction.x, direction.y);
     if (length === 0) {
       this.setVelocity(0, 0);
+      // A stagger is allowed to *finish* while he stands there, which is where
+      // the hit reads best. It is never allowed to stop him: pressing a
+      // direction falls through to the walk below and cuts it short.
+      if (this.currentState === 'hurt' && this.anims.isPlaying) return;
       this.playState('idle', this.idleClip());
       return;
     }
@@ -241,7 +266,7 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
    * Pacing is the animation's and the chain's; there is deliberately no attack
    * cooldown on top, which would only eat presses the chain would have taken.
    */
-  attack(): boolean {
+  attack(steer?: Vector2Like): boolean {
     if (this.isDead) return false;
 
     if (this.currentState === 'attack') {
@@ -250,6 +275,8 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
     }
     if (this.isBusy) return false;
 
+    // same one-frame staleness as the casts — see above
+    this.turn(steer);
     const now = this.scene.time.now;
     const hit = this.combo.press(now, (index) =>
       refDuration(NhuYenClip.attack(this.facing, index)),
@@ -282,18 +309,27 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
   }
 
   /** Băng Phách Trảm — a crescent of qi thrown along the facing. */
-  castQiSlash(): boolean {
-    return this.cast(NhuYenSlot.QiSlash, NhuYenClip.qiSlash(this.facing), QI_SLASH_REACH);
+  /*
+   * Each of these takes the heading held at the moment of the press, the way
+   * the dash does. Without it a skill fired in the same frame as the direction
+   * key went out along the *previous* facing: the controller checks actions
+   * before movement so a press wins its frame, which means `move` has not run
+   * yet and the facing is one frame stale. Turning to face an enemy and
+   * striking is a single motion for the player, so it has to be one here.
+   */
+  castQiSlash(steer?: Vector2Like): boolean {
+    return this.cast(NhuYenSlot.QiSlash, NhuYenClip.qiSlash, QI_SLASH_REACH, steer);
   }
 
   /** Băng Tinh Trận — a channelled ice eruption on the ground ahead. */
-  castIceArray(): boolean {
-    return this.cast(NhuYenSlot.IceArray, NhuYenClip.channel(this.facing), ICE_ARRAY_REACH);
+  castIceArray(steer?: Vector2Like): boolean {
+    return this.cast(NhuYenSlot.IceArray, NhuYenClip.channel, ICE_ARRAY_REACH, steer);
   }
 
   /** Sương Ảnh Bộ — a short invulnerable lunge that leaves afterimages. */
-  dash(): boolean {
+  dash(steer?: Vector2Like): boolean {
     if (this.isBusy || this.isDead) return false;
+    this.turn(steer);
     const slot = NhuYenSlot.ShadowStep;
     if (!this.combat.canCastSkill(slot)) {
       this.rejectSkill(slot);
@@ -342,11 +378,36 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
     }
 
     // being staggered drops both the pending hit and the chain
-    this.pending = null;
-    this.bufferedAttack = false;
+    /*
+     * Every hit flashes, and that flash is the whole of the feedback most of
+     * the time.
+     *
+     * Being hit used to hand the body over to the stagger: velocity zeroed,
+     * `isBusy` true, no input accepted until the clip ran out. Against one mob
+     * that is a beat of drama; against three it is a quarter of a second of
+     * dead controls every time any of them connects, which is what the
+     * juddering was. It never takes the body now — the flinch plays only when
+     * there is nothing else to show, and moving away cuts it short.
+     */
+    this.setTintFill(0xff9aa6);
+    this.scene.time.delayedCall(70, () => {
+      // `scene` is what Phaser nulls on destroy, and the timer outlives the
+      // sprite. Cleared even when the hit was lethal, so the death animation
+      // plays in the character's own colours.
+      if (this.scene) this.clearTint();
+    });
+
+    // A swing or a cast is left to finish, damage and all: an action the
+    // player already committed to is exactly what must not be snatched away.
+    const now = this.scene.time.now;
+    if (this.isBusy || now < this.nextFlinchAt) return;
+    this.nextFlinchAt = now + FLINCH_GAP;
+
+    // Reaching here means the character was idle or walking, so there is no
+    // pending hit to drop — but the chain window may still be open, and a hit
+    // closes it.
     this.combo.reset();
     this.emitComboState();
-    this.setVelocity(0, 0);
     this.playState('hurt', NhuYenClip.hurt(), true);
   }
 
@@ -381,12 +442,21 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
 
   /* ------------------------------------------------------------- internals */
 
-  private cast(slot: number, clip: ClipRef, reach: number): boolean {
+  private cast(
+    slot: number,
+    clipFor: (direction: Direction) => ClipRef,
+    reach: number,
+    steer?: Vector2Like,
+  ): boolean {
     if (this.isBusy || this.isDead) return false;
     if (!this.combat.canCastSkill(slot)) {
       this.rejectSkill(slot);
       return false;
     }
+
+    // turn before the clip is chosen: which art plays depends on the facing
+    this.turn(steer);
+    const clip = clipFor(this.facing);
 
     const skill = this.combat.skillAt(slot);
     const damage = this.combat.beginSkill(slot);
@@ -416,6 +486,19 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
       },
     };
     return true;
+  }
+
+  /** Face a held heading, if one is held. Ignores a neutral stick. */
+  private turn(steer?: Vector2Like): void {
+    if (!steer) return;
+    if (Math.hypot(steer.x, steer.y) === 0) return;
+    this.facing = directionFromVector(steer, this.facing);
+    this.aim = aimFromVector(steer, this.aim);
+  }
+  /** The shadow is a scene object rather than a child, so it needs saying. */
+  destroy(fromScene?: boolean): void {
+    this.shadow.destroy();
+    super.destroy(fromScene);
   }
 
   private rejectSkill(slot: number): void {

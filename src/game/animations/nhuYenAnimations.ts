@@ -10,7 +10,7 @@ import type { Direction } from '../types';
  * The build writes into an `atlas/` subfolder so it can never overwrite the
  * source sheets, which happen to share its naming.
  *
- * Unlike the Lâm Uyên atlas, frames are NOT all the same size: each output file
+ * Frames are NOT all the same size: each output file
  * has its own box (104x128 for idle, 366x276 for the ice channel) and every
  * frame carries a normalised pivot on the character's feet. Phaser re-applies
  * that pivot on each animation frame, so the sprite's (x, y) IS the point Như

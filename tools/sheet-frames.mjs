@@ -300,7 +300,23 @@ export function analyseSheet({ dir, key, spec, rules, img: decoded }) {
   // bands that hold more than one row are split further.
   let rows;
   let rowMethod;
-  if (even) {
+  if (Array.isArray(spec.rows)) {
+    /*
+     * `rows: [[y0, y1], ...]` states the bands outright.
+     *
+     * Wukong's sheets need it: his cloak streams a full frame-height above and
+     * behind him, so consecutive rows touch and no gap search can tell them
+     * apart, and the rows are not on an even pitch either — one sheet opens
+     * with a band of five oversized hero poses before the animation grid
+     * starts. Measured bounds are the only honest answer, and stating them also
+     * lets a sheet ignore rows it has no use for.
+     */
+    if (spec.rows.length !== spec.cols.length) {
+      throw new Error(`${key}: ${spec.rows.length} rows given but ${spec.cols.length} col counts`);
+    }
+    rows = spec.rows.map(([y0, y1]) => [y0, y1]);
+    rowMethod = 'given';
+  } else if (even) {
     const lines = tile(height, spec.cols.length);
     rows = spec.cols.map((_, r) => [lines[r], lines[r + 1] - 1]);
     rowMethod = 'even';
@@ -322,9 +338,26 @@ export function analyseSheet({ dir, key, spec, rules, img: decoded }) {
     for (let y = y0; y <= y1; y++) {
       for (let x = 0; x < width; x++) if (alpha[y * width + x]) colProfile[x]++;
     }
-    const { cuts, method } = even
-      ? { cuts: tile(width, count), method: 'even' }
-      : axisCuts(colProfile, width, count);
+    /*
+     * `cuts: {[row]: [0, …, width]}` states a row's column lines outright, the
+     * way `rows` states its band.
+     *
+     * The last resort, for a row no rule can cut: Wukong's swings are drawn
+     * with the qi trail *inside* the pose, so a crescent from one frame sweeps
+     * bodily through the next two, and the poses themselves drift right as the
+     * swing accelerates. There is no emptiest line to find and no pitch to lock
+     * onto — the boundaries were read off a ruler overlay by eye, which is what
+     * the numbers in the inventory are.
+     */
+    const given = spec.cuts?.[row];
+    if (given && given.length !== count + 1) {
+      throw new Error(`${key} r${row}: ${given.length} cut lines given for ${count} frames`);
+    }
+    const { cuts, method } = given
+      ? { cuts: given, method: 'given' }
+      : even
+        ? { cuts: tile(width, count), method: 'even' }
+        : axisCuts(colProfile, width, count);
     rowInfo.push({ row, y0, y1, method, rowMethod, cuts });
 
     const owns = [];
@@ -347,6 +380,25 @@ export function analyseSheet({ dir, key, spec, rules, img: decoded }) {
     }
 
     if (spec.claim === 'nearest') reclaim({ alpha, labels, sizes, width, y0, y1, owns });
+
+    /*
+     * `drop: <fraction>` discards any owned component smaller than that share of
+     * the cell's biggest one.
+     *
+     * For a sheet whose frames overlap, the cut line does not only decide who
+     * owns what — it severs. The tail of one frame's crescent, left stranded on
+     * the wrong side of the line, becomes a component of its own and draws as a
+     * bright arc floating beside the next pose. Anything that small next to a
+     * whole character is debris, and this is the sheet saying how small.
+     */
+    if (spec.drop) {
+      for (const own of owns) {
+        let biggest = 0;
+        for (const label of own) biggest = Math.max(biggest, sizes[label]);
+        const floor = biggest * spec.drop;
+        for (const label of own) if (sizes[label] < floor) own.delete(label);
+      }
+    }
 
     for (let col = 0; col < count; col++) {
       frames.push(
@@ -472,6 +524,9 @@ function addCycleAnchors(frames) {
  *   ground bottom of the art, centred on its lowest slice. Right for the
  *          lying-down and dissolve frames, which have no feet under them.
  *   centre box centre. Right for the effect-only frames.
+ *   muzzle left edge of the art, on its centre line there. Right for a beam
+ *          or bolt drawn along the row, which has to hang off the staff that
+ *          threw it rather than off its own middle.
  */
 function measureFrame({ img, alpha, labels, own, row, col, y0, y1, rules, sliceX0, sliceX1 }) {
   const { width, data } = img;
@@ -512,6 +567,21 @@ function measureFrame({ img, alpha, labels, own, row, col, y0, y1, rules, sliceX
     return n ? Math.round(sum / n) : Math.round((minX + maxX) / 2);
   };
 
+  /** centreOfRows turned on its side: the art's middle across a column band. */
+  const centreOfCols = (from, to) => {
+    let sum = 0;
+    let n = 0;
+    for (let x = from; x <= to; x++) {
+      for (let y = minY; y <= maxY; y++) {
+        const i = y * width + x;
+        if (!alpha[i] || !own.has(labels[i])) continue;
+        sum += y;
+        n++;
+      }
+    }
+    return n ? Math.round(sum / n) : Math.round((minY + maxY) / 2);
+  };
+
   const h = maxY - minY + 1;
   const feetY = darkBottom > 0 ? darkBottom : maxY;
   const anchors = {
@@ -525,6 +595,16 @@ function measureFrame({ img, alpha, labels, own, row, col, y0, y1, rules, sliceX
     cell: {
       x: Math.round((sliceX0 + sliceX1) / 2),
       y: Math.round((minY + maxY) / 2),
+    },
+    /**
+     * The firing end of a streak: leftmost art column, on the centre line of
+     * the art there. For a beam or bolt drawn lying along the row, this is the
+     * end that has to stay welded to the staff that threw it, whatever length
+     * the rest of the drawing has reached.
+     */
+    muzzle: {
+      x: minX,
+      y: centreOfCols(minX, Math.min(maxX, minX + Math.max(2, Math.round((maxX - minX + 1) * 0.08)))),
     },
   };
 
@@ -663,10 +743,23 @@ function resample(surface, width, height) {
 
 /* ------------------------------------------------------------------ report */
 
-/** Extent of one frame around its anchor, already divided by the sheet scale. */
+/**
+ * Downscale that lands one frame on the shared body height.
+ *
+ * Normally that is the sheet's single `scale`: a sheet is one drawing session
+ * and its rows agree with each other. `rowScale` is the exception, for a sheet
+ * whose rows do not — Wukong's head-on swing sheets draw the two swings aimed
+ * straight down at roughly twice the size of the four aimed into the corners,
+ * so one number per sheet would ship half its rows at the wrong height.
+ */
+export function frameScale(sheet, frame) {
+  return sheet.spec.rowScale?.[frame.row] ?? sheet.spec.scale;
+}
+
+/** Extent of one frame around its anchor, already divided by its own scale. */
 export function frameExtent(sheet, frame, anchor = 'feet') {
   const a = frame.anchors[anchor];
-  const s = sheet.spec.scale;
+  const s = frameScale(sheet, frame);
   return {
     left: Math.ceil((a.x - frame.x) / s),
     right: Math.ceil((frame.x + frame.w - 1 - a.x) / s),

@@ -9,6 +9,9 @@ export const RUNG_NGOAI_MON: ZoneDef = {
   width: W,
   height: H,
   ground: 'forest',
+  // Under canopy: dimmer than the meadow, and cool rather than neutral, which
+  // is what makes walking out of the forest feel like walking out.
+  ambient: 0xb4b4c4,
   shrine: { x: 240, y: 900 },
   trees: [
     [360, 360], [520, 480], [700, 300], [880, 420], [1100, 360],

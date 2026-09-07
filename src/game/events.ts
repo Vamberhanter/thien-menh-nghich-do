@@ -151,7 +151,7 @@ export interface DashPayload {
 }
 
 export interface CharacterChangedPayload {
-  /** Stable id, e.g. `lamuyen` / `nhuyen`. */
+  /** Stable id, e.g. `nhuyen` / `huyetlang`. */
   id: string;
   /** Display name for the HUD. */
   name: string;

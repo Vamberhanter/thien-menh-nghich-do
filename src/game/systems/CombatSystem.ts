@@ -15,13 +15,6 @@ export interface SkillDefinition {
   recovery?: number;
 }
 
-export const HU_VO_KIEM_KHI: SkillDefinition = {
-  name: 'Hư Vô Kiếm Khí',
-  damageMultiplier: 2.5,
-  cooldown: 2000,
-  spiritCost: 8,
-};
-
 /**
  * Như Yên's three Băng Cung techniques, in slot order (K, L, Space).
  *
@@ -79,6 +72,73 @@ export const LIET_ANH_BO: SkillDefinition = {
   spiritCost: 4,
 };
 
+/*
+ * Tôn Ngộ Không's kit: four offensive techniques, one per drawn sheet, plus
+ * the cloud dash.
+ *
+ * `recovery` holds him past the end of the clip. It is short for all four,
+ * because unlike the other kits the finale is *inside* the animation rather
+ * than spawned to outlive it — this is only long enough for the last drawn
+ * frame to be read before he stands out of the cast.
+ *
+ * Four offensive techniques is one more than any other kit carries, and they
+ * are individually cheaper and weaker to pay for it: Ma Nguyệt Trảm undercuts
+ * Băng Phách Trảm's multiplier, and neither of his two area techniques reaches
+ * Băng Tinh Trận's. Having a fourth button does not mean having a third more
+ * damage — it means having an answer to a fourth shape of problem.
+ */
+export const MA_NGUYET_TRAM: SkillDefinition = {
+  name: 'Ma Nguyệt Trảm',
+  damageMultiplier: 1.9,
+  cooldown: 1500,
+  spiritCost: 5,
+  recovery: 240,
+};
+
+/** The fourth: flame rising around him into a demon's face. */
+export const PHAN_THIEN_MA_DIEM: SkillDefinition = {
+  name: 'Phần Thiên Ma Diễm',
+  damageMultiplier: 2.6,
+  cooldown: 6800,
+  spiritCost: 14,
+  recovery: 320,
+};
+
+export const CUU_U_NO_DIEM: SkillDefinition = {
+  name: 'Cửu U Nộ Diễm',
+  damageMultiplier: 3.0,
+  cooldown: 5600,
+  spiritCost: 12,
+  recovery: 300,
+};
+
+/**
+ * `recovery` here is unusually long, and it is the art that sets it: the five
+ * cast frames run 385ms, but the bolt they throw keeps going for another 308
+ * and the lance then stands in the air before it fades. At 220 he dropped back
+ * to a standing pose while his own beam was still at full brightness. 450 holds
+ * the firing pose until the lance starts going out.
+ */
+export const HANG_MA_CHAN_LOI: SkillDefinition = {
+  name: 'Hàng Ma Chân Lôi',
+  damageMultiplier: 2.4,
+  cooldown: 3800,
+  spiritCost: 9,
+  recovery: 450,
+};
+
+/**
+ * No cooldown, because this one is a switch rather than a move: press to get on
+ * the cloud, press again to get off. Only taking off costs anything, so the
+ * spirit price is what limits how freely he uses it.
+ */
+export const CAN_DAU_VAN: SkillDefinition = {
+  name: 'Cân Đẩu Vân',
+  damageMultiplier: 0,
+  cooldown: 0,
+  spiritCost: 4,
+};
+
 export const NHU_YEN_SKILLS: readonly SkillDefinition[] = [
   BANG_PHACH_TRAM,
   BANG_TINH_TRAN,
@@ -97,6 +157,14 @@ export const NhuYenSlot = {
   IceArray: 1,
   ShadowStep: 2,
 } as const;
+
+export const WUKONG_SKILLS: readonly SkillDefinition[] = [
+  CUU_U_NO_DIEM,
+  HANG_MA_CHAN_LOI,
+  PHAN_THIEN_MA_DIEM,
+  MA_NGUYET_TRAM,
+  CAN_DAU_VAN,
+];
 
 export const HuyetLangSlot = {
   MagmaSlash: 0,
@@ -138,6 +206,18 @@ export const MikuSlot = {
   ShadowStep: 2,
 } as const;
 
+/**
+ * Five slots, not three. The order follows the sheets they were drawn on
+ * (skill1..skill4), so the HUD reads the same way the art folder does.
+ */
+export const WukongSlot = {
+  Nova: 0,
+  Lance: 1,
+  Wrath: 2,
+  Dragon: 3,
+  CloudStep: 4,
+} as const;
+
 export const ATTACK_COOLDOWN = 500;
 
 /** Spirit power regenerated per second while not casting. */
@@ -149,7 +229,7 @@ const SPIRIT_REGEN_PER_SECOND = 2;
  *
  * A character may carry several skills, each on its own cooldown but all
  * drawing from one spirit pool. Every skill method takes a slot that defaults
- * to 0, so a one-skill character (Lâm Uyên) never has to mention it.
+ * to 0, so a one-skill character never has to mention it.
  */
 export class CombatSystem {
   readonly skills: readonly SkillDefinition[];
@@ -161,7 +241,7 @@ export class CombatSystem {
 
   constructor(
     private readonly stats: CharacterStats,
-    skills: SkillDefinition | readonly SkillDefinition[] = HU_VO_KIEM_KHI,
+    skills: SkillDefinition | readonly SkillDefinition[],
     private readonly attackCooldown: number = ATTACK_COOLDOWN,
   ) {
     this.skills = Array.isArray(skills) ? skills : [skills as SkillDefinition];

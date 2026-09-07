@@ -30,6 +30,10 @@ export const HUYET_MA_COC: ZoneDef = {
   width: W,
   height: H,
   ground: 'ash',
+  // A cave. This is where lighting earns its place: the zone is genuinely dark
+  // and what you can see is what the shrine, the boss and your own techniques
+  // light up.
+  ambient: 0x6a5a70,
   shrine: { x: 380, y: 1600 },
   arena: { ...ARENA, label: 'Sàn Huyết Ma' },
   trees: [

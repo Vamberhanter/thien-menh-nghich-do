@@ -125,3 +125,31 @@ export const TINH_CA_TAM_LIEN: readonly ComboStep[] = [
   { damageMultiplier: 1.2, frost: 0, reach: 96, radius: 76, knockback: 8 },
   { damageMultiplier: 1.9, frost: 0, reach: 118, radius: 86, knockback: 16 },
 ];
+
+/**
+ * Cửu Chuyển Côn Pháp — Tôn Ngộ Không's staff chain. Longest reach in the
+ * roster and no Frost: the staff is drawn sweeping a full body-width past him,
+ * so the hit boxes are sized to the art rather than to his silhouette.
+ *
+ * Damage per step sits between Như Yên's and Huyết Lang's. He is the kit that
+ * pays for a third technique, so his basic chain is not also the best one.
+ */
+export const CUU_CHUYEN_CON_PHAP: readonly ComboStep[] = [
+  { damageMultiplier: 1.0, frost: 0, reach: 60, radius: 78, knockback: 4 },
+  { damageMultiplier: 1.2, frost: 0, reach: 70, radius: 88, knockback: 8 },
+  { damageMultiplier: 1.9, frost: 0, reach: 82, radius: 100, knockback: 18 },
+];
+
+/*
+ * Those numbers are near-circles centred close to his own feet, not the
+ * far-flung discs the first pass gave him, and the reason is what the art
+ * does: measured on each impact frame, his crescent runs from 45px *behind*
+ * him out to 165px in front. It wraps around him.
+ *
+ * The first pass sized the hit off `reach` alone and left the inner edge at
+ * +14, +26 and +38 — so the finisher, the hit the whole chain builds to, could
+ * not touch anything within 38px of his boots. A mob in melee stands closer
+ * than that, which is why the swing looked like it swept straight through one
+ * and did nothing. Every step now opens at -18, so a target he is standing
+ * next to is inside all three.
+ */

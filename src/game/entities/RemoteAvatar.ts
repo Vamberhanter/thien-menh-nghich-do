@@ -1,37 +1,43 @@
 import Phaser from 'phaser';
-import { FEET_OFFSET_Y } from './LinYuan';
-import type { PlayerId } from './playerHandle';
-import {
-  LIN_YUAN_TEXTURE,
-  LinYuanAnim,
-  createLinYuanAnimations,
-} from '../animations/linYuanAnimations';
+import { PLAYER_TEXTURES, type PlayerId } from './playerHandle';
 import {
   NHU_YEN_TEXTURE,
   NhuYenClip,
   createNhuYenAnimations,
 } from '../animations/nhuYenAnimations';
 import {
-  HUYET_LANG_TEXTURE,
   HuyetLangClip,
   createHuyetLangAnimations,
 } from '../animations/huyetLangAnimations';
 import {
-  MIKU_TEXTURE,
   MikuClip,
   createMikuAnimations,
 } from '../animations/mikuAnimations';
+import {
+  WukongClip,
+  WUKONG_ART_SCALE,
+  castScaleOf as wukongCastScale,
+  createWukongAnimations,
+} from '../animations/wukongAnimations';
 import type { CharacterState, Direction } from '../types';
-import { BANG_PHACH_TRAM, BANG_TINH_TRAN, HUYET_DIEM_TRAM, TINH_MANG_TRAM } from '../systems/CombatSystem';
+import {
+  BANG_PHACH_TRAM,
+  BANG_TINH_TRAN,
+  HUYET_DIEM_TRAM,
+  TINH_MANG_TRAM,
+  MA_NGUYET_TRAM,
+  HANG_MA_CHAN_LOI,
+  PHAN_THIEN_MA_DIEM,
+} from '../systems/CombatSystem';
 import type { NetAction, NetPose } from '../../net/types';
 
 const LABEL_LIFT = 92;
 
 const LABEL_COLOR: Record<PlayerId, string> = {
   nhuyen: '#9fe8ff',
-  lamuyen: '#c8d6ff',
   huyetlang: '#ff7a4a',
   miku: '#c9a0ff',
+  wukong: '#c98aff',
 };
 
 /**
@@ -66,10 +72,10 @@ export class RemoteAvatar {
     this.destX = pose.x;
     this.destY = pose.y;
 
-    createLinYuanAnimations(scene);
     createNhuYenAnimations(scene);
     createHuyetLangAnimations(scene);
     createMikuAnimations(scene);
+    createWukongAnimations(scene);
 
     this.sprite = this.makeSprite(pose.character, pose.x, pose.y);
     this.label = scene.add
@@ -161,20 +167,29 @@ export class RemoteAvatar {
   }
 
   private clipFor(state: CharacterState): { key: string; flip: boolean } {
-    if (this.character === 'nhuyen') {
-      return nhuYenClip(state, this.facing, this.atk, this.skillName);
-    }
     if (this.character === 'huyetlang') {
       return huyetLangClip(state, this.facing, this.atk, this.skillName);
     }
     if (this.character === 'miku') {
       return mikuClip(state, this.facing, this.atk, this.skillName);
     }
-    return { key: linYuanKey(state, this.facing), flip: false };
+    if (this.character === 'wukong') {
+      return wukongClip(state, this.facing, this.atk, this.skillName);
+    }
+    return nhuYenClip(state, this.facing, this.atk, this.skillName);
   }
 
   private playClip(clip: { key: string; flip: boolean }, force: boolean): void {
     this.sprite.setFlipX(clip.flip);
+    // Wukong's techniques are drawn larger than he is, by a factor that differs
+    // per technique (CAST_SCALE in wukongAnimations), so somebody else casting
+    // one has to read the same size on your screen as it does on theirs.
+    const cast = this.character === 'wukong' && this.state === 'skill';
+    // Divided by the art scale for the same reason the local one is: his atlas is
+    // baked larger than the world. The other three kits are still 1:1, so they
+    // divide by 1 and nothing changes for them.
+    const art = this.character === 'wukong' ? WUKONG_ART_SCALE : 1;
+    this.sprite.setScale((cast ? wukongCastScale(clip) : 1) / art);
     if (!force && this.playedKey === clip.key) return;
     this.playedKey = clip.key;
     if (this.scene.anims.exists(clip.key)) {
@@ -191,36 +206,17 @@ export class RemoteAvatar {
     this.label.setColor(LABEL_COLOR[character] ?? '#c8d6ff');
   }
 
+  // Every character carries a feet pivot on every atlas frame, so the
+  // sprite's own position already is the foot point.
   private makeSprite(character: PlayerId, x: number, y: number): Phaser.GameObjects.Sprite {
-    if (character === 'nhuyen') {
-      const sprite = this.scene.add.sprite(x, y, NHU_YEN_TEXTURE, 'idle_down_0');
-      sprite.setDepth(y);
-      return sprite;
-    }
-    // Như Yên and Huyết Lang both carry a feet pivot on every atlas frame, so
-    // their sprite position is the foot point already
-    if (character === 'huyetlang') {
-      const sprite = this.scene.add.sprite(x, y, HUYET_LANG_TEXTURE, 'idle_down_0');
-      sprite.setDepth(y);
-      return sprite;
-    }
-    if (character === 'miku') {
-      const sprite = this.scene.add.sprite(x, y, MIKU_TEXTURE, 'idle_down_0');
-      sprite.setDepth(y);
-      return sprite;
-    }
-    const sprite = this.scene.add.sprite(x, y - FEET_OFFSET_Y, LIN_YUAN_TEXTURE, 'idle_down_0');
-    sprite.setOrigin(0.5, 0.5);
+    const texture = PLAYER_TEXTURES[character] ?? NHU_YEN_TEXTURE;
+    const sprite = this.scene.add.sprite(x, y, texture, 'idle_down_0');
     sprite.setDepth(y);
     return sprite;
   }
 
   private setFoot(x: number, y: number): void {
-    if (this.character === 'nhuyen' || this.character === 'huyetlang' || this.character === 'miku') {
-      this.sprite.setPosition(x, y);
-    } else {
-      this.sprite.setPosition(x, y - FEET_OFFSET_Y);
-    }
+    this.sprite.setPosition(x, y);
     this.sprite.setDepth(y);
     this.label.setPosition(x, y - LABEL_LIFT);
     this.label.setDepth(y + 1);
@@ -231,8 +227,7 @@ export class RemoteAvatar {
   }
 
   private displayY(): number {
-    if (this.character === 'nhuyen' || this.character === 'huyetlang' || this.character === 'miku') return this.sprite.y;
-    return this.sprite.y + FEET_OFFSET_Y;
+    return this.sprite.y;
   }
 }
 
@@ -266,25 +261,6 @@ function nhuYenClip(
       return NhuYenClip.death();
     default:
       return NhuYenClip.idle(facing);
-  }
-}
-
-function linYuanKey(state: CharacterState, facing: Direction): string {
-  switch (state) {
-    case 'walk':
-    case 'run':
-    case 'dash':
-      return LinYuanAnim.walk(facing);
-    case 'attack':
-      return LinYuanAnim.attack(facing);
-    case 'skill':
-      return LinYuanAnim.skill(facing);
-    case 'hurt':
-      return LinYuanAnim.hurt;
-    case 'dead':
-      return LinYuanAnim.death;
-    default:
-      return LinYuanAnim.idle(facing);
   }
 }
 
@@ -339,5 +315,44 @@ function mikuClip(
       return MikuClip.death();
     default:
       return MikuClip.idle(facing);
+  }
+}
+
+/**
+ * Tôn Ngộ Không has real art for every state a replica can be in, including a
+ * dedicated run and a cloud dash, so unlike the others nothing here has to
+ * borrow a neighbouring clip. The skill name picks between his three
+ * techniques; an unnamed one is Cửu U Nộ Diễm, whose qi gathers from nothing
+ * and so is the safest thing to show while the packet naming it is in flight.
+ */
+function wukongClip(
+  state: CharacterState,
+  facing: Direction,
+  atk: number,
+  skillName: string,
+): { key: string; flip: boolean } {
+  switch (state) {
+    case 'walk':
+      return WukongClip.move(facing, false);
+    case 'run':
+      return WukongClip.move(facing, true);
+    case 'dash':
+      return WukongClip.dash(facing);
+    case 'attack':
+      return WukongClip.attack(facing, atk);
+    case 'skill':
+      return skillName === MA_NGUYET_TRAM.name
+        ? WukongClip.dragon(facing)
+        : skillName === HANG_MA_CHAN_LOI.name
+          ? WukongClip.lance(facing)
+          : skillName === PHAN_THIEN_MA_DIEM.name
+            ? WukongClip.wrath(facing)
+            : WukongClip.nova(facing);
+    case 'hurt':
+      return WukongClip.hurt();
+    case 'dead':
+      return WukongClip.death();
+    default:
+      return WukongClip.idle(facing);
   }
 }

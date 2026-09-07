@@ -1,15 +1,17 @@
 import Phaser from 'phaser';
-import { FEET_OFFSET_Y, LinYuan } from './LinYuan';
+import { HUYET_LANG_TEXTURE } from '../animations/huyetLangAnimations';
+import { MIKU_TEXTURE } from '../animations/mikuAnimations';
+import { NHU_YEN_TEXTURE } from '../animations/nhuYenAnimations';
+import { WUKONG_TEXTURE } from '../animations/wukongAnimations';
 import { HUYET_LANG_PROFILE, HuyetLang } from './HuyetLang';
 import { MIKU_PROFILE, Miku } from './Miku';
 import { NHU_YEN_PROFILE, NhuYen } from './NhuYen';
-import { CharacterController } from '../systems/CharacterController';
+import { WUKONG_PROFILE, Wukong } from './Wukong';
 import { HuyetLangController } from '../systems/HuyetLangController';
 import { MikuController } from '../systems/MikuController';
 import { NhuYenController } from '../systems/NhuYenController';
-import { HU_VO_KIEM_KHI } from '../systems/CombatSystem';
+import { WukongController } from '../systems/WukongController';
 import type { CharacterChangedPayload } from '../events';
-import { DIRECTION_VECTORS } from '../types';
 import type { CharacterStats } from '../types';
 import type { PlayerNetState } from '../../net/types';
 import { currentZone } from '../worldState';
@@ -19,19 +21,18 @@ import type { CombatSystem } from '../systems/CombatSystem';
 /**
  * Uniform grip on whichever character the scene is driving.
  *
- * The two entities are deliberately not made to share a base class: Lâm Uyên's
- * sprite is centred on its frame and has one skill, Như Yên's is pivoted on her
- * feet and has a combo plus three. This wrapper is the small amount of glue the
- * scene actually needs — the rest of the differences stay inside each entity.
+ * The three characters are deliberately not made to share a base class: each
+ * has its own combo length and skill set, and Tôn Ngộ Không has four skill
+ * slots where the others have three. This wrapper is the small amount of glue
+ * the scene actually needs — the rest of the differences stay inside each
+ * entity.
  */
 export interface PlayerHandle {
   /** Identity + skill names, for the HUD. */
   readonly profile: CharacterChangedPayload;
   readonly sprite: Phaser.Physics.Arcade.Sprite;
-  /**
-   * World Y of the point the character stands on — the depth-sort key. Như Yên
-   * is already pivoted there; Lâm Uyên needs her half-frame offset added.
-   */
+  /** World Y of the point the character stands on — the depth-sort key. Both
+   *  entities are already pivoted on their feet, so this is just `sprite.y`. */
   footY(): number;
   /** Where the character stands, for enemy ranges and AI targeting. */
   hitPoint(): { x: number; y: number };
@@ -39,6 +40,12 @@ export interface PlayerHandle {
   readonly alive: boolean;
   /** True while a dash phases through damage (Như Yên's Sương Ảnh Bộ). */
   readonly invulnerable: boolean;
+  /**
+   * True while the character is drawn off the ground — Cân Đẩu Vân, and only
+   * Wukong. The scene reads it to sort him above the scenery and to let him
+   * over it; everyone else is always false.
+   */
+  readonly airborne: boolean;
   update(time: number, delta: number): void;
   hurt(amount: number): void;
   respawn(x: number, y: number): void;
@@ -50,39 +57,6 @@ export interface PlayerHandle {
   /** Same hit path the boss and mobs use. */
   applyHit(hit: HitInfo): void;
   hitRadius(): number;
-}
-
-export const LAM_UYEN_PROFILE: CharacterChangedPayload = {
-  id: 'lamuyen',
-  name: 'Lâm Uyên',
-  sect: 'Hư Vô Kiếm',
-  skills: [HU_VO_KIEM_KHI.name],
-  comboSteps: 0,
-};
-
-export function createLamUyen(
-  scene: Phaser.Scene,
-  x: number,
-  y: number,
-  stats?: Partial<CharacterStats>,
-): PlayerHandle {
-  const sprite = new LinYuan(scene, x, y, stats);
-  const controller = new CharacterController(scene, sprite);
-  return wrapPlayer(LAM_UYEN_PROFILE, sprite, controller, {
-    footY: () => sprite.y + FEET_OFFSET_Y,
-    hitPoint: () => ({ x: sprite.x, y: sprite.y + FEET_OFFSET_Y }),
-    invulnerable: () => false,
-    snapshot: () => ({
-      character: 'lamuyen',
-      x: sprite.x,
-      y: sprite.y + FEET_OFFSET_Y,
-      facing: sprite.facingDirection,
-      aim: DIRECTION_VECTORS[sprite.facingDirection],
-      state: sprite.characterState,
-      hp: sprite.stats.hp,
-      zone: currentZone(),
-    }),
-  });
 }
 
 export function createNhuYen(
@@ -175,6 +149,37 @@ export function createMiku(
   });
 }
 
+export function createWukong(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  stats?: Partial<CharacterStats>,
+): PlayerHandle {
+  const sprite = new Wukong(scene, x, y, stats);
+  const controller = new WukongController(scene, sprite);
+  return wrapPlayer({ ...WUKONG_PROFILE }, sprite, controller, {
+    footY: () => sprite.y,
+    hitPoint: () => ({ x: sprite.x, y: sprite.y }),
+    invulnerable: () => sprite.isInvulnerable,
+    airborne: () => sprite.airHeight > 0,
+    snapshot: () => {
+      const pending = sprite.combo.pending;
+      const atk = pending === 0 ? sprite.combo.length - 1 : pending - 1;
+      return {
+        character: 'wukong',
+        x: sprite.x,
+        y: sprite.y,
+        facing: sprite.facingDirection,
+        aim: sprite.aimVector,
+        state: sprite.characterState,
+        hp: sprite.stats.hp,
+        atk,
+        zone: currentZone(),
+      };
+    },
+  });
+}
+
 interface LivingSprite extends Phaser.Physics.Arcade.Sprite {
   readonly stats: CharacterStats;
   readonly combat: CombatSystem;
@@ -191,6 +196,7 @@ function wrapPlayer(
     footY(): number;
     hitPoint(): { x: number; y: number };
     invulnerable(): boolean;
+    airborne?(): boolean;
     snapshot(): PlayerNetState;
   },
 ): PlayerHandle {
@@ -204,6 +210,9 @@ function wrapPlayer(
     },
     get invulnerable() {
       return bits.invulnerable();
+    },
+    get airborne() {
+      return bits.airborne?.() ?? false;
     },
     get stats() {
       return sprite.stats;
@@ -240,10 +249,27 @@ export function asDamageable(player: PlayerHandle): Damageable {
 }
 
 export const PLAYER_FACTORIES = {
-  lamuyen: createLamUyen,
   nhuyen: createNhuYen,
   huyetlang: createHuyetLang,
   miku: createMiku,
+  wukong: createWukong,
 } as const;
 
 export type PlayerId = keyof typeof PLAYER_FACTORIES;
+
+/**
+ * The atlas each kit draws from.
+ *
+ * Exists so a caller can ask whether a character is *loadable* before trying
+ * to build one. Every kit's art is fetched at boot, and a fetch can come back
+ * empty — the atlas may not have been uploaded yet, or, in dev, the images may
+ * simply not be on this machine. Constructing an entity whose texture is
+ * missing throws from inside Phaser's animation code, which took the whole
+ * scene down with it; `WorldScene.playable` uses this to step around that.
+ */
+export const PLAYER_TEXTURES: Record<PlayerId, string> = {
+  nhuyen: NHU_YEN_TEXTURE,
+  huyetlang: HUYET_LANG_TEXTURE,
+  miku: MIKU_TEXTURE,
+  wukong: WUKONG_TEXTURE,
+};

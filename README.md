@@ -1,14 +1,21 @@
 # Thiên Mệnh Nghịch Đồ — Vertical Slice
 
 Game tu tiên pixel-art 2D chạy trên web: **Phaser 3 + React + TypeScript + Vite**.
-Hai nhân vật chơi được, cả hai đều dùng sprite sheet do bạn vẽ, đã được bóc tách
+Ba nhân vật chơi được, cả ba đều dùng sprite sheet do bạn vẽ, đã được bóc tách
 tự động thành atlas game-ready:
 
-* **Lâm Uyên** — Hư Vô Kiếm. Một sheet `lamuyen.png`.
 * **Như Yên** — Băng Cung. Năm sheet `nhuyen-*.png`, kiếm băng: liên chiêu 3 thức,
   3 chiêu thức, chạy nước rút và ảnh bộ.
+* **Huyết Lang** — Tam Thủ Môn. Sheet `huyetlang-*.png`, trường đao: liên chiêu,
+  3 chiêu thức (Huyết Diễm Trảm, Tam Thủ Hống, Liệt Ảnh Bộ).
+* **Tôn Ngộ Không** — Hoa Quả Sơn. Chín sheet `wukong-*.png`, thiết côn: liên
+  chiêu 3 thức, **4 chiêu công** (Cửu U Nộ Diễm, Hàng Ma Chân Lôi, Phần Thiên Ma
+  Diễm, Ma Nguyệt Trảm) cộng Cân Đẩu Vân, chạy nước rút và cưỡi mây. Anh là
+  người duy nhất có 4 chiêu công — vì cả bốn đều được vẽ nguyên một hàng art,
+  khí tụ dần ra từ cây côn qua từng frame, nên cắt bớt một chiêu là vứt art đi
+  chứ không phải gọn code đi.
 
-Nhấn `Q` trong game để đổi qua lại giữa hai người.
+Nhấn `Q` trong game để đổi qua lại giữa ba người.
 
 Cùng map có **Boss 1 — Huyết Ma** (sheet trong `public/assets/boss/boss1/`), tự
 tuần tra và tự đánh nhau với nhân vật đang chơi — xem [Boss 1](#boss-1--huyết-ma-và-hệ-ai-dùng-chung).
@@ -18,14 +25,21 @@ npm install
 npm run dev              # http://localhost:5173
 npm run build            # tsc -b && vite build
 
-npm run build:lamuyen    # bóc tách lamuyen.png -> atlas (chạy lại khi sửa sheet)
-npm run inspect:lamuyen  # báo cáo segmentation: mỗi hàng có bao nhiêu frame
-npm run dump:lamuyen     # xuất từng frame + strip từng hàng để xem bằng mắt
-
 npm run build:nhuyen     # bóc tách 5 sheet Như Yên -> atlas/
 npm run inspect:nhuyen   # báo cáo segmentation + kích thước frame sau khi scale
 npm run measure:nhuyen   # thước đo "chân -> cổ áo", dùng để chỉnh scale từng sheet
 npm run dump:nhuyen      # xuất toàn bộ frame để kiểm tra pose bằng mắt
+
+npm run build:huyetlang    # bóc tách sheet Huyết Lang -> atlas/
+npm run inspect:huyetlang  # báo cáo segmentation từng hàng
+npm run measure:huyetlang  # thước đo "chân -> cổ áo"
+npm run dump:huyetlang     # xuất toàn bộ frame để kiểm tra pose bằng mắt
+
+npm run build:wukong       # bóc tách 6 sheet Tôn Ngộ Không -> atlas/
+npm run inspect:wukong     # báo cáo segmentation từng hàng
+npm run measure:wukong     # thước đo "chân -> vai"
+npm run dump:wukong        # xuất toàn bộ frame để kiểm tra pose bằng mắt
+npm run cuts:wukong        # vẽ đường cắt + neo chân lên sheet gốc để soi bằng mắt
 
 npm run measure:stride   # đo bàn chân trôi bao nhiêu px mỗi hàng đi/chạy
 npm run analyse:cycle    # đo độ nhiễu giữa các frame + tìm thứ tự chu kỳ êm nhất
@@ -49,12 +63,14 @@ Chung cho cả hai nhân vật:
 | `R` | (debug) hồi sinh tại điểm spawn |
 | `B` | (debug) gọi lại Boss 1 tại chỗ đứng của nó |
 
-**Lâm Uyên** (HP 100, ATK 15, speed 140, SP 20):
+**Huyết Lang** (HP 128, ATK 17, speed 108, SP 18):
 
 | Phím | Hành động |
 | --- | --- |
-| `J` | Kiếm chiêu — damage = attack, cooldown 500ms |
-| `K` | **Hư Vô Kiếm Khí** — damage = attack × 2.5, cooldown 2000ms, tốn 8 SP, quét theo đường bay 150px |
+| `J` | Trường đao liên chiêu |
+| `K` | **Huyết Diễm Trảm** — damage = attack × 2.2, cooldown 1600ms, tốn 6 SP |
+| `L` | **Tam Thủ Hống** — damage = attack × 3.4, cooldown 5200ms, tốn 12 SP |
+| `Space` | **Liệt Ảnh Bộ** — lao theo hướng nhắm, miễn sát thương, cooldown 900ms, tốn 4 SP |
 
 **Như Yên** (HP 92, ATK 13, speed 132, SP 26):
 
@@ -65,6 +81,27 @@ Chung cho cả hai nhân vật:
 | `K` | **Băng Phách Trảm** — attack × 2.2, cooldown 1600ms, 6 SP. Phóng vệt kiếm khí bay 300px, **xuyên** qua mọi mục tiêu trên đường, +2 Băng |
 | `L` | **Băng Tinh Trận** — attack × 3.4, cooldown 5200ms, 12 SP. Tụ khí 6 frame rồi dựng **trận 9 trụ băng**; sát thương là một đĩa lan từ 120px ra **294px**, kín đặc không kẽ, +3 Băng (đóng băng ngay) |
 | `Space` | **Sương Ảnh Bộ** — lao 168px theo hướng nhắm trong 170ms, **miễn sát thương**, để lại 4 ảnh tàn, cooldown 900ms, 4 SP |
+
+**Tôn Ngộ Không** (HP 84, ATK 14, speed 142, SP 34):
+
+| Phím | Hành động |
+| --- | --- |
+| `Shift` (giữ) | Chạy nước rút — speed × 1.42, dùng đúng dải frame "run" trong sheet |
+| `J` | **Cửu Chuyển Côn Pháp** — liên chiêu 3 thức: attack × 1.0 / 1.2 / 1.9, vùng đánh phủ −20…140 / −20…160 / −20…180px quanh chân. Tầm xa nhất roster, vì cây côn được vẽ quét qua cả một thân người. **Anh vung theo hướng nhắm chứ không theo hướng sprite quay**: cả tám hướng đều có art riêng, và ba hướng (ngang, bổ xuống, bổ lên) có đủ ba thức khác nhau — không kit nào khác được vậy. Bốn góc chéo có hai thức |
+| `K` | **Cửu U Nộ Diễm** — attack × 3.0, cooldown 5600ms, 12 SP. Khí tụ dưới chân rồi bung thành trụ, ăn **đĩa bán kính 200px** quanh chỗ đứng |
+| `L` | **Hàng Ma Chân Lôi** — attack × 2.4, cooldown 3800ms, 9 SP. Cầu khí tụ lại thành thương lôi, **hiện ra sẵn suốt 420px** theo hướng nhắm và ăn ngay trong một frame — câu trả lời chắc chắn cho một hàng địch |
+| `U` | **Phần Thiên Ma Diễm** — attack × 2.6, cooldown 6800ms, 14 SP. Ma diễm dâng qua 7 nấc thành mặt quỷ, ăn **đĩa bán kính 260px** — rộng nhất của anh, và chậm nhất |
+| `O` | **Ma Nguyệt Trảm** — attack × 1.9, cooldown 1500ms, 5 SP. Nguyệt trảm lớn dần thành **rồng khí**, quét dải rộng 84px dài **300px** trước mặt |
+| `Space` | **Cân Đẩu Vân** — cưỡi mây 196px trong 190ms, **miễn sát thương**, cooldown 1000ms, 4 SP |
+
+`U` và `O` là hai phím lẻ, và chúng là của riêng anh: `J K L Space` là hàng phím
+mọi kit đều dùng chung, nhét chiêu thứ ba và thứ tư vào đó sẽ làm hàng phím
+chung mang nghĩa khác đi ở đúng một nhân vật. Trên **touch pad chỉ có 3 nút
+chiêu**, nên Phần Thiên Ma Diễm và Ma Nguyệt Trảm hiện chỉ bấm được bằng bàn
+phím — nhân đôi chúng lên nút sẵn có thì tệ hơn.
+
+Thứ tự slot bám theo tên file art (`skill1`…`skill4`), để HUD đọc cùng thứ tự
+với thư mục art.
 
 Mọi đòn đánh và skill đều **nhắm theo 8 hướng**, kể cả chéo — xem
 [Nhắm 8 hướng](#nhắm-8-hướng-trên-art-4-hướng).
@@ -211,6 +248,33 @@ có `side: 'player' | 'enemy'`:
 * Sương Ảnh Bộ vẫn xuyên đòn — `hitPlayer` kiểm tra `invulnerable` một chỗ duy
   nhất, thay vì ba chiêu của boss mỗi cái kiểm tra một kiểu.
 
+## Trúng đòn: nháy màu chứ không cướp quyền điều khiển
+
+Trước đây `takeDamage` giao thân người cho animation trúng đòn: `setVelocity(0,0)`,
+`isBusy` bật, không nhận input cho tới khi clip chạy hết. Với **một** con quái đó
+là một nhịp kịch tính. Với **ba** con thì cứ mỗi lần bất kỳ con nào chạm tới là
+thêm một phần tư giây tay lái chết — người chơi đọc ra thành *khựng liên tục*,
+dù thực ra không ai bị choáng, chỉ là input rơi.
+
+Giờ nó **không bao giờ** giữ thân người:
+
+* Mọi đòn đều **nháy màu** (`setTintFill`, 70ms) — đó mới là phần phản hồi chính,
+  và nó hiện được kể cả khi nhân vật đang chạy hoặc đang vung côn.
+* Animation loạng choạng chỉ chạy khi **không có gì khác để diễn** — không đang
+  đánh, không đang niệm chiêu, không đang cưỡi mây. Đứng yên thì nó diễn trọn;
+  bấm một phím hướng là nó bị cắt ngang ngay khung hình đó.
+* `FLINCH_GAP = 900ms` chặn animation khởi động lại chồng lên chính nó. Đây đúng
+  là hàng rào mà **boss đã có sẵn** từ khi nó bị stun-lock ra khỏi trận đánh của
+  chính mình — người chơi chỉ là chưa được hưởng.
+* Đòn đang vung **không bị huỷ nữa**: trước kia `pending = null` nghĩa là cú
+  đánh vẫn diễn hết nhưng không gây sát thương gì. Giờ nó vẫn ăn.
+
+Đo thực tế: giữ phím đi trong 2.5s trong khi ăn **16 đòn** (một đòn mỗi 150ms) →
+**0 / 361 khung hình** bị chặn di chuyển.
+
+Áp cho cả bốn kit — code `takeDamage` của Như Yên, Huyết Lang, Miku và Tôn Ngộ
+Không vốn là bốn bản sao giống hệt nhau.
+
 ## Kiểm tra AI bằng clock giả
 
 ```bash
@@ -293,84 +357,27 @@ Giờ danh sách được **suy ra** từ chính các atlas JSON: ảnh nào kh�
 nào tham chiếu thì không thể với tới được, nên bị bỏ. Đổi tên hay thêm nhân vật
 mới cũng không làm nó mục lại.
 
+### 4. WebP lossless cho atlas
+
+Atlas đã được đóng gói + trim sẵn — chỉ còn *cách mã hoá* mỗi texture để tận
+dụng thêm. `tools/image-io.mjs` (`sharp`, mới thêm vào devDependencies) mã hoá
+mỗi atlas ra `.webp` lossless thay vì `.png`; `check-atlas.mjs` được nới đúng
+một chỗ để so khớp — bỏ qua RGB của pixel **hoàn toàn trong suốt** (libwebp có
+quyền ghi đè màu ở đó để nén tốt hơn, nhưng alpha = 0 thì Phaser không bao giờ
+vẽ ra màu đó). Mọi pixel còn hiển thị vẫn phải khớp tuyệt đối.
+
+Đo trên một atlas 7 texture dùng làm bộ kiểm thử (có sẵn PNG tham chiếu):
+1.78MB → 0.98MB, giảm 45%, `check:atlas` báo delta = 0 trên cả 90 frame. Chạy
+lại `npm run build:<nhân_vật>` để tái tạo atlas ở định dạng mới, rồi
+`npm run upload:*` để đẩy lên Supabase Storage.
+
 ### Còn có thể làm nữa
 
-* **WebP lossless** cho atlas: thêm ~20–30% nữa, nhưng cần thêm `sharp` vào
-  devDependencies (máy hiện chưa có encoder WebP nào).
 * **Bỏ frame lật được**: boss có `walk_left` vẽ riêng (8 frame) mà lật
   `walk_right` là ra; Như Yên có `idle_left`/`idle_right`. Đổi lấy việc mất nét
   vẽ tay riêng cho từng hướng.
 * Packer hiện phí ~8% so với trần lý thuyết (5.53 Mpx). MaxRects sẽ ép sát hơn,
   nhưng phần lớn miếng ngon đã lấy rồi.
-
----
-
-# Pipeline bóc tách sprite — Lâm Uyên
-
-Sheet nguồn: `public/assets/characters/lamuyen/lamuyen.png` (1536×1024, RGBA).
-
-Sheet này **không phải grid chuẩn**, nên toàn bộ pipeline đo từ ảnh, không giả định:
-
-* Nền là **gradient xám-xanh**, không trong suốt.
-* Cột lệch tới **~20px**, pitch dao động 100–117px.
-* Hàng **không cách nhau đúng 128px** (bắt đầu ở y = 5, 134, 250, 374, 494…).
-* Áo bào **màu xanh** — cùng tông với linh khí, nên không thể lọc hiệu ứng bằng màu.
-
-### 4 bước (`tools/extract-lamuyen.mjs`)
-
-1. **Alpha** = hợp của hai mask, vì một mình mask nào cũng thiếu:
-   * `solidMask` (Sobel + flood-fill từ biên ảnh) → giữ được **khối tóc đen phẳng**
-     mà phép trừ nền tưởng là nền.
-   * Phép trừ nền (block-median + median filter + nội suy bilinear) → giữ được
-     **linh khí bán trong suốt**.
-2. **Tách cột**: cluster theo **pixel tối** (tóc, giày, viền). Pixel gần đen luôn
-   thuộc nhân vật và vẫn tách rời giữa các frame kể cả khi vệt kiếm nối 2 frame.
-3. **Tách pixel**: dùng **connected components**. Sprite hàng dưới chồi vào slice
-   sẽ bị loại vì component của nó nằm chủ yếu ngoài slice (`>50%` rule);
-   vệt khí rời nằm trọn trong cửa sổ frame thì được giữ.
-4. **Neo frame**: mỗi frame neo theo **điểm đứng** = tâm ngang của dải pixel tối
-   thấp nhất (bàn chân) + baseline. Kiếm và vệt sáng không làm lệch baseline.
-   Biên cắt được fade mềm để vệt khí không có mép chữ nhật.
-
-### Inventory sheet (đã đối chiếu bằng mắt)
-
-| Hàng | Nội dung |
-| --- | --- |
-| 0 | Chính diện (down): c0–c7 đứng/đi, c8–c12 vung kiếm |
-| 1 | Sau lưng (up): c0–c7 đứng/đi, c8–c12 vung kiếm |
-| 2 | Hông (trái): c0–c7 đi, c8–c11 đánh, c12 lật sang phải |
-| 3 | Hông (trái): c0–c8 đi, c9–c12 đánh **hướng phải** |
-| 4 | Hông (phải): c2–c3 phóng kiếm khí, c4–c6 trúng đòn, c8–c9 ngã |
-| 5 | Hông (phải): c0–c3 tụ khí + phóng, c4–c6 trúng đòn, c9–c10 tan biến |
-| 6 | c0–c3 các thế đứng, c4–c7 trúng đòn/quỳ, c8–c9 tử vong |
-| 7 | Cấu trúc như hàng 6 (art dự phòng) |
-
-### Mapping sang animation (`tools/build-lamuyen-atlas.mjs`)
-
-| Animation | Frame | Nguồn |
-| --- | --- | --- |
-| `idle_{down,up,left}` | 4 | r0c0–3, r1c0–3, r2c0–3 |
-| `idle_right` | 4 | r2c0–3 (lật ngang) |
-| `walk_{down,up,left}` | 6 | r0c2–7, r1c2–7, r2c2–7 |
-| `walk_right` | 6 | r2c2–7 (lật ngang) |
-| `attack_down` / `attack_up` | 4 | r0c8–11 / r1c8–11 |
-| `attack_left` / `attack_right` | 4 | r2c8–11 / r3c9–12 (**cả 2 hướng đều có art gốc**) |
-| `skill_*` | 6 | r5c0–3 + r4c2–3 |
-| `hurt` | 3 | r6c4–6 |
-| `death` | 6 | r6c5–9 + r7c9 |
-| `fx_slash_0` | 1 | vệt kiếm khí bóc từ r0c12, dùng làm projectile |
-
-Output: 7 PNG + `lamuyen.json` (Phaser **multiatlas**), frame **160×144**,
-điểm đứng tại **(80, 126)**.
-
-### Hai chỗ phải thỏa hiệp (do sheet gốc)
-
-1. **Skill hướng down/up dùng art hông**: sheet chỉ vẽ chiêu thức ở góc nhìn hông.
-   Nếu bạn vẽ thêm 6 frame chính diện/sau lưng, chỉ cần sửa 2 dòng trong
-   `ANIMATIONS` của builder.
-2. **Luồng kiếm khí dài không bóc trọn được**: trong sheet nó tràn sang ô của
-   frame kế bên, nên chỉ cắt được một mảng. Vì vậy projectile dùng **vệt crescent**
-   (bóc sạch từ r0c12) thay vì luồng beam.
 
 ---
 
@@ -386,8 +393,8 @@ Năm sheet nguồn trong `public/assets/characters/nhuyen/`, đều 1536×1024 R
 | `nhuyen-skill.png` | r0 c0–c3 tụ khí, r1 c0–c1 lốc băng cực đại, **r1 c2–c3 chỉ có trụ băng** |
 | `nhuyen-hurt&death.png` | r0 trúng đòn (3), r1 quỵ xuống (5), r2 nằm + tan biến (6) |
 
-Khác với `lamuyen.png`, các sheet này **đã có alpha thật**, nên không cần dựng mô
-hình nền. Bù lại có ba chỗ khó:
+Các sheet này **đã có alpha thật**, nên không cần dựng mô hình nền để tách. Bù
+lại có ba chỗ khó:
 
 1. **Vệt kiếm khí rộng hơn ô của nó** và tràn sang ô bên cạnh — cắt theo "cột
    trống" sẽ dán hai frame thành một (hàng `attack` r1 bị đúng lỗi này).
@@ -475,8 +482,8 @@ pose đứng thẳng (`npm run measure:nhuyen`) rồi đưa tất cả về 112p
 
 `scale` là số thực, và luôn là phép **thu nhỏ** — không frame nào bị phóng to, nên
 không mất nét. Phép resample là area-average trên alpha premultiplied nên viền
-không bị quầng tối. 112px cũng xấp xỉ chiều cao Lâm Uyên, nhờ đó hai nhân vật đứng
-cùng một thế giới mà không lệch tỉ lệ.
+không bị quầng tối. 112px là chiều cao chuẩn mọi nhân vật trong game dùng chung,
+nhờ đó cả hai đứng cùng một thế giới mà không lệch tỉ lệ.
 
 ### Frame box riêng + pivot nướng sẵn (`tools/build-nhuyen-atlas.mjs`)
 
@@ -501,7 +508,7 @@ sẽ làm texture phình gấp ~4 lần và mỗi frame idle phải fill một q
 Hai hệ quả trong code:
 
 * `sprite.x, sprite.y` của Như Yên **chính là điểm cô ấy đứng** — không cần cộng
-  offset nửa frame khi tính hitbox hay depth sort (khác Lâm Uyên).
+  offset nửa frame khi tính hitbox hay depth sort.
 * Body vật lý phải tính lại offset mỗi khi frame đổi cỡ — `NhuYen.syncBody()` làm
   việc đó, `tick()` phát hiện frame đổi. Đã kiểm tra: sai số chân = **0px** xuyên
   suốt chuyển tiếp 104×128 → 366×276 → 104×128.
@@ -589,24 +596,238 @@ chân chụm) ra hai đầu chu kỳ → thành khập khiễng. Nên giữ th�
 
 ---
 
+## Pipeline bóc tách Tôn Ngộ Không
+
+Mười sáu sheet nguồn trong `public/assets/characters/wukong/source/`:
+
+| Sheet | Bố cục | Nội dung |
+| --- | --- | --- |
+| `wukong-idle-walk.png` | 5 hàng × 8 | **2 chu kỳ 4 frame mỗi hàng.** Đứng: xuống / lên / phải / trái. Đi: xuống / **phải** / lên / **trái**. Cả tám hướng đều là art thật — không lật gương lần nào. r4 còn hai chu kỳ nghiêng phải nữa, cắt nhưng không nướng |
+| `wukong-run.png` | 7 hàng × 8 | 14 chu kỳ chạy ở các độ ngả khác nhau; nướng 3 (trước / sau / nghiêng). Hàng nghiêng **vẽ quay trái** nên được lật một lần lúc nướng |
+| `wukong-attack1.png` | 3 hàng × 4 | **Liên chiêu**: mỗi hàng một nhát riêng, 4 nhịp — r0 đâm tới, r1 xoay rồi nện đất, r2 lao dài. Đều nghiêng, không có chính diện |
+| `wukong-attack2.png` | 6 hàng × 5 | **Đánh không-ngang, bản 5 nhịp.** Thân luôn chính diện. r0 nhảy đâm thẳng xuống, r1 nện đất, r2–r5 quạt ra bốn góc (phải-lên, phải-xuống, trái-lên, trái-xuống) |
+| `wukong-attack3.png` | 6 hàng × 6 | **Cùng những hướng đó, vẽ nặng hơn trên 6 nhịp.** r1 đâm chính diện, r2 phải-lên, r3 trái-lên (quay lưng), r4 phải-xuống, r5 trái-xuống. r0 (bổ thẳng lên) **không còn nướng** — sheet quay lưng vẽ hướng đó hay hơn |
+| `wukong-attack-quaylung.png` | 3 hàng × 5,5,4 | **Cả chuỗi bổ thẳng lên**, quay lưng về phía camera: r0 mở đòn, r1 xoay rồi nện đất, r2 lao dài — đúng ba nhịp mà chuỗi đánh ngang có |
+| `wukong-attack.png` | 7 hàng × 4 | Sheet đánh đời đầu, **không còn nướng**: nó mặc bộ đồ cũ (choàng tím lông vũ) trong khi bản vẽ lại mặc đỏ khăn quàng, nên giữ lại r0/r1 sẽ đổi áo anh đúng vào nhịp bổ lên hoặc xuống |
+| `wukong-fly.png` | 5 hàng | Cân Đẩu Vân: r0 lơ lửng (7), r1–r2 bay (4), r3–r4 vệt dài (3, 2) |
+| `wukong-hurt-death.png` | 5 hàng | **File cũ, chưa vẽ lại** — xem ghi chú dưới |
+| `wukong-skillquaylung.png` | 4 hàng | **Hàng Ma Chân Lôi, nửa nhìn thẳng**: r0 bổ xuống, r1 bổ lên (quay lưng), r2 chéo xuống-phải, r3 chéo lên-phải |
+| `wukong-skilltraiphai.png` | 2 hàng × 7 | **Hàng Ma Chân Lôi, nửa nhìn ngang** — cả hai hàng vẽ quay phải, một hàng lật lúc nướng thành bản quay trái |
+| `wukong-skill-2.png` | 5 hàng | Bản Hàng Ma Chân Lôi trước đó, **không còn nướng** |
+| `wukong-skill4.png` | 4 hàng | **Ma Nguyệt Trảm vẽ lại theo bốn hướng**: r0 chém xuống (chính diện), r1 chém lên (quay lưng), r2/r3 sang ngang — cả hai vẽ quay phải |
+| `wukong-skill1,3.png` | 1–2 hàng | Hai chiêu còn lại, mỗi chiêu một file, mỗi hàng đọc trái→phải rồi trên→dưới |
+| `wukong-skill2.png` | 2 hàng | Hàng Ma Chân Lôi bản đầu, **không còn nướng** — bản mới có đủ năm góc và không phóng tia ra nữa |
+
+### Bộ vẽ lại đã xoá gần hết phần khai tay
+
+Bản sheet đầu tiên phải khai bằng tay 10 mảng `cuts` đọc từ thước, cộng ngưỡng
+`drop` để dọn mảnh vệt khí bị đường cắt xén ra. **Bộ mới không cần gì trong số
+đó.** Mỗi khoảnh khắc là một đảo pixel riêng có khoảng trong suốt bao quanh, nên
+engine cắt tự tìm được ranh giới; inventory giờ chỉ còn `rows`, `cols`, `scale`.
+
+Điều đáng nói: **cutter không cần lưới đều**. Ô rộng hẹp chênh nhau gấp bốn vẫn
+cắt đúng — finale của Hàng Ma Chân Lôi rộng 1148px cạnh một pose mở đầu 328px —
+vì nó tìm *khoảng trống*, không tìm nhịp lưới. Quy tắc duy nhất khi export: đừng
+để nét của frame này chạm frame kia, và chừa khoảng ~25px cho chắc.
+
+### Hai chỗ vẫn phải can thiệp
+
+1. **Số frame.** Máy không đoán được một hàng có mấy khoảnh khắc — đó là thứ duy
+   nhất bức tranh không tự nói ra. `cols` khai con số đó. Sai một là hỏng: với
+   `skill1`, khai 6 thay vì 7 sẽ gộp nguyệt trảm cuối vào trụ nova.
+2. **Ranh giới hàng chạm nhau.** Áo choàng bay khỏi đỉnh hàng này rơi xuống hàng
+   trên nó, nên component dính xuyên hàng — mà component vắt qua hai hàng thì
+   *không thuộc hàng nào*, và ô lẽ ra chứa nó ra frame rỗng. `clipToRows` rạch
+   một khe 2px ở mọi ranh giới hàng liền kề, làm trên bản đã decode chứ không
+   đụng sheet gốc.
+
+### Neo `strip`: đăng ký cả hàng như một cuộn phim
+
+Các neo khác (`feet`, `ground`, `centre`) đều hỏi **từng frame** một câu hỏi.
+Đúng cho một pose, sai cho một hàng vẽ kiểu camera đứng yên: ô finale không có
+thân người (trụ khí lấy đâu ra bàn chân), và ngay cả ô có thân thì anh cũng đang
+*được vẽ là đang di chuyển* — neo lại vào bàn chân là triệt tiêu đúng chuyển
+động đó.
+
+Nên cả sheet được đăng ký như cuộn phim: mọi frame neo ở **cùng khoảng lệch tính
+từ mép trái ô của nó**, lấy từ chỗ anh đứng ở frame đầu *của cả sheet* — không
+phải frame đầu mỗi hàng, vì chiêu nào tràn sang hàng thứ hai thì hàng đó mở đầu
+giữa chừng, không có pose đứng sạch để đo.
+
+Mép **trái**, không phải tâm ô: các ô là mốc thời gian, không có gì bắt chúng
+rộng bằng nhau. Đăng ký theo tâm ô thì neo rơi vào giữa thân cây thương, thành
+ra tia lôi phóng ra từ khoảng không sau lưng anh.
+
+### Nướng nguyên hàng, kể cả ô cuối
+
+Mỗi chiêu là **một clip trọn hàng theo phương ngang**, ô finale nằm trong cùng
+clip với các ô trước nó. Ô cuối không phải hiệu ứng đi kèm — nó là *frame mà cú
+ra chiêu đi tới*. Bản đầu tôi cắt nó ra thành sprite riêng rồi spawn lại lúc
+chạy, và đó đúng là chỗ duy nhất trong art không có mối nối: hiệu ứng hiện ra
+trễ một nhịp so với cái pose vốn đã đang vẽ ra nó.
+
+Nhờ vậy `WukongEffects.ts` chỉ còn ~110 dòng so với ~260 của hai module FX kia:
+không projectile nào phải dựng lại, không element nào giả bằng tint. Còn lại đúng
+phần lặt vặt — cụm khí nổ trên mục tiêu ăn đòn, vệt cháy, tàn lửa, ảnh tàn cưỡi
+mây.
+
+### Đánh thường đi theo **hướng nhắm**, không theo hướng sprite quay
+
+`Direction` vẫn là bốn hướng vì art di chuyển chỉ có bốn. Nhưng ba sheet đánh
+thường gộp lại đã phủ **cả tám hướng**: `attack1` vẽ ngang, `attack2` và
+`attack3` vẽ sáu hướng còn lại. Nên `WukongClip.attack()` đọc thẳng vector
+`aim` — vốn đã tám hướng từ trước, xem `aimFromVector` — và chỉ rơi về hướng
+sprite khi không có `aim`.
+
+Ngưỡng chia múi là `sin(22.5°)`: một hướng được coi là chéo khi **cả hai** trục
+vượt ngưỡng đó, tức đúng nêm 45° quanh mỗi góc.
+
+Chuỗi dài bao nhiêu là do art có bấy nhiêu. Ngang, bổ xuống và bổ lên đều có ba
+nhát riêng — ngang và lên còn được vẽ **cùng một hình dáng** (mở đòn / nện đất /
+lao dài), nên hai hướng đọc ra như một bộ đòn nhìn từ hai góc. Bốn góc chéo có
+hai; chỗ nào chuỗi ngắn thì **lặp nhát cuối chứ không lặp nhát đầu**, để lần nhấn
+thứ ba luôn là nhát nặng hơn.
+
+### Hàng Ma Chân Lôi: chiêu duy nhất có nhiều hơn một góc vẽ
+
+Ba chiêu kia vẫn một hàng, lật gương cho trái. Chiêu này có **sáu hàng** chia
+làm hai file, chọn theo vector `aim` giống hệt đánh thường:
+
+| file | hàng | hướng |
+| --- | --- | --- |
+| `wukong-skillquaylung.png` | r0 (6 ô) | bổ thẳng **xuống**, chính diện |
+| | r1 (6 ô) | bổ thẳng **lên**, quay lưng |
+| | r2 (5 ô) | chéo **xuống**-phải, chính diện |
+| | r3 (5 ô) | chéo **lên**-phải, quay lưng |
+| `wukong-skilltraiphai.png` | r0, r1 (7 ô) | ngang — **cả hai hàng đều vẽ quay phải** |
+
+Hai hàng chéo lật khi tia chỉ sang trái; hai hàng ngang thì **không lật lúc
+chạy** — hàng thứ hai được lật một lần lúc nướng thành `cast_lance_left`, nên cả
+trái lẫn phải đều là frame riêng. Lật phải đọc từ **`aim.x`** chứ không từ
+`Direction`: nhắm chéo lên-trái thì `Direction` vẫn ra `up`, không ra `left`.
+
+Băng thứ ba của file quay lưng cao 445px vì hai hàng chéo **chồng nhau theo chiều
+dọc** — không có khoảng trống nào để tìm. Dòng quét vắng nhất giữa chúng là y764,
+và đó là chỗ hai băng dưới được khai tay.
+
+### Ma Nguyệt Trảm: chiêu thứ hai có nhiều góc vẽ
+
+Bốn hàng, một hướng chính mỗi hàng — r0 chém thẳng xuống (chính diện, anh lơ
+lửng rồi cắm lưỡi khí xuống đất), r1 chém thẳng lên (quay lưng, rồng cuộn trên
+đầu), r2 và r3 phóng rồng sang ngang. **Cả hai hàng ngang đều vẽ quay phải**, nên
+một hàng được lật lúc nướng thành bản quay trái — y hệt cách file ngang của Hàng
+Ma Chân Lôi được xử lý.
+
+Bốn hướng chéo rơi về **hàng ngang** chứ không về hàng chính diện: con rồng là
+một luồng quét dài theo phương ngang, nó đọc ra tự nhiên hơn nhiều khi tiếp tục
+bay sang bên so với khi chĩa thẳng vào camera.
+
+Neo `feet` chứ không `strip`: bốn hàng này cũng không chung đường chân — r0 cắm
+lưỡi khí xuống sâu dưới gót — và mọi ô đều có thân người để tìm giày. Không hàng
+nào vẽ ô tàn tro, nên không phải bỏ ô cuối như bên Hàng Ma Chân Lôi.
+
+Cỡ nhân vật lấy từ **thang A/B**, rồi chia cho `CAST_SCALE` 1.1 của chiêu này để
+thứ hiện lên màn hình đúng bằng cỡ lúc đi bộ.
+
+### Tia khí bay: ngoại lệ thứ hai của quy tắc "không dựng lại lúc chạy"
+
+Quy tắc của kit này là mọi hiệu ứng đều là **frame của chính clip ra chiêu**. Hai
+thứ phá lệ, và cùng một lý do: chúng phải xuất hiện ở chỗ **nhân vật không có
+mặt**. Trụ lửa Cửu U Nộ Diễm nổ ở cuối làn; tia Hàng Ma Chân Lôi bay dọc làn đó.
+
+Bản vẽ mới không có tia bay — quả cầu quay quanh người rồi tắt tại chỗ — nên tia
+lấy lại từ sheet đời đầu: `wukong-skill2.png` r1 c1–c4, bốn ô tia **không có thân
+người**, dài dần tới ba lần chính nó rồi kết bằng một sao va chạm. Nó **xoay theo
+`aim`** chứ không lật gương, nên một luồng vẽ sẵn phục vụ cả tám hướng.
+
+Điểm phóng đọc từ chính art mới. Lấy mẫu các lõi trắng-nóng của
+`cast_lance_right` qua các frame giữa, có đúng một cụm 90–120 pixel **đứng yên ở
+(148, −49)** trong khi mọi thứ khác chuyển động — đó là đầu tia mà chiêu đã tụ
+suốt cả hàng, và tia phải rời đi từ đó chứ không phải từ khoảng không sau lưng.
+
+**Tầm chiêu 560px**, và con số này đã đổi ba lần — luôn vì cùng một lý do: nó đọc
+từ chỗ art thực sự vẽ tới, không phải chọn bừa.
+
+| bản | tầm | vì sao |
+| --- | --- | --- |
+| sheet đời đầu | 500 | sao va chạm ở cuối tia cách chân 501px |
+| bản giữa (giữ cầu trên côn) | 300 → 260 | không có gì bay ra cả |
+| bản hiện tại | **560** | đầu tia ở 148px + tia bay thêm 447px |
+
+### `rowAnchorShift`: khi không tìm được bàn chân
+
+Neo `feet` hỏi bức tranh một câu: pixel **tối nhất** nằm thấp nhất ở đâu. Câu đó
+đúng vì đôi giày là thứ đen nhất trên người nhân vật — cho tới khi một hàng vẽ
+chân co lên dưới lớp áo choàng đang phát sáng, với tia khí quét ngang qua. Lúc đó
+pixel tối nhất là một nếp hiệu ứng, và neo trượt cả trăm pixel sang ngang.
+
+Hai hàng chéo của file quay lưng bị đúng vậy. Không có quy tắc nào tìm được chân
+anh trong đó vì chân **không hiện ra**, nên khoảng lệch được đọc bằng thước —
+nhưng không phải bằng mắt: script đo **đáy của khối gần-đen** (mọi hiệu ứng trên
+nhân vật này đều sáng, nên gần-đen chỉ còn giày, giáp và tóc) rồi so với
+`cast_lance_right`. Trước khi chỉnh, hai hàng đó lơ lửng **58 và 62px** trên mặt
+đất; sau khi chỉnh còn −6 và −2, ngang với lúc đứng yên (−6).
+
+Ngoại lệ duy nhất còn lại là `cast_lance_down`: nó đi từ −11 ở ô đầu tới −74 ở ô
+giữa, nhưng đó là **hoạ sĩ vẽ anh nhảy lên** rồi bổ xuống, không phải lỗi neo.
+
+### Thước cuối cùng: **thang A/B**, không phải đo đạc
+
+Chiêu này làm hỏng mọi thước tự động từng dùng ở đây, và lý do đáng ghi lại.
+
+`--measure` (chân-tới-vai) nói dối vì áo choàng phủ kín băng đo. Neo-tới-đỉnh-đầu
+nói dối vì **mọi tư thế của chiêu này đều ngả hoặc nhảy** — nó rút ngắn số đo
+trong khi nhân vật to y nguyên: sáu hàng đều ra 116 so với 111 lúc đi bộ, mà trên
+màn hình chúng lớn hơn hẳn một phần năm. Đo bề ngang mái tóc thì bắt trúng cánh
+tay giơ lên; đo mảng da mặt thì bắt trúng lõi sáng của quả cầu, ra 88px cho một
+nhân vật cao 110px.
+
+Cách chạy được là **thang A/B**: dựng bản ứng viên ở vài hệ số cạnh bản đi bộ
+trên cùng một đường chân, rồi chọn nấc nào khớp. Mắt người phân biệt *cái nào to
+hơn* chính xác hơn hẳn so với đọc số pixel của từng cái. Script ở
+`.tmp/pick.mjs`; sáu hàng của chiêu này đều lấy số từ nó.
+
+### `rowScale`: khi các hàng trong cùng một sheet không cùng cỡ### `rowScale`: khi các hàng trong cùng một sheet không cùng cỡ
+
+Quy tắc xưa nay là **một `scale` cho một sheet** — một sheet là một buổi vẽ, các
+hàng của nó thống nhất với nhau. `attack2` và `attack3` phá quy tắc đó: hai nhát
+bổ thẳng xuống của `attack2` được vẽ to gần gấp đôi bốn nhát quạt ra góc (băng
+hàng r0 cao 246px so với r5 99px). Một con số cho cả sheet thì một nửa số hàng ra
+sai cỡ thân người.
+
+Nên `sheet-frames.mjs` có thêm `frameScale(sheet, frame)`, đọc `spec.rowScale[row]`
+rồi mới rơi về `spec.scale`. Con số đọc **bằng mắt**, so `atk1_side_0` trên cùng
+một đường chân — ba cái thước tự động đều nói dối trên art này: chân-tới-vai thì
+áo choàng phủ kín băng đo, căn-bậc-hai-diện-tích thì áo choàng bay làm phồng, còn
+neo-tới-đỉnh-đầu thì lẫn tư thế khom vào cỡ người.
+
+### Ghi chú: hurt/death chưa khớp
+
+`wukong-hurt-death.png` là file duy nhất chưa được vẽ lại, nên **trang phục khác
+hẳn** bộ mới: nhân vật đổi áo lúc trúng đòn và lúc chết. Vẫn nướng, vì một nhân
+vật không thể bị choáng hay chết thì tệ hơn là một nhân vật đổi áo trong lúc đó.
+Vẽ lại theo cùng bố cục là thay được ngay, không phải sửa code.
+
+---
 ## Cấu trúc
 
 ```
 src/
 ├── game/
-│   ├── entities/LinYuan.ts             # Arcade.Sprite + state machine (sprite tâm frame)
 │   ├── entities/NhuYen.ts              # Như Yên: liên chiêu, 3 skill, run/dash, pivot ở chân
+│   ├── entities/HuyetLang.ts           # Huyết Lang: liên chiêu trường đao, 3 skill, pivot ở chân
+│   ├── entities/RemoteAvatar.ts        # bản sao hình ảnh của người chơi khác (multiplayer)
 │   ├── entities/playerHandle.ts        # lớp keo mỏng để Scene điều khiển cả hai nhân vật
-│   ├── scenes/BootScene.ts             # load 2 atlas, bake texture môi trường (PIXEL=2)
-│   ├── scenes/TestScene.ts             # demo map, prop, luyện thạch, camera, đổi nhân vật
-│   ├── systems/CharacterController.ts  # input Lâm Uyên -> hành động
+│   ├── scenes/BootScene.ts             # load atlas nhân vật, bake texture môi trường (PIXEL=2)
+│   ├── scenes/WorldScene.ts            # map theo zone, mob, boss, loot, warp, multiplayer
+│   ├── systems/HuyetLangController.ts  # input Huyết Lang
 │   ├── systems/NhuYenController.ts     # input Như Yên (4 phím chiêu + Shift chạy)
 │   ├── systems/CombatSystem.ts         # cooldown nhiều slot, damage, SP (không cần Phaser)
 │   ├── systems/ComboChain.ts           # trạng thái liên chiêu + cửa sổ chain (không cần Phaser)
 │   ├── systems/FrostMark.ts            # Băng stack / Đóng Băng cho một mục tiêu (không cần Phaser)
 │   ├── systems/NhuYenEffects.ts        # spawn vệt khí, trụ băng, mảnh băng, ảnh tàn
-│   ├── animations/linYuanAnimations.ts # animation key + asset path + FRAME/ANCHOR
 │   ├── animations/nhuYenAnimations.ts  # clip registry, (hướng -> clip + flipX), frame va chạm
+│   ├── animations/huyetLangAnimations.ts # clip registry Huyết Lang
 │   ├── config/gameConfig.ts            # pixelArt, FIT scale, arcade physics
 │   ├── events.ts                       # event bus Phaser <-> React
 │   └── types.ts                        # Direction, CharacterState, CharacterStats
@@ -616,18 +837,19 @@ src/
 
 tools/
 ├── png-decode.mjs / png.mjs / pixel.mjs   # decode/encode PNG + toolkit vẽ pixel
-├── sheet-lib.mjs                          # mô hình nền, solid mask, profile/band
-├── extract-lamuyen.mjs                    # segmentation + cắt frame
-├── build-lamuyen-atlas.mjs                # mapping -> atlas game-ready
+├── image-io.mjs                           # encode WebP lossless + decode PNG/WebP dùng chung
+├── atlas-pack.mjs                         # trim frame + shelf pack -> một texture
 ├── extract-nhuyen.mjs                     # cắt cột 2 lượt, 3 điểm neo, resample số thực
 ├── build-nhuyen-atlas.mjs                 # frame box riêng + pivot -> atlas/
-├── zoom-frames.mjs                        # montage phóng to để kiểm tra pose
+├── extract-huyetlang.mjs / build-huyetlang-atlas.mjs  # inventory + atlas Huyết Lang
 ├── measure-stride.mjs                     # đo chân trụ: quãng mặt đất art thực sự vẽ
 ├── analyse-cycle.mjs                      # đo Δsilhouette/frame, brute-force chu kỳ êm nhất
 ├── sheet-frames.mjs                       # engine segmentation dùng chung (Như Yên + boss)
 ├── extract-boss.mjs / build-boss-atlas.mjs# inventory + atlas cho Boss 1
+├── check-atlas.mjs                        # dựng lại frame từ metadata, so pixel với bản trước
+├── preview-atlas.mjs                      # contact sheet để kiểm tra atlas bằng mắt
 ├── check-enemy-ai.mjs                     # test hệ AI bằng clock giả
-└── generate-lin-yuan-sprites.mjs          # sprite placeholder thuần code (dự phòng)
+└── upload-game-assets.mjs                 # đẩy atlas lên Supabase Storage
 ```
 
 ## Ghi chú kỹ thuật
@@ -642,8 +864,6 @@ tools/
 - React **không** dùng `StrictMode`: double-mount sẽ tạo → hủy → tạo lại
   `Phaser.Game` và làm loader bị hủy giữa dòng.
 - Scene hủy đăng ký `GameBus` ở **cả** `SHUTDOWN` và `DESTROY`.
-- Sprite placeholder cũ (`public/assets/characters/lin-yuan/`) đã xóa vì không còn
-  dùng; chạy `npm run gen:placeholder` nếu muốn tạo lại.
 
 ### Quyết định riêng của Như Yên
 

@@ -21,7 +21,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Surface } from './pixel.mjs';
-import { encodePNG } from './png.mjs';
+import { encodeWebP } from './image-io.mjs';
 import { packFrames } from './atlas-pack.mjs';
 import { SHEET_DIR, SHEETS, analyseSheet, cutFrame, frameExtent, isMagma } from './extract-huyetlang.mjs';
 
@@ -97,13 +97,13 @@ const CLIPS = [
 
 /** One output PNG per group; every clip inside a group shares its frame box. */
 const FILES = [
-  { file: 'huyetlang-idle.png', match: /^idle_/ },
-  { file: 'huyetlang-walk.png', match: /^walk_/ },
-  { file: 'huyetlang-attack.png', match: /^atk_/ },
-  { file: 'huyetlang-skill.png', match: /^cast_/ },
-  { file: 'huyetlang-hurt.png', match: /^(hurt|death)$/ },
-  { file: 'huyetlang-fx.png', match: /^fx_crescent$/ },
-  { file: 'huyetlang-fx-magma.png', match: /^fx_pillar$/ },
+  { file: 'huyetlang-idle.webp', match: /^idle_/ },
+  { file: 'huyetlang-walk.webp', match: /^walk_/ },
+  { file: 'huyetlang-attack.webp', match: /^atk_/ },
+  { file: 'huyetlang-skill.webp', match: /^cast_/ },
+  { file: 'huyetlang-hurt.webp', match: /^(hurt|death)$/ },
+  { file: 'huyetlang-fx.webp', match: /^fx_crescent$/ },
+  { file: 'huyetlang-fx-magma.webp', match: /^fx_pillar$/ },
 ];
 
 /* ------------------------------------------------------------ frame recipes */
@@ -250,7 +250,7 @@ for (const spec of FILES) {
 
   const { surface, frames } = packFrames(entries);
 
-  writeFileSync(assertNotSource(join(OUT_DIR, spec.file)), encodePNG(surface));
+  writeFileSync(assertNotSource(join(OUT_DIR, spec.file)), await encodeWebP(surface));
   textures.push({
     image: spec.file,
     format: 'RGBA8888',

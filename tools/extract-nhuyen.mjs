@@ -31,9 +31,9 @@ export const SHEET_DIR = join(ROOT, 'public', 'assets', 'characters', 'nhuyen');
  * `scale` downscale that lands this sheet's art on the shared body height.
  *         Every sheet drew Như Yên at its own size; measuring feet-to-collar on
  *         the upright poses (see `--measure`) puts them all at 112px, which is
- *         also roughly Lâm Uyên's height, so the two characters can share a
- *         world. The idle sheet at 2.0 is the reference; the hurt sheet was
- *         drawn 37% larger, the attack sheet 18% smaller.
+ *         a scale every character in the world shares. The idle sheet at 2.0
+ *         is the reference; the hurt sheet was drawn 37% larger, the attack
+ *         sheet 18% smaller.
  */
 export const SHEETS = {
   idle: {

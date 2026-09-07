@@ -27,6 +27,16 @@ export interface ZoneDef {
   width: number;
   height: number;
   ground: GroundKind;
+  /**
+   * Base brightness of everything lit in the zone, as a grey.
+   *
+   * 0xffffff means lights only ever add, so the zone looks exactly as it does
+   * unlit until an effect fires — the right default for an open map under the
+   * sky. A cave wants far less, and that is the whole point of it being per
+   * zone: it is what makes Huyết Ma Cốc a different place rather than the same
+   * place with different tiles.
+   */
+  ambient?: number;
   /** Huyết mạch — death revive and character swap. */
   shrine: { x: number; y: number };
   trees: Array<[number, number]>;

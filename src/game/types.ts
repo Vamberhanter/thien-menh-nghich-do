@@ -28,19 +28,9 @@ export interface Vector2Like {
   y: number;
 }
 
-export const DEFAULT_LIN_YUAN_STATS: CharacterStats = {
-  maxHp: 100,
-  hp: 100,
-  attack: 15,
-  defense: 5,
-  speed: 140,
-  spiritualPower: 20,
-  maxSpiritualPower: 20,
-};
-
 /**
- * Như Yên of Băng Cung. Lighter and weaker per swing than Lâm Uyên on purpose:
- * her damage comes from landing the whole three-hit combo and from the Frost it
+ * Như Yên of Băng Cung. Lighter per swing than Huyết Lang on purpose: her
+ * damage comes from landing the whole three-hit combo and from the Frost it
  * leaves on the target, and she needs a deeper spirit pool to keep three skills
  * running instead of one.
  */
@@ -80,6 +70,23 @@ export const DEFAULT_MIKU_STATS: CharacterStats = {
   maxSpiritualPower: 28,
 };
 
+/**
+ * Tôn Ngộ Không of Hoa Quả Sơn. Built around reach and options rather than
+ * around either of the other poles: the lightest armour in the roster, the
+ * fastest stride, and by far the deepest spirit pool, because his kit is three
+ * techniques and a cloud dash all drawing on it. Squishy on purpose — he is
+ * meant to be somewhere else by the time the answer arrives.
+ */
+export const DEFAULT_WUKONG_STATS: CharacterStats = {
+  maxHp: 84,
+  hp: 84,
+  attack: 14,
+  defense: 3,
+  speed: 142,
+  spiritualPower: 34,
+  maxSpiritualPower: 34,
+};
+
 /** Unit vector for each facing, used for hitboxes and skill direction. */
 export const DIRECTION_VECTORS: Record<Direction, Vector2Like> = {
   down: { x: 0, y: 1 },
@@ -88,10 +95,23 @@ export const DIRECTION_VECTORS: Record<Direction, Vector2Like> = {
   right: { x: 1, y: 0 },
 };
 
-/** Picks the facing from a movement vector; horizontal wins on a tie. */
+/**
+ * Picks the facing from a movement vector. An exact 45° diagonal reads as
+ * vertical.
+ *
+ * The comparison is strict on purpose. With `>=`, horizontal won every tie,
+ * which handed it the whole closed band from -45° to +45° — 90° plus both
+ * boundaries — while vertical got only what was left open. Walking down and to
+ * the right is exactly that boundary, so holding S+D showed the *sideways* walk
+ * while the character was plainly moving down the screen. With `>` each axis
+ * owns a clean 90°, and the diagonals go to the front and back art.
+ *
+ * This matters more now than it used to: it decides which drawn row plays, and
+ * every kit in the roster has real front and back walk art to show.
+ */
 export function directionFromVector(vec: Vector2Like, fallback: Direction): Direction {
   if (vec.x === 0 && vec.y === 0) return fallback;
-  if (Math.abs(vec.x) >= Math.abs(vec.y)) return vec.x > 0 ? 'right' : 'left';
+  if (Math.abs(vec.x) > Math.abs(vec.y)) return vec.x > 0 ? 'right' : 'left';
   return vec.y > 0 ? 'down' : 'up';
 }
 

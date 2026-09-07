@@ -23,7 +23,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Surface } from './pixel.mjs';
-import { encodePNG } from './png.mjs';
+import { encodeWebP } from './image-io.mjs';
 import { packFrames } from './atlas-pack.mjs';
 import { SHEET_DIR, SHEETS, analyseSheet, cutFrame, frameExtent } from './extract-boss.mjs';
 
@@ -90,14 +90,14 @@ const CLIPS = [
 
 /** One output PNG per group; every clip inside a group shares its frame box. */
 const FILES = [
-  { file: 'boss1-idle.png', match: /^idle_/ },
-  { file: 'boss1-walk.png', match: /^walk_/ },
-  { file: 'boss1-attack.png', match: /^atk_/ },
-  { file: 'boss1-cast.png', match: /^cast_/ },
-  { file: 'boss1-nova.png', match: /^nova_/ },
-  { file: 'boss1-hurt.png', match: /^(hurt|death)$/ },
-  { file: 'boss1-fx.png', match: /^fx_(bolt|crescent)$/ },
-  { file: 'boss1-fx-ground.png', match: /^fx_(burst|ring)$/ },
+  { file: 'boss1-idle.webp', match: /^idle_/ },
+  { file: 'boss1-walk.webp', match: /^walk_/ },
+  { file: 'boss1-attack.webp', match: /^atk_/ },
+  { file: 'boss1-cast.webp', match: /^cast_/ },
+  { file: 'boss1-nova.webp', match: /^nova_/ },
+  { file: 'boss1-hurt.webp', match: /^(hurt|death)$/ },
+  { file: 'boss1-fx.webp', match: /^fx_(bolt|crescent)$/ },
+  { file: 'boss1-fx-ground.webp', match: /^fx_(burst|ring)$/ },
 ];
 
 /* ------------------------------------------------------------------- build */
@@ -160,7 +160,7 @@ for (const spec of FILES) {
 
   const { surface, frames } = packFrames(entries);
 
-  writeFileSync(assertNotSource(join(OUT_DIR, spec.file)), encodePNG(surface));
+  writeFileSync(assertNotSource(join(OUT_DIR, spec.file)), await encodeWebP(surface));
   textures.push({
     image: spec.file,
     format: 'RGBA8888',

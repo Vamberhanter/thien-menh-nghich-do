@@ -10,4 +10,6 @@ dist
 
 # Runtime sheets live on Supabase Storage (bucket game-assets).
 public/assets/characters/**/*.png
+public/assets/characters/**/*.webp
 public/assets/boss/**/*.png
+public/assets/boss/**/*.webp

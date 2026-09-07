@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { GroundShadow } from '../systems/GroundShadow';
 import type { Vector2Like } from '../types';
 import { directionFromVector } from '../types';
 import type { Direction } from '../types';
@@ -133,6 +134,7 @@ export class Mob extends Phaser.Physics.Arcade.Sprite implements AiActor, Damage
   private dead = false;
   private readonly readyAt = new Map<string, number>();
   private readonly bar: Phaser.GameObjects.Graphics;
+  private readonly shadow: GroundShadow;
   private readonly home: Vector2Like;
 
   constructor(
@@ -156,6 +158,9 @@ export class Mob extends Phaser.Physics.Arcade.Sprite implements AiActor, Damage
     this.setCollideWorldBounds(true);
     this.body?.setSize(BODY.width, BODY.height);
     this.bar = scene.add.graphics().setDepth(20000);
+    // Sized off the body rather than the art: a mob is a fraction of a
+    // character's bulk, and a shadow that ignores that reads as a puddle.
+    this.shadow = new GroundShadow(scene, { size: { w: 26, h: 11 }, lift: 0 });
   }
 
   get position(): Vector2Like {
@@ -266,6 +271,10 @@ export class Mob extends Phaser.Physics.Arcade.Sprite implements AiActor, Damage
     if (this.frost.update(time) && this.alive) this.paintFrost(time);
     if (this.frozen) this.setVelocity(0, 0);
     this.setDepth(this.y);
+    // A corpse keeps its shadow — it is still lying on the ground — but one
+    // that has been cleared out of the world must not leave a mark behind.
+    if (this.visible) this.shadow.sync(this.x, this.y);
+    else this.shadow.hide();
     this.drawBar();
   }
 
@@ -320,6 +329,7 @@ export class Mob extends Phaser.Physics.Arcade.Sprite implements AiActor, Damage
 
   destroy(fromScene?: boolean): void {
     this.bar.destroy();
+    this.shadow.destroy();
     super.destroy(fromScene);
   }
 

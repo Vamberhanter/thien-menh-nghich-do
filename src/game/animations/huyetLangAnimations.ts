@@ -10,7 +10,7 @@ import type { Direction } from '../types';
  * `npm run build:huyetlang`. The build writes into an `atlas/` subfolder so it
  * can never overwrite the strips it read.
  *
- * Geometry matches Như Yên rather than Lâm Uyên: frames are **not** all the
+ * Geometry uses a per-frame pivot like Như Yên's: frames are **not** all the
  * same size — 140x128 for a walk step, 190x172 for an overhead chop that lifts
  * the greatsword above his heads — and every frame carries a normalised pivot
  * on the point he stands on. Phaser re-applies that pivot per animation frame,

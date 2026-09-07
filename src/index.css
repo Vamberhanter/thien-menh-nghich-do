@@ -30,10 +30,27 @@ body {
   line-height: 0;
 }
 
+/*
+ * The canvas draws at device resolution (RENDER_SCALE) and is then shown at the
+ * logical 1280x720, so the box has to be stated: without a size on the parent
+ * Phaser's FIT mode has nothing to fit to and leaves the canvas at its full
+ * backing-store size, which overflows the page.
+ */
+.game-canvas {
+  width: 1280px;
+  max-width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
 .game-canvas canvas {
   display: block;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
+  /*
+   * Deliberately NOT `pixelated`. That was right when the backing store was
+   * 1280x720 and the browser had to blow it up — nearest-neighbour at least
+   * kept the pixel art crisp. Now there are more device pixels behind the
+   * canvas than the box it is shown in, so the browser is *downsampling*, and
+   * `pixelated` throws away exactly the extra detail that is being paid for.
+   */
 }
 
 /* --------------------------------------------------------------------- HUD */
