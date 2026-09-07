@@ -276,6 +276,27 @@ const SWORD_RAIN_VOLLEY = 5;
 const SWORD_RAIN_STEP = 55;
 /** How many `rain_hit_*` frames the extras sheet gave us. */
 const SWORD_RAIN_FRAMES = 5;
+
+/**
+ * Huyết Kiếm Sát closes rather than opens: the strikes start wide at
+ * `BLOOD_RANGE` and walk in to `BLOOD_FOCUS`, where the pillar comes up. Four
+ * beats at 70ms — fewer and slower than the other ultimate's five at 55, which
+ * is what makes it read as the heavier of the two.
+ */
+const BLOOD_RANGE = 300;
+const BLOOD_FOCUS = 170;
+const BLOOD_RADIUS = 110;
+const BLOOD_SPREAD = 96;
+const BLOOD_BEATS = 4;
+const BLOOD_STEP = 70;
+/** The blade that finishes it: how big, how far above, how long to fall. */
+const BLOOD_SWORD_SCALE = 2.6;
+/** Squeezed narrow and drawn long — that is what turns a burst into a blade. */
+const BLOOD_SWORD_NARROW = 0.34;
+const BLOOD_SWORD_LONG = 1.7;
+const BLOOD_SWORD_DROP = 420;
+const BLOOD_SWORD_FALL = 190;
+const BLOOD_SWORD_TINT = 0xff6a80;
 /** The bloom is drawn beside the ray, so it wears the ray clip's own scale. */
 const SWORD_BLOOM_SCALE = clipScaleOf(KiemTienClip.skill2('right'));
 /**
@@ -3487,8 +3508,7 @@ export class WorldScene extends Phaser.Scene {
         this.castSwordRain(payload);
         return;
       case HUYET_KIEM_SAT.name:
-        this.castQiWrath(payload);
-        this.juiceHitStop(70);
+        this.castBloodSlaughter(payload);
         return;
       default:
         this.resolveHit(payload, {
@@ -4023,6 +4043,109 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.sweepQi(payload, from, to, SWORD_RAIN_RADIUS, 12, 0x9fd4ff);
+  }
+
+  /**
+   * Huyết Kiếm Sát — the heavier ultimate, and the one with no sheet of its own.
+   *
+   * Vạn Kiếm has a second sheet of landings to draw on; this has four poses and
+   * nothing else, so its motion is built from the magma effects rather than
+   * from her art. That is not a downgrade dressed up: the technique is red
+   * where everything else of hers is blue, and those effects are the game's
+   * existing red.
+   *
+   * Shaped as the opposite of the other ultimate so the two do not read as one
+   * move in two colours. Vạn Kiếm fans *outward* and ends far away; this one
+   * closes *inward* — strikes landing wide and walking in to a point ahead of
+   * her — and finishes with a pillar there, heavier and slower, with more of a
+   * shake behind it.
+   */
+  private castBloodSlaughter(payload: SkillPayload): void {
+    const { aim } = payload;
+    const side = { x: -aim.y, y: aim.x };
+    const focus = {
+      x: payload.x + aim.x * BLOOD_FOCUS,
+      y: payload.y + aim.y * BLOOD_FOCUS,
+    };
+    const from = { x: payload.x, y: payload.y };
+    const to = {
+      x: payload.x + aim.x * BLOOD_RANGE,
+      y: payload.y + aim.y * BLOOD_RANGE,
+    };
+
+    for (let i = 0; i < BLOOD_BEATS; i++) {
+      // 1 → 0: wide and far on the first beat, on the focus by the last.
+      const closing = 1 - i / BLOOD_BEATS;
+      const along = BLOOD_FOCUS + (BLOOD_RANGE - BLOOD_FOCUS) * closing;
+      const spread = BLOOD_SPREAD * closing;
+      for (const lean of [-1, 1]) {
+        const x = payload.x + aim.x * along + side.x * spread * lean;
+        const y = payload.y + aim.y * along + side.y * spread * lean;
+        this.time.delayedCall(i * BLOOD_STEP, () => this.magmaFx.magmaBurst(x, y, 0.5 + 0.1 * i));
+      }
+    }
+
+    // Everything arrives at once on the point they have been closing on: one
+    // enormous blade coming down on it.
+    this.time.delayedCall(BLOOD_BEATS * BLOOD_STEP, () => this.bloodSword(focus.x, focus.y));
+
+    this.sweepQi(payload, from, to, BLOOD_RADIUS, 16, 0xff4a6a);
+  }
+
+  /**
+   * The blade that ends Huyết Kiếm Sát: one enormous sword driven into the
+   * ground point-first.
+   *
+   * There is no drawn sword to use — nothing in the atlas is a blade on its own.
+   * The nearest thing is `rain_hit_4`, the impact whose centre is a single tall
+   * spike, so it is turned over to put that point at the bottom, stretched
+   * narrow to read as a blade rather than a burst, and tinted to her blood
+   * palette. It falls from well above, accelerating, and the ground answers on
+   * the frame it arrives.
+   */
+  private bloodSword(x: number, y: number): void {
+    if (!this.textures.exists(KIEMTIEN_TEXTURE)) {
+      this.magmaFx.magmaPillar(x, y, 1.2, 0.016);
+      return;
+    }
+    const art = BLOOD_SWORD_SCALE / KIEMTIEN_ART_SCALE;
+    const blade = this.add
+      .sprite(x, y - BLOOD_SWORD_DROP, KIEMTIEN_TEXTURE, 'rain_hit_4')
+      // Point down, and narrower than it is tall: the frame is a burst, and
+      // squeezing it is what turns the spike in the middle of it into a blade.
+      .setFlipY(true)
+      .setScale(art * BLOOD_SWORD_NARROW, art * BLOOD_SWORD_LONG)
+      .setTint(BLOOD_SWORD_TINT)
+      // Added rather than multiplied. The frame is blue and the technique is
+      // red: multiplying a red tint through it takes the blue channel most of
+      // the way to nothing and the blade came out a dark smear. Added, it
+      // glows the way light does, which is what it is.
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setAlpha(0)
+      .setDepth(y + 260);
+
+    this.tweens.add({
+      targets: blade,
+      y,
+      alpha: 1,
+      duration: BLOOD_SWORD_FALL,
+      // Gathering speed the whole way down, so it lands rather than arrives.
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        this.magmaFx.magmaBurst(x, y, 0.95);
+        this.lighting.flash(x, y, 680, 0xff3a5c, 3.6, 820);
+        this.qiFx.shake(0.018, 260);
+        this.juiceHitStop(110);
+        this.tweens.add({
+          targets: blade,
+          alpha: 0,
+          scaleY: art * (BLOOD_SWORD_LONG + 0.12),
+          duration: 300,
+          ease: 'Quad.easeIn',
+          onComplete: () => blade.destroy(),
+        });
+      },
+    });
   }
 
   /** One sword-fall from the `.1` sheet, dropped in and fading out. */
