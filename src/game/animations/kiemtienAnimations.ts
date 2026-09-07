@@ -13,12 +13,18 @@ import type { Direction, Vector2Like } from '../types';
  * which is why their clips read `_side`; every facing of this one was drawn
  * out, and a mirror would move the sword to the wrong hand.
  *
- * The sword-flight is the one exception, and it is why `ClipRef` still carries
- * `flip`. Its sheet has an up row, a down row and *two* side rows that are the
- * same heading rather than a left and a right — 29.5/255 apart as drawn against
- * 58.3 mirrored — so they are one twelve-frame loop and there is no left
- * drawing to use. Lying along the blade, the pose is near enough symmetric that
- * the flip does not read as the wrong hand.
+ * Two things mirror, which is why `ClipRef` still carries `flip`, and both are
+ * the art being short of a left rather than a decision:
+ *
+ *  * **The sword-flight.** Its sheet has an up row, a down row and *two* side
+ *    rows that are the same heading rather than a left and a right — 29.5/255
+ *    apart as drawn against 58.3 mirrored — so they are one twelve-frame loop
+ *    and there is no left drawing to use.
+ *  * **Thanh Phong Trảm to the left.** Its sheet captions a row Trái and then
+ *    draws it facing right; see `KiemTienClip.skill1`.
+ *
+ * Both are poses where the mirror does not read as the wrong hand — lying
+ * along the blade is near enough symmetric, and the cut is a two-handed sweep.
  */
 export const KIEMTIEN_TEXTURE = 'kiemtien';
 
@@ -181,7 +187,24 @@ export const KiemTienClip = {
   attack: (direction: Direction, aim?: Vector2Like): ClipRef =>
     drawn('atk', headingOf(direction, aim)),
 
-  skill1: (direction: Direction): ClipRef => drawn('skill1', direction),
+  /**
+   * Thanh Phong Trảm, and the one row on any of these sheets whose caption
+   * lies about it.
+   *
+   * The skill1 sheet labels its four rows Lên / Xuống / Trái / Phải, and the
+   * cutter takes those at their word — but the Trái row is *drawn facing
+   * right*, same as the Phải row beside it. Played as-is, casting to the left
+   * turned her to the right. Mirroring that row puts her the way the caption
+   * always claimed, and keeps it as its own drawing rather than throwing it
+   * away for a mirror of Phải.
+   *
+   * Only skill1. Every other action was checked against its own art: the
+   * swing, skill2, both ultimates and the walk all face where they say.
+   */
+  skill1: (direction: Direction): ClipRef =>
+    direction === 'left'
+      ? { key: key('skill1_left'), flip: true }
+      : drawn('skill1', direction),
   skill2: (direction: Direction): ClipRef => drawn('skill2', direction),
   skill3: (direction: Direction): ClipRef => drawn('skill3', direction),
   skill4: (direction: Direction): ClipRef => drawn('skill4', direction),
