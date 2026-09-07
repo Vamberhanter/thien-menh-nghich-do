@@ -638,6 +638,26 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
 
     const pending = this.pending;
     if (!pending || frame.index < pending.frame) return;
+    this.resolvePending();
+  }
+
+  /**
+   * Fire whatever hit is still waiting.
+   *
+   * Normally the impact frame arrives and `onAnimationUpdate` calls this. Two
+   * of her techniques never get one: both ultimates are a single drawn moment,
+   * and Phaser raises no ANIMATION_UPDATE for a one-frame clip — the frame is
+   * applied by `play()` and never changes, so there is no update to hear. Vạn
+   * Kiếm Quy Tông and Huyết Kiếm Sát spent their spirit, played their pose and
+   * dealt nothing at all.
+   *
+   * So the end of the clip flushes it too. That also covers the general case of
+   * a clip that finishes before the frame its impact was declared on, which is
+   * a mis-declaration rather than a reason to swallow the hit.
+   */
+  private resolvePending(): void {
+    const pending = this.pending;
+    if (!pending) return;
     this.pending = null;
 
     if (pending.kind === 'combo') {
@@ -651,6 +671,8 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
   private onAnimationComplete(animation: Phaser.Animations.Animation): void {
     if (this.isDead) return;
     if (animation.key !== this.playedKey) return;
+    // A one-frame clip never raises an update, so its hit is still waiting here.
+    this.resolvePending();
     if (this.currentState === 'skill' && this.scene.time.now < this.castHoldUntil) return;
 
     const wasAttacking = this.currentState === 'attack';

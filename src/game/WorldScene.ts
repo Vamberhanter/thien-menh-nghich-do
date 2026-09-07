@@ -260,6 +260,22 @@ const SWORD_RAY_RANGE = 400;
  */
 const SWORD_RAY_RANGE_VERTICAL = 260;
 const SWORD_RAY_RADIUS = 44;
+
+/**
+ * Vạn Kiếm Quy Tông's volley, read off the pose it is drawn in: the blades fan
+ * out about 320px and a good way to either side, so the lane is short and wide
+ * where the ray's is long and narrow. Five beats of two, 55ms apart, is a
+ * little over a quarter of a second of landings before the last one — long
+ * enough to read as a volley, short enough to still feel like one blow.
+ */
+const SWORD_RAIN_RANGE = 320;
+const SWORD_RAIN_NEAR = 70;
+const SWORD_RAIN_RADIUS = 96;
+const SWORD_RAIN_SPREAD = 78;
+const SWORD_RAIN_VOLLEY = 5;
+const SWORD_RAIN_STEP = 55;
+/** How many `rain_hit_*` frames the extras sheet gave us. */
+const SWORD_RAIN_FRAMES = 5;
 /** The bloom is drawn beside the ray, so it wears the ray clip's own scale. */
 const SWORD_BLOOM_SCALE = clipScaleOf(KiemTienClip.skill2('right'));
 /**
@@ -3468,6 +3484,8 @@ export class WorldScene extends Phaser.Scene {
         this.castSwordRay(payload);
         return;
       case VAN_KIEM_QUY_TONG.name:
+        this.castSwordRain(payload);
+        return;
       case HUYET_KIEM_SAT.name:
         this.castQiWrath(payload);
         this.juiceHitStop(70);
@@ -3951,6 +3969,91 @@ export class WorldScene extends Phaser.Scene {
     // out as its own frame precisely because it is *not* in her pose.
     if (sideways) this.swordBloom(to.x, to.y);
     this.sweepQi(payload, from, to, SWORD_RAY_RADIUS, 7, 0x8fd0ff);
+  }
+
+  /**
+   * Vạn Kiếm Quy Tông — ten thousand swords, and where they come down.
+   *
+   * Her sheet draws one held moment of this: she hangs in the summoning circle
+   * with the blades fanned out around her, and that is all it draws. Played
+   * alone it was a still picture for a second — no weight, nothing moving, and
+   * no moment where the technique actually happens.
+   *
+   * The rest of it is on the `.1` sheet, in the five cells with nobody in them:
+   * what the swords do where they land. So the pose stays hers and the landings
+   * become a volley — a line of impacts marching out along the aim, each one a
+   * beat after the last, paired off either side of the line so it reads as a
+   * fan rather than a queue, and the last and largest arriving on its own with
+   * the light and the shake behind it.
+   *
+   * The damage still resolves once, on the frame the pose commits, because a
+   * technique whose hit trickled in over half a second would be impossible to
+   * read in a fight.
+   */
+  private castSwordRain(payload: SkillPayload): void {
+    const { aim } = payload;
+    // perpendicular to the aim, for throwing pairs off the centre line
+    const side = { x: -aim.y, y: aim.x };
+    const from = { x: payload.x, y: payload.y };
+    const to = {
+      x: payload.x + aim.x * SWORD_RAIN_RANGE,
+      y: payload.y + aim.y * SWORD_RAIN_RANGE,
+    };
+
+    for (let i = 0; i < SWORD_RAIN_VOLLEY; i++) {
+      const t = (i + 1) / SWORD_RAIN_VOLLEY;
+      const along = SWORD_RAIN_NEAR + (SWORD_RAIN_RANGE - SWORD_RAIN_NEAR) * t;
+      // Two per beat, opening wider as they go out — the fan the pose promises.
+      const spread = SWORD_RAIN_SPREAD * t;
+      for (const lean of [-1, 1]) {
+        const x = payload.x + aim.x * along + side.x * spread * lean;
+        const y = payload.y + aim.y * along + side.y * spread * lean;
+        this.time.delayedCall(i * SWORD_RAIN_STEP, () =>
+          this.swordFall(x, y, 0.55 + 0.12 * i, i % SWORD_RAIN_FRAMES),
+        );
+      }
+    }
+
+    // The one that lands last, alone, in the middle of the lane's end.
+    this.time.delayedCall(SWORD_RAIN_VOLLEY * SWORD_RAIN_STEP, () => {
+      this.swordFall(to.x, to.y, 1.35, SWORD_RAIN_FRAMES - 1);
+      this.lighting.flash(to.x, to.y, 620, 0xbfe4ff, 3.2, 720);
+      this.qiFx.shake(0.012, 240);
+      this.juiceHitStop(80);
+    });
+
+    this.sweepQi(payload, from, to, SWORD_RAIN_RADIUS, 12, 0x9fd4ff);
+  }
+
+  /** One sword-fall from the `.1` sheet, dropped in and fading out. */
+  private swordFall(x: number, y: number, scale: number, frame: number): void {
+    if (!this.textures.exists(KIEMTIEN_TEXTURE)) return;
+    const art = scale / KIEMTIEN_ART_SCALE;
+    const hit = this.add
+      .sprite(x, y, KIEMTIEN_TEXTURE, `rain_hit_${frame}`)
+      .setDepth(y + 250)
+      .setScale(art * 0.75)
+      .setAlpha(0)
+      // Every second one mirrored, so a volley of five drawn shapes does not
+      // read as the same picture stamped down the lane.
+      .setFlipX(frame % 2 === 1);
+    this.tweens.add({
+      targets: hit,
+      scale: art,
+      alpha: 1,
+      duration: 90,
+      ease: 'Quad.easeOut',
+      onComplete: () => {
+        this.tweens.add({
+          targets: hit,
+          alpha: 0,
+          scale: art * 1.08,
+          duration: 260,
+          ease: 'Quad.easeIn',
+          onComplete: () => hit.destroy(),
+        });
+      },
+    });
   }
 
   /**

@@ -184,8 +184,14 @@ const SHEETS = [
   // impact with nobody in it. Cut by position and numbered, because nothing on
   // the sheet says what order they go in.
   {
+    // Vạn Kiếm Quy Tông's motion and its impacts — the ".1" of skill3, and the
+    // half of that technique the main sheet does not draw. Twelve cells in two
+    // kinds: six with her inside the circle throwing the swords, six of what
+    // the swords do where they land, with nobody in them. Sorted by which is
+    // which rather than numbered in reading order, because the two are used at
+    // opposite ends of the cast — she holds one, the world gets the others.
     file: 'kiemtien-skill3.1.png',
-    clip: () => 'fx',
+    clip: () => 'rain',
     rows: 3,
     cols: 4,
     labelWidth: 0,
@@ -194,6 +200,7 @@ const SHEETS = [
     split: 'grid',
     rowSplit: 'grid',
     numbered: true,
+    sortByCharacter: { with: 'rain_cast', without: 'rain_hit' },
     texture: 'kiemtien-fx.png',
   },
 ];
@@ -666,6 +673,13 @@ function readSheet(sheet) {
       seen.set(override, index);
       return { clip: override, index, surface, anchor };
     }
+    if (sheet.sortByCharacter) {
+      const { with: withChar, without } = sheet.sortByCharacter;
+      const clip = hasFace(surface) ? withChar : without;
+      const index = (seen.get(clip) ?? -1) + 1;
+      seen.set(clip, index);
+      return { clip, index, surface, anchor };
+    }
     if (sheet.numbered) {
       return { clip: sheet.clip(), index: seen.set('n', (seen.get('n') ?? -1) + 1).get('n'), surface, anchor };
     }
@@ -697,6 +711,31 @@ function hasCharacter(surface) {
       if (surface.alphaAt(x, y) < 200) continue;
       const [r, g, b] = surface.get(x, y);
       if (r + g + b < 200 && ++dark >= 300) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Is she *facing* us in this frame — is her skin in it?
+ *
+ * A second, stricter test than {@link hasCharacter}, for sorting the extras
+ * sheet. Near-black is not enough there: the swords have navy cores and dark
+ * debris, and every one of the twelve cells passed. Her face does separate
+ * them cleanly — a warm mid-tone with red over blue, where the whole technique
+ * is blue. The seven cells she is in score 223 and up, the five she is not
+ * score four and under.
+ *
+ * Not used for `requireCharacter`, because a pose with her back turned or her
+ * face behind the beam scores as low as 39 and would be thrown away.
+ */
+function hasFace(surface) {
+  let skin = 0;
+  for (let y = 0; y < surface.height; y++) {
+    for (let x = 0; x < surface.width; x++) {
+      if (surface.alphaAt(x, y) < 230) continue;
+      const [r, g, b] = surface.get(x, y);
+      if (r > 150 && g > 110 && b > 95 && r > b + 22 && r < 250 && ++skin >= 120) return true;
     }
   }
   return false;

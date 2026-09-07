@@ -5248,7 +5248,7 @@
       "scale": 1,
       "frames": [
         {
-          "filename": "fx_0",
+          "filename": "rain_cast_0",
           "rotated": false,
           "trimmed": true,
           "sourceSize": {
@@ -5273,7 +5273,7 @@
           }
         },
         {
-          "filename": "fx_1",
+          "filename": "rain_cast_1",
           "rotated": false,
           "trimmed": true,
           "sourceSize": {
@@ -5298,7 +5298,7 @@
           }
         },
         {
-          "filename": "fx_2",
+          "filename": "rain_cast_2",
           "rotated": false,
           "trimmed": true,
           "sourceSize": {
@@ -5323,7 +5323,7 @@
           }
         },
         {
-          "filename": "fx_3",
+          "filename": "rain_hit_0",
           "rotated": false,
           "trimmed": true,
           "sourceSize": {
@@ -5348,7 +5348,7 @@
           }
         },
         {
-          "filename": "fx_4",
+          "filename": "rain_cast_3",
           "rotated": false,
           "trimmed": true,
           "sourceSize": {
@@ -5373,7 +5373,7 @@
           }
         },
         {
-          "filename": "fx_5",
+          "filename": "rain_hit_1",
           "rotated": false,
           "trimmed": true,
           "sourceSize": {
@@ -5398,7 +5398,7 @@
           }
         },
         {
-          "filename": "fx_6",
+          "filename": "rain_hit_2",
           "rotated": false,
           "trimmed": true,
           "sourceSize": {
@@ -5423,7 +5423,7 @@
           }
         },
         {
-          "filename": "fx_7",
+          "filename": "rain_cast_4",
           "rotated": false,
           "trimmed": true,
           "sourceSize": {
@@ -5448,7 +5448,7 @@
           }
         },
         {
-          "filename": "fx_8",
+          "filename": "rain_cast_5",
           "rotated": false,
           "trimmed": true,
           "sourceSize": {
@@ -5473,7 +5473,7 @@
           }
         },
         {
-          "filename": "fx_9",
+          "filename": "rain_hit_3",
           "rotated": false,
           "trimmed": true,
           "sourceSize": {
@@ -5498,7 +5498,7 @@
           }
         },
         {
-          "filename": "fx_10",
+          "filename": "rain_cast_6",
           "rotated": false,
           "trimmed": true,
           "sourceSize": {
@@ -5523,7 +5523,7 @@
           }
         },
         {
-          "filename": "fx_11",
+          "filename": "rain_hit_4",
           "rotated": false,
           "trimmed": true,
           "sourceSize": {
