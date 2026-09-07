@@ -1,0 +1,1861 @@
+/*
+ * Realm of Darkness — gothic ARPG front end for the join flow.
+ *
+ * Everything is namespaced under `.rod` so it cannot leak into the in-game
+ * HUD, which keeps its own flat pixel look. Material comes from one tiling
+ * stone photo plus brass hairlines drawn with box-shadow, so the whole theme
+ * costs a single 48 KB texture.
+ */
+
+.rod {
+  --stone: url('/assets/ui/tex-stone.jpg');
+
+  --black: #07070a;
+  --pitch: #0b0a0d;
+  --stone-900: #121114;
+  --stone-800: #1a181d;
+  --stone-700: #262229;
+  --stone-600: #35302c;
+
+  --brass-900: #3d2f14;
+  --brass-700: #6b5326;
+  --brass-500: #9d7b34;
+  --brass-300: #c9a24a;
+  --gold: #e8c46a;
+
+  --blood: #8e1c16;
+  --blood-lit: #c9352a;
+  --blood-ink: #a8231b;
+
+  --bone: #d9d0be;
+  --ash: #978f81;
+  --ash-dim: #6a635a;
+
+  --font-gothic: 'Grenze Gotisch', 'Pirata One', 'Palatino Linotype', serif;
+  --font-display: 'Cinzel', 'Palatino Linotype', Georgia, serif;
+  --font-body: 'Spectral', 'EB Garamond', Georgia, 'Times New Roman', serif;
+
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--font-body);
+  line-height: 1.45;
+  color: var(--bone);
+  pointer-events: auto;
+  background-color: #060507;
+  background-image:
+    radial-gradient(120% 70% at 50% 118%, rgba(142, 28, 22, 0.32) 0%, transparent 62%),
+    radial-gradient(90% 60% at 50% -12%, rgba(70, 62, 48, 0.3) 0%, transparent 60%),
+    linear-gradient(180deg, rgba(6, 5, 7, 0.86), rgba(4, 4, 6, 0.95)),
+    var(--stone);
+  background-size: auto, auto, auto, 420px 420px;
+}
+
+.rod *,
+.rod *::before,
+.rod *::after {
+  box-sizing: border-box;
+}
+
+.rod ::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.rod ::-webkit-scrollbar-track {
+  background: #08070a;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.28);
+}
+
+.rod ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #6b5326, #3d2f14);
+  box-shadow: inset 0 0 0 1px rgba(232, 196, 106, 0.3);
+}
+
+.rod ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #9d7b34, #55411b);
+}
+
+/* ------------------------------------------------------- material recipes */
+
+/*
+ * Riveted stone panel. `::before` draws the inner brass rule and one rivet in
+ * each corner; the four radial gradients are the same dot pinned to a
+ * different corner.
+ */
+.rod-frame {
+  position: relative;
+  background-color: var(--stone-900);
+  background-image: linear-gradient(180deg, rgba(54, 48, 42, 0.5), rgba(8, 7, 10, 0.9)), var(--stone);
+  background-size: auto, 340px 340px;
+  border: 1px solid #040406;
+  box-shadow:
+    inset 0 0 0 1px rgba(107, 83, 38, 0.4),
+    inset 0 1px 0 rgba(226, 196, 132, 0.14),
+    inset 0 0 46px rgba(0, 0, 0, 0.86),
+    0 2px 0 #000,
+    0 14px 34px rgba(0, 0, 0, 0.7);
+}
+
+.rod-frame::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  pointer-events: none;
+  border: 1px solid rgba(126, 99, 44, 0.42);
+  background-image:
+    radial-gradient(circle, #d7b160 0 1.7px, #6b5326 1.7px 2.7px, rgba(0, 0, 0, 0.75) 2.7px 3.6px, transparent 3.6px),
+    radial-gradient(circle, #d7b160 0 1.7px, #6b5326 1.7px 2.7px, rgba(0, 0, 0, 0.75) 2.7px 3.6px, transparent 3.6px),
+    radial-gradient(circle, #d7b160 0 1.7px, #6b5326 1.7px 2.7px, rgba(0, 0, 0, 0.75) 2.7px 3.6px, transparent 3.6px),
+    radial-gradient(circle, #d7b160 0 1.7px, #6b5326 1.7px 2.7px, rgba(0, 0, 0, 0.75) 2.7px 3.6px, transparent 3.6px);
+  background-repeat: no-repeat;
+  background-size: 13px 13px;
+  background-position: 3px 3px, right 3px top 3px, left 3px bottom 3px, right 3px bottom 3px;
+}
+
+/* Carved plaque used for every panel heading. */
+.rod-plate {
+  position: relative;
+  flex: none;
+  padding: 7px 34px 6px;
+  text-align: center;
+  background-image: linear-gradient(180deg, #322c26 0%, #1a181d 56%, #0c0b0e 100%), var(--stone);
+  background-size: auto, 240px 240px;
+  border: 1px solid #040406;
+  box-shadow:
+    inset 0 0 0 1px rgba(107, 83, 38, 0.46),
+    inset 0 1px 0 rgba(226, 196, 132, 0.16),
+    inset 0 -10px 16px rgba(0, 0, 0, 0.6),
+    0 3px 0 #07070a;
+}
+
+/* Small brass lozenges flanking the plaque text. */
+.rod-plate::before,
+.rod-plate::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -4px;
+  background: linear-gradient(135deg, var(--brass-300), var(--brass-900));
+  box-shadow: 0 0 0 1px #050507;
+  transform: rotate(45deg);
+}
+
+.rod-plate::before {
+  left: 13px;
+}
+
+.rod-plate::after {
+  right: 13px;
+}
+
+.rod-plate__title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--brass-300);
+  text-shadow: 0 1px 0 #000, 0 0 14px rgba(0, 0, 0, 0.9);
+}
+
+.rod-plate__sub {
+  font-size: 9px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ash-dim);
+}
+
+/* Idle panels read as unlit stone; the focused panel lights its plaque. */
+.rod-panel.is-idle .rod-plate__title {
+  color: #6d5c3c;
+  text-shadow: 0 1px 0 #000;
+}
+
+.rod-panel.is-focus .rod-plate__title {
+  color: var(--gold);
+  text-shadow: 0 1px 0 #000, 0 0 18px rgba(232, 196, 106, 0.5);
+}
+
+.rod-panel.is-focus {
+  box-shadow:
+    inset 0 0 0 1px rgba(157, 123, 52, 0.62),
+    inset 0 1px 0 rgba(226, 196, 132, 0.2),
+    inset 0 0 46px rgba(0, 0, 0, 0.82),
+    0 2px 0 #000,
+    0 0 0 1px rgba(157, 123, 52, 0.35),
+    0 14px 40px rgba(0, 0, 0, 0.75);
+}
+
+/* Hairline rule with a centre diamond, used to break up long panels. */
+.rod-rule {
+  position: relative;
+  flex: none;
+  height: 1px;
+  margin: 3px 0;
+  background: linear-gradient(90deg, transparent, rgba(107, 83, 38, 0.65), transparent);
+}
+
+.rod-rule::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  margin-left: -4px;
+  background: linear-gradient(135deg, var(--brass-500), var(--brass-900));
+  box-shadow: 0 0 0 1px #050507;
+  transform: rotate(45deg);
+}
+
+/* ------------------------------------------------------------ header bar */
+
+.rod__header {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 6px 22px 5px;
+  background-color: #0e0c10;
+  background-image: linear-gradient(180deg, rgba(62, 55, 46, 0.55), rgba(6, 6, 8, 0.95)), var(--stone);
+  background-size: auto, 300px 300px;
+  border-bottom: 1px solid #040406;
+  box-shadow:
+    inset 0 1px 0 rgba(226, 196, 132, 0.14),
+    inset 0 -1px 0 rgba(157, 123, 52, 0.4),
+    0 6px 22px rgba(0, 0, 0, 0.7);
+}
+
+/*
+ * Both crests were rendered on black, so `screen` blending drops the
+ * background without needing an alpha channel.
+ */
+.rod-crest {
+  width: clamp(40px, 6vh, 58px);
+  height: clamp(40px, 6vh, 58px);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 10px rgba(157, 123, 52, 0.35));
+}
+
+.rod-crest--skull {
+  background-image: url('/assets/ui/icon-skull.png');
+}
+
+.rod-crest--sigil {
+  background-image: url('/assets/ui/icon-sigil.png');
+  animation: rod-turn 64s linear infinite;
+}
+
+@keyframes rod-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rod-crest--sigil {
+    animation: none;
+  }
+}
+
+.rod__brand {
+  min-width: 0;
+  text-align: center;
+}
+
+.rod__title {
+  margin: 0;
+  font-family: var(--font-gothic);
+  font-weight: 900;
+  font-size: clamp(26px, 4.4vh, 44px);
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #b5231a;
+  text-shadow:
+    0 1px 0 #2a0705,
+    0 2px 1px #000,
+    0 0 26px rgba(201, 53, 42, 0.5);
+}
+
+.rod__title-sub {
+  margin-top: -1px;
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--ash-dim);
+}
+
+.rod__tabs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.rod-tab {
+  padding: 3px 16px 2px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6d5c3c;
+  background-image: linear-gradient(180deg, rgba(48, 42, 36, 0.9), rgba(9, 8, 11, 0.95));
+  border: 1px solid #050507;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.3);
+  cursor: pointer;
+  transition: color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.rod-tab:hover {
+  color: var(--brass-300);
+}
+
+.rod-tab.is-on {
+  color: var(--gold);
+  box-shadow:
+    inset 0 0 0 1px rgba(232, 196, 106, 0.6),
+    inset 0 -8px 12px rgba(0, 0, 0, 0.5),
+    0 0 14px rgba(232, 196, 106, 0.2);
+  text-shadow: 0 0 12px rgba(232, 196, 106, 0.55);
+}
+
+.rod__aside {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.rod__account {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-align: right;
+  color: var(--ash-dim);
+}
+
+.rod__account b {
+  max-width: 22ch;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ash);
+}
+
+/* ------------------------------------------------------------ three columns */
+
+.rod__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.6fr);
+  gap: 14px;
+  padding: 14px 18px 16px;
+}
+
+/* Forge only appears after «Tạo nhân vật» — not as a permanent idle column. */
+.rod__body[data-view='menu'] .rod-col--create,
+.rod__body[data-view='join'] .rod-col--create {
+  display: none;
+}
+
+.rod__body[data-view='create'] {
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.92fr);
+}
+
+.rod__body[data-view='create'] .rod-col--join {
+  display: none;
+}
+
+.rod-col {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rod-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 9px;
+}
+
+.rod-panel--grow {
+  flex: 1;
+}
+
+.rod-panel__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px 5px 4px;
+}
+
+.rod-panel__scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* ---------------------------------------------------------------- buttons */
+
+.rod-btn {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 10px 22px 9px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #c0b08c;
+  text-align: center;
+  text-shadow: 0 1px 0 #000, 0 0 12px rgba(0, 0, 0, 0.85);
+  background-color: var(--stone-800);
+  background-image: linear-gradient(180deg, #3a342d, #1c1a1f 48%, #100f12), var(--stone);
+  background-size: auto, 220px 220px;
+  border: 1px solid #040406;
+  box-shadow:
+    inset 0 0 0 1px rgba(107, 83, 38, 0.45),
+    inset 0 1px 0 rgba(226, 196, 132, 0.16),
+    inset 0 -10px 16px rgba(0, 0, 0, 0.55),
+    0 3px 0 #07070a,
+    0 7px 18px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  transition: color 0.14s ease, box-shadow 0.14s ease, transform 0.08s ease;
+}
+
+/* Studs that ignite with the label on hover. */
+.rod-btn::before,
+.rod-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  background: linear-gradient(135deg, #6b5326, #241b0c);
+  box-shadow: 0 0 0 1px #040406;
+  transform: rotate(45deg);
+  transition: background 0.14s ease, box-shadow 0.14s ease;
+}
+
+.rod-btn::before {
+  left: 9px;
+}
+
+.rod-btn::after {
+  right: 9px;
+}
+
+.rod-btn:hover:not(:disabled) {
+  color: var(--gold);
+  box-shadow:
+    inset 0 0 0 1px rgba(232, 196, 106, 0.55),
+    inset 0 1px 0 rgba(255, 232, 178, 0.22),
+    inset 0 0 26px rgba(201, 162, 74, 0.16),
+    0 3px 0 #07070a,
+    0 0 18px rgba(201, 162, 74, 0.26);
+}
+
+.rod-btn:hover:not(:disabled)::before,
+.rod-btn:hover:not(:disabled)::after {
+  background: linear-gradient(135deg, var(--gold), var(--brass-700));
+  box-shadow: 0 0 0 1px #040406, 0 0 8px rgba(232, 196, 106, 0.6);
+}
+
+.rod-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 0 0 1px rgba(232, 196, 106, 0.45),
+    inset 0 6px 14px rgba(0, 0, 0, 0.7),
+    0 1px 0 #07070a;
+}
+
+.rod-btn:disabled {
+  color: #514a41;
+  cursor: not-allowed;
+  box-shadow:
+    inset 0 0 0 1px rgba(107, 83, 38, 0.22),
+    inset 0 -10px 16px rgba(0, 0, 0, 0.6),
+    0 2px 0 #07070a;
+}
+
+.rod-btn.is-on {
+  color: var(--gold);
+  box-shadow:
+    inset 0 0 0 1px rgba(232, 196, 106, 0.72),
+    inset 0 1px 0 rgba(255, 232, 178, 0.26),
+    inset 0 0 30px rgba(201, 162, 74, 0.22),
+    0 3px 0 #07070a,
+    0 0 22px rgba(201, 162, 74, 0.3);
+}
+
+.rod-btn--lg {
+  padding: 13px 24px 12px;
+  font-size: 16px;
+  letter-spacing: 0.2em;
+}
+
+.rod-btn--sm {
+  padding: 6px 18px 5px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+/* Blood variant for the destructive / final actions. */
+.rod-btn--blood {
+  color: #dda79a;
+  background-image: linear-gradient(180deg, #47231e, #23100e 50%, #130909), var(--stone);
+  box-shadow:
+    inset 0 0 0 1px rgba(142, 28, 22, 0.7),
+    inset 0 1px 0 rgba(226, 132, 116, 0.18),
+    inset 0 -10px 16px rgba(0, 0, 0, 0.55),
+    0 3px 0 #07070a,
+    0 7px 18px rgba(0, 0, 0, 0.6);
+}
+
+.rod-btn--blood:hover:not(:disabled) {
+  color: #ffd9cd;
+  box-shadow:
+    inset 0 0 0 1px rgba(201, 53, 42, 0.85),
+    inset 0 1px 0 rgba(255, 190, 175, 0.24),
+    inset 0 0 26px rgba(201, 53, 42, 0.24),
+    0 3px 0 #07070a,
+    0 0 20px rgba(201, 53, 42, 0.35);
+}
+
+.rod-btn--blood:hover:not(:disabled)::before,
+.rod-btn--blood:hover:not(:disabled)::after {
+  background: linear-gradient(135deg, #e4695a, #5c1b15);
+  box-shadow: 0 0 0 1px #040406, 0 0 8px rgba(201, 53, 42, 0.6);
+}
+
+.rod-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rod-btns--row {
+  flex-direction: row;
+}
+
+.rod-btns--row > * {
+  flex: 1;
+}
+
+/* ------------------------------------------------- character creation grid */
+
+.rod-classes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.rod-class {
+  position: relative;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  background: #08070a;
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.35), 0 4px 12px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  transition: box-shadow 0.16s ease;
+}
+
+.rod-class__art {
+  height: clamp(88px, 15.5vh, 172px);
+  background-repeat: no-repeat;
+  /* Portraits are 3:4 into a wider box, so bias the crop to head and torso. */
+  background-position: 50% 14%;
+  background-size: cover;
+  filter: saturate(0.7) brightness(0.62) contrast(1.06);
+  transition: filter 0.2s ease, transform 0.4s ease;
+}
+
+.rod-class__art::after {
+  content: '';
+  display: block;
+  height: 100%;
+  background: linear-gradient(180deg, rgba(7, 5, 9, 0.34) 0%, transparent 32%, rgba(5, 4, 7, 0.92) 100%);
+}
+
+.rod-class__name {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 4px 8px 5px;
+  background: linear-gradient(180deg, rgba(8, 7, 10, 0.1), rgba(8, 7, 10, 0.92));
+}
+
+.rod-class__name strong {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #b6a482;
+  text-shadow: 0 1px 2px #000;
+}
+
+.rod-class__name em {
+  display: block;
+  font-style: normal;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  color: var(--ash-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rod-class:hover .rod-class__art {
+  filter: saturate(0.9) brightness(0.82) contrast(1.04);
+}
+
+.rod-class:hover .rod-class__name strong {
+  color: var(--brass-300);
+}
+
+.rod-class.is-on {
+  box-shadow: 0 0 22px rgba(232, 196, 106, 0.45), 0 4px 14px rgba(0, 0, 0, 0.7);
+}
+
+/*
+ * The ring and the brackets both live on pseudo-elements: the portrait is a
+ * real child, so an inset box-shadow on the tile itself would sit under it.
+ */
+.rod-class.is-on::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 34px rgba(232, 196, 106, 0.2);
+}
+
+.rod-class.is-on .rod-class__art {
+  filter: saturate(1.05) brightness(1) contrast(1.02);
+  transform: scale(1.03);
+}
+
+.rod-class.is-on .rod-class__name strong {
+  color: var(--gold);
+  text-shadow: 0 1px 2px #000, 0 0 12px rgba(232, 196, 106, 0.6);
+}
+
+.rod-class.is-on .rod-class__name {
+  background: linear-gradient(180deg, rgba(8, 7, 10, 0.1), rgba(50, 38, 12, 0.9));
+}
+
+/* Corner brackets on the chosen class, drawn as four clipped hairlines. */
+.rod-class.is-on::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, var(--gold) 0 12px, transparent 12px) no-repeat left top / 100% 1px,
+    linear-gradient(180deg, var(--gold) 0 12px, transparent 12px) no-repeat left top / 1px 100%,
+    linear-gradient(270deg, var(--gold) 0 12px, transparent 12px) no-repeat right bottom / 100% 1px,
+    linear-gradient(0deg, var(--gold) 0 12px, transparent 12px) no-repeat right bottom / 1px 100%;
+}
+
+/* --------------------------------------------------------- fields & stats */
+
+.rod-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rod-label {
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #7d6b48;
+}
+
+.rod-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: var(--bone);
+  background-color: #06060899;
+  background-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), rgba(24, 22, 26, 0.55));
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.38), inset 0 3px 10px rgba(0, 0, 0, 0.8);
+  outline: none;
+}
+
+.rod-input::placeholder {
+  color: #4f483f;
+}
+
+.rod-input:focus {
+  color: #fff3d8;
+  box-shadow:
+    inset 0 0 0 1px rgba(232, 196, 106, 0.65),
+    inset 0 3px 10px rgba(0, 0, 0, 0.8),
+    0 0 14px rgba(201, 162, 74, 0.22);
+}
+
+.rod-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.rod-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px 14px;
+}
+
+.rod-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 0;
+}
+
+.rod-stat__key {
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #7d6b48;
+}
+
+/* Leader dots between the label and the value. */
+.rod-stat__dots {
+  flex: 1;
+  height: 1px;
+  min-width: 8px;
+  background-image: linear-gradient(90deg, rgba(107, 83, 38, 0.55) 0 2px, transparent 2px);
+  background-size: 4px 1px;
+  background-repeat: repeat-x;
+}
+
+.rod-stat__value {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--bone);
+}
+
+.rod-stat--wide {
+  grid-column: 1 / -1;
+}
+
+.rod-stat--hi .rod-stat__value {
+  color: var(--gold);
+}
+
+/* --------------------------------------------------------- campfire scene */
+
+.rod-scene {
+  position: relative;
+  flex: 1;
+  min-height: clamp(140px, 28vh, 280px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-image: url('/assets/ui/scene-campfire.jpg');
+  background-position: 50% 62%;
+  background-size: cover;
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.35), inset 0 0 40px rgba(0, 0, 0, 0.8);
+}
+
+/* Vignette so the art melts into the panel instead of ending on a hard edge. */
+.rod-scene__shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 60% at 46% 74%, rgba(214, 118, 44, 0.16), transparent 70%),
+    linear-gradient(180deg, rgba(7, 6, 9, 0.55) 0%, transparent 28%, rgba(7, 6, 9, 0.88) 100%),
+    linear-gradient(90deg, rgba(7, 6, 9, 0.7) 0%, transparent 18%, transparent 82%, rgba(7, 6, 9, 0.7) 100%);
+}
+
+.rod-scene__picks {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 0;
+  padding: 14px 12px 36px;
+  overflow-x: auto;
+}
+
+.rod-scene__empty {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  text-align: center;
+}
+
+.rod-scene__empty p {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: #9c8e75;
+  text-shadow: 0 1px 3px #000;
+}
+
+.rod-hero {
+  position: relative;
+  flex: 0 0 auto;
+  width: clamp(88px, 28%, 120px);
+  min-height: 0;
+  height: 100%;
+  max-height: 220px;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  background: #08070a;
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.35), 0 6px 16px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  transition: box-shadow 0.14s ease, transform 0.14s ease;
+}
+
+.rod-hero-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  width: clamp(88px, 28%, 120px);
+  height: 100%;
+  max-height: 220px;
+}
+
+.rod-hero-wrap .rod-hero {
+  width: 100%;
+  height: 100%;
+}
+
+.rod-pick-row .rod-hero-wrap {
+  width: 86px;
+  height: 118px;
+  max-height: none;
+}
+
+.rod-pick-row .rod-hero-wrap .rod-hero {
+  width: 86px;
+  height: 118px;
+}
+
+.rod-hero__del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: #e8c4a6;
+  background: rgba(48, 10, 12, 0.88);
+  border: 1px solid rgba(160, 52, 48, 0.7);
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.rod-hero__del:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(120, 22, 24, 0.95);
+  opacity: 1;
+}
+
+.rod-hero__del:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.rod-hero__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-repeat: no-repeat;
+  background-position: 50% 12%;
+  background-size: cover;
+  filter: saturate(0.75) brightness(0.72);
+  transition: filter 0.16s ease, transform 0.3s ease;
+}
+
+.rod-hero__art::after {
+  content: '';
+  display: block;
+  height: 100%;
+  background: linear-gradient(180deg, transparent 40%, rgba(5, 4, 7, 0.95) 100%);
+}
+
+.rod-hero__meta {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 5px 6px 6px;
+  background: linear-gradient(180deg, transparent, rgba(8, 7, 10, 0.92));
+}
+
+.rod-hero__meta strong {
+  display: block;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #c0b08c;
+  text-shadow: 0 1px 2px #000;
+}
+
+.rod-hero__meta em {
+  display: block;
+  overflow: hidden;
+  font-style: normal;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #7a7164;
+}
+
+.rod-hero:hover {
+  box-shadow: inset 0 0 0 1px rgba(201, 162, 74, 0.55), 0 0 16px rgba(201, 162, 74, 0.2);
+}
+
+.rod-hero:hover .rod-hero__art {
+  filter: saturate(0.95) brightness(0.9);
+}
+
+.rod-hero.is-on {
+  box-shadow:
+    inset 0 0 0 2px var(--gold),
+    0 0 20px rgba(232, 196, 106, 0.4),
+    0 6px 16px rgba(0, 0, 0, 0.55);
+  transform: translateY(-2px);
+}
+
+.rod-hero.is-on .rod-hero__art {
+  filter: saturate(1.05) brightness(1);
+  transform: scale(1.04);
+}
+
+.rod-hero.is-on .rod-hero__meta strong {
+  color: var(--gold);
+}
+
+.rod-scene__caption {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  left: 8px;
+  z-index: 2;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  color: #9c8e75;
+  text-shadow: 0 1px 3px #000;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rod-scene__caption b {
+  font-weight: 600;
+  color: var(--gold);
+}
+
+/* ------------------------------------------------------------- room table */
+
+.rod-table {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: rgba(4, 4, 6, 0.6);
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.3), inset 0 4px 14px rgba(0, 0, 0, 0.7);
+}
+
+.rod-table__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 62px 84px 58px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.rod-table__row--slim {
+  grid-template-columns: minmax(0, 1fr) 56px;
+}
+
+.rod-table__head {
+  flex: none;
+  background-image: linear-gradient(180deg, rgba(56, 49, 40, 0.85), rgba(9, 8, 11, 0.9));
+  border-bottom: 1px solid rgba(107, 83, 38, 0.45);
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #7d6b48;
+}
+
+.rod-table__body {
+  flex: 1;
+  min-height: 0;
+  max-height: clamp(96px, 24vh, 260px);
+  overflow-y: auto;
+}
+
+.rod-room {
+  width: 100%;
+  font: inherit;
+  font-size: 12.5px;
+  color: #b3a891;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(107, 83, 38, 0.16);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.rod-room:hover {
+  color: var(--bone);
+  background: rgba(107, 83, 38, 0.14);
+}
+
+.rod-room strong {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rod-room span {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ash-dim);
+}
+
+.rod-room.is-on {
+  color: var(--gold);
+  background: linear-gradient(90deg, rgba(232, 196, 106, 0.2), rgba(232, 196, 106, 0.05));
+  box-shadow: inset 2px 0 0 var(--gold);
+}
+
+.rod-room.is-on span {
+  color: #b79a5e;
+}
+
+.rod-empty {
+  padding: 14px 10px;
+  font-size: 11.5px;
+  font-style: italic;
+  text-align: center;
+  color: #5d564c;
+}
+
+/* ------------------------------------------------------------------- chat */
+
+.rod-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(112px, 12vw, 158px);
+  gap: 10px;
+}
+
+.rod-side {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rod-chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rod-chat__tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.rod-chat__log {
+  flex: 1;
+  min-height: 60px;
+  overflow-y: auto;
+  padding: 7px 9px;
+  font-size: 12px;
+  background: rgba(3, 3, 5, 0.7);
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.28), inset 0 4px 14px rgba(0, 0, 0, 0.75);
+}
+
+.rod-chat__line {
+  margin-bottom: 2px;
+  color: #a89e8a;
+  overflow-wrap: anywhere;
+}
+
+.rod-chat__line b {
+  font-weight: 600;
+  color: var(--brass-300);
+}
+
+.rod-chat__line.is-self b {
+  color: var(--gold);
+}
+
+.rod-chat__line.is-whisper {
+  color: #b79ec4;
+}
+
+.rod-chat__line.is-whisper b {
+  color: #cbb0dc;
+}
+
+.rod-chat__line.is-system {
+  font-style: italic;
+  color: #6a635a;
+}
+
+.rod-users {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 8px;
+  background: rgba(3, 3, 5, 0.7);
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.28), inset 0 4px 14px rgba(0, 0, 0, 0.75);
+}
+
+.rod-user {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 0;
+  font: inherit;
+  font-size: 11.5px;
+  color: #a89e8a;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.rod-user:hover {
+  color: var(--gold);
+}
+
+.rod-user::before {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  background: #4e7a3c;
+  box-shadow: 0 0 6px rgba(120, 200, 90, 0.7);
+  transform: rotate(45deg);
+}
+
+.rod-user.is-self {
+  color: var(--gold);
+}
+
+.rod-user.is-self::before {
+  background: var(--gold);
+  box-shadow: 0 0 6px rgba(232, 196, 106, 0.8);
+}
+
+.rod-user__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ status text */
+
+.rod-note {
+  flex: none;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #6a635a;
+}
+
+/* Step guide for joining a room. */
+.rod-guide {
+  margin: 0;
+  padding: 8px 10px;
+  list-style: none;
+  background: rgba(3, 3, 5, 0.55);
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.28);
+}
+
+.rod-guide li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 3px 0;
+  font-size: 12px;
+  color: #6a635a;
+}
+
+.rod-guide li + li {
+  border-top: 1px solid rgba(107, 83, 38, 0.18);
+}
+
+.rod-guide b {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  line-height: 18px;
+  text-align: center;
+  color: #7d6b48;
+  background: #121114;
+  border: 1px solid rgba(107, 83, 38, 0.45);
+}
+
+.rod-guide em {
+  font-style: normal;
+  color: var(--gold);
+}
+
+.rod-guide li.is-done {
+  color: #978f81;
+}
+
+.rod-guide li.is-done b {
+  color: #1a2a14;
+  background: #6b8a4a;
+  border-color: #8ab05e;
+}
+
+.rod-guide li.is-now {
+  color: var(--bone);
+}
+
+.rod-guide li.is-now b {
+  color: #1a1408;
+  background: var(--gold);
+  border-color: #e8c46a;
+}
+
+.rod-link {
+  padding: 0;
+  font: inherit;
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.rod-link:hover {
+  color: #fff3d8;
+}
+
+.rod-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+/* Who is already inside the selected room. */
+.rod-room-peek {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.rod-room-peek__list {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  overflow-x: auto;
+  background: rgba(3, 3, 5, 0.65);
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.28), inset 0 4px 14px rgba(0, 0, 0, 0.7);
+}
+
+.rod-occupant {
+  flex: 0 0 auto;
+  width: 92px;
+  overflow: hidden;
+  background: #0a090c;
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.35);
+}
+
+.rod-occupant__art {
+  display: block;
+  height: 88px;
+  background-repeat: no-repeat;
+  background-position: 50% 10%;
+  background-size: cover;
+  filter: saturate(0.85) brightness(0.85);
+}
+
+.rod-occupant__art::after {
+  content: '';
+  display: block;
+  height: 100%;
+  background: linear-gradient(180deg, transparent 45%, rgba(5, 4, 7, 0.95) 100%);
+}
+
+.rod-occupant__meta {
+  display: block;
+  padding: 4px 5px 5px;
+}
+
+.rod-occupant__meta strong {
+  display: block;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--brass-300);
+}
+
+.rod-occupant__meta em {
+  display: block;
+  overflow: hidden;
+  font-style: normal;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6a635a;
+}
+
+.rod-chat-toggle {
+  width: 100%;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #7d6b48;
+  text-align: left;
+  background: rgba(9, 8, 11, 0.65);
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.28);
+  cursor: pointer;
+}
+
+.rod-chat-toggle:hover {
+  color: var(--brass-300);
+}
+
+.rod-error {
+  flex: none;
+  padding: 6px 9px;
+  font-size: 12px;
+  color: #e8a49a;
+  background: rgba(60, 14, 11, 0.55);
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(142, 28, 22, 0.6);
+}
+
+/* Full-width banner so a failure is readable whichever column is showing. */
+.rod__alert {
+  margin: 12px 18px -2px;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+.rod-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 9px;
+  font: inherit;
+  text-align: left;
+  color: #a89e8a;
+  background: rgba(9, 8, 11, 0.75);
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.24);
+  cursor: pointer;
+  transition: color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.rod-pick-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.rod-pick-wrap + .rod-pick-wrap {
+  margin-top: 5px;
+}
+
+.rod-pick-wrap .rod-pick {
+  flex: 1;
+  min-width: 0;
+}
+
+.rod-pick__del {
+  flex: 0 0 auto;
+  padding: 0 10px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #c9a090;
+  background: rgba(48, 10, 12, 0.75);
+  border: 1px solid rgba(160, 52, 48, 0.55);
+  cursor: pointer;
+}
+
+.rod-pick__del:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(120, 22, 24, 0.92);
+}
+
+.rod-pick__del:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rod-pick + .rod-pick {
+  margin-top: 5px;
+}
+
+.rod-pick strong {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12.5px;
+  letter-spacing: 0.1em;
+}
+
+.rod-pick em {
+  font-style: normal;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ash-dim);
+}
+
+.rod-pick:hover {
+  color: var(--bone);
+  box-shadow: inset 0 0 0 1px rgba(201, 162, 74, 0.5);
+}
+
+.rod-pick.is-on {
+  color: var(--gold);
+  box-shadow: inset 0 0 0 1px rgba(232, 196, 106, 0.7), 0 0 16px rgba(201, 162, 74, 0.18);
+}
+
+/* ------------------------------------------------------------- auth gate */
+
+.rod--gate {
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.rod-auth {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  width: min(860px, calc(100vw - 32px));
+  min-height: min(520px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid #040406;
+  box-shadow:
+    inset 0 0 0 1px rgba(107, 83, 38, 0.35),
+    0 18px 48px rgba(0, 0, 0, 0.75);
+}
+
+.rod-auth--loading {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(420px, calc(100vw - 32px));
+  min-height: 0;
+}
+
+.rod-auth__hero {
+  position: relative;
+  min-height: 280px;
+  background: #08070a;
+}
+
+.rod-auth__hero-art {
+  position: absolute;
+  inset: 0;
+  background-image: url('/assets/ui/scene-campfire.jpg');
+  background-position: 46% 55%;
+  background-size: cover;
+  filter: saturate(0.7) brightness(0.55);
+}
+
+.rod-auth__hero-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(6, 5, 7, 0.35), rgba(6, 5, 7, 0.88)),
+    linear-gradient(90deg, transparent 40%, rgba(6, 5, 7, 0.85));
+}
+
+.rod-auth__hero-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+  padding: 28px 24px;
+}
+
+.rod-auth__crest,
+.rod-auth__crest--solo {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 12px;
+  background-image: url('/assets/ui/icon-skull.png');
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 14px rgba(157, 123, 52, 0.45));
+}
+
+.rod-auth__crest--solo {
+  margin: 18px auto 8px;
+}
+
+.rod-auth__hero-copy h1 {
+  margin: 0;
+  font-family: var(--font-gothic);
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.05;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #b5231a;
+  text-shadow: 0 1px 0 #2a0705, 0 2px 1px #000, 0 0 22px rgba(201, 53, 42, 0.45);
+}
+
+.rod-auth__hero-copy > p {
+  margin: 4px 0 16px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--ash-dim);
+}
+
+.rod-auth__hero-copy ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rod-auth__hero-copy li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0;
+  font-size: 13px;
+  color: #c0b08c;
+}
+
+.rod-auth__hero-copy li::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: linear-gradient(135deg, var(--gold), var(--brass-900));
+  box-shadow: 0 0 0 1px #040406;
+  transform: rotate(45deg);
+}
+
+.rod-auth__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: center;
+  padding: 28px 26px 24px;
+  background-color: var(--stone-900);
+  background-image: linear-gradient(180deg, rgba(54, 48, 42, 0.45), rgba(8, 7, 10, 0.92)), var(--stone);
+  background-size: auto, 340px 340px;
+}
+
+.rod-auth__tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.35);
+}
+
+.rod-auth__tab {
+  padding: 10px 8px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #6d5c3c;
+  background: rgba(8, 7, 10, 0.7);
+  border: 0;
+  cursor: pointer;
+}
+
+.rod-auth__tab.is-on {
+  color: var(--gold);
+  background: linear-gradient(180deg, rgba(80, 60, 28, 0.55), rgba(20, 16, 10, 0.9));
+  box-shadow: inset 0 -2px 0 var(--gold);
+  text-shadow: 0 0 12px rgba(232, 196, 106, 0.35);
+}
+
+.rod-auth__hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #8a8172;
+}
+
+.rod-auth__switch {
+  margin: 2px 0 0;
+  font-size: 12px;
+  text-align: center;
+  color: #6a635a;
+}
+
+.rod-gate {
+  width: min(420px, calc(100vw - 32px));
+  padding: 10px;
+}
+
+.rod-gate__crest {
+  width: 74px;
+  height: 74px;
+  margin: 14px auto 6px;
+  background-image: url('/assets/ui/icon-skull.png');
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 16px rgba(157, 123, 52, 0.4));
+}
+
+.rod-gate__title {
+  font-family: var(--font-gothic);
+  font-size: 34px;
+  line-height: 1.05;
+  letter-spacing: 0.05em;
+  text-align: center;
+  text-transform: uppercase;
+  color: #b5231a;
+  text-shadow: 0 1px 0 #2a0705, 0 2px 1px #000, 0 0 26px rgba(201, 53, 42, 0.5);
+}
+
+.rod-gate__sub {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.4em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--ash-dim);
+}
+
+.rod-gate__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px 16px;
+}
+
+.rod-pick-row {
+  display: flex;
+  gap: 8px;
+  padding: 4px 2px 2px;
+  overflow-x: auto;
+}
+
+.rod-hero--sm {
+  width: 86px;
+  height: 118px;
+  max-height: none;
+}
+
+.rod-hero--sm:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rod-hero--add {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 118px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #7d6b48;
+  background: rgba(8, 7, 10, 0.65);
+  border: 1px dashed rgba(107, 83, 38, 0.55);
+  cursor: pointer;
+}
+
+.rod-hero--add:hover {
+  color: var(--gold);
+  border-color: rgba(232, 196, 106, 0.55);
+}
+
+.rod-empty--action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 720px) {
+  .rod-auth {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .rod-auth__hero {
+    min-height: 160px;
+  }
+
+  .rod-auth__hero-copy ul {
+    display: none;
+  }
+
+  .rod-auth__panel {
+    padding: 20px 16px 18px;
+  }
+}
+
+/* --------------------------------------------------------------- narrow */
+
+/*
+ * Under 1180px there is no room for three columns, so the header tabs and
+ * the menu buttons swap the side panels in and out instead.
+ */
+@media (max-width: 1180px) {
+  .rod__body {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.7fr);
+  }
+
+  .rod__body[data-view='create'] {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.9fr);
+  }
+}
+
+@media (max-width: 820px), (max-height: 520px) {
+  .rod__body {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+    padding: 10px;
+  }
+
+  .rod__body[data-view='menu'] .rod-col--side,
+  .rod__body[data-view='create'] .rod-col--menu,
+  .rod__body[data-view='create'] .rod-col--join,
+  .rod__body[data-view='join'] .rod-col--menu,
+  .rod__body[data-view='join'] .rod-col--create {
+    display: none;
+  }
+
+  .rod__header {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 5px 12px;
+  }
+
+  .rod__aside {
+    display: none;
+  }
+
+  .rod-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rod-side--users {
+    display: none;
+  }
+
+  /*
+   * One scrollbar only: panels grow to their content and `.rod__body` does
+   * the scrolling, instead of every panel nesting its own scroll area.
+   */
+  .rod-panel--grow,
+  .rod-scene {
+    flex: none;
+  }
+
+  .rod-panel__scroll {
+    overflow: visible;
+  }
+
+  .rod-chat__log {
+    height: 168px;
+    flex: none;
+  }
+}

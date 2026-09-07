@@ -23,22 +23,22 @@ interface ClipSpec {
 }
 
 const CLIPS: readonly ClipSpec[] = [
-  { clip: 'idle_down', frames: 8, frameRate: 6, repeat: -1 },
-  { clip: 'idle_up', frames: 8, frameRate: 6, repeat: -1 },
-  { clip: 'idle_right', frames: 8, frameRate: 6, repeat: -1 },
+  { clip: 'idle_down', frames: 4, frameRate: 4, repeat: -1 },
+  { clip: 'idle_up', frames: 4, frameRate: 4, repeat: -1 },
+  { clip: 'idle_right', frames: 4, frameRate: 4, repeat: -1 },
 
-  { clip: 'walk_down', frames: 13, frameRate: 12, repeat: -1 },
-  { clip: 'walk_up', frames: 13, frameRate: 12, repeat: -1 },
-  { clip: 'walk_side', frames: 13, frameRate: 12, repeat: -1 },
+  { clip: 'walk_down', frames: 4, frameRate: 8, repeat: -1 },
+  { clip: 'walk_up', frames: 4, frameRate: 8, repeat: -1 },
+  { clip: 'walk_side', frames: 6, frameRate: 8, repeat: -1 },
 
-  { clip: 'atk1_side', frames: 9, frameRate: 14, repeat: 0 },
-  { clip: 'atk2_side', frames: 7, frameRate: 13, repeat: 0 },
-  { clip: 'atk3_side', frames: 7, frameRate: 13, repeat: 0 },
+  { clip: 'atk1_side', frames: 4, frameRate: 12, repeat: 0 },
+  { clip: 'atk2_side', frames: 3, frameRate: 11, repeat: 0 },
+  { clip: 'atk3_side', frames: 3, frameRate: 11, repeat: 0 },
 
-  { clip: 'cast_side', frames: 9, frameRate: 11, repeat: 0 },
+  { clip: 'cast_side', frames: 4, frameRate: 9, repeat: 0 },
 
-  { clip: 'hurt', frames: 5, frameRate: 12, repeat: 0 },
-  { clip: 'death', frames: 7, frameRate: 8, repeat: 0 },
+  { clip: 'hurt', frames: 2, frameRate: 10, repeat: 0 },
+  { clip: 'death', frames: 5, frameRate: 7, repeat: 0 },
 ];
 
 const PREFIX = 'miku-';
@@ -89,10 +89,10 @@ export const MikuClip = {
 } as const;
 
 const IMPACT_FRAME: Record<string, number> = {
-  atk1_side: 8,
-  atk2_side: 5,
-  atk3_side: 6,
-  cast_side: 6,
+  atk1_side: 4,
+  atk2_side: 2,
+  atk3_side: 2,
+  cast_side: 3,
 };
 
 export function impactFrameOf(ref: ClipRef): number {

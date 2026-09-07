@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { NhuYen } from '../entities/NhuYen';
 import type { Vector2Like } from '../types';
-import { isInputGated } from '../../net/bind';
+import { isGameplayGated } from '../../net/bind';
 import { consumePad, padMove } from '../touchPad';
 
 /**
@@ -28,6 +28,7 @@ export class NhuYenController {
     qiSlash: Phaser.Input.Keyboard.Key[];
     iceArray: Phaser.Input.Keyboard.Key[];
     dash: Phaser.Input.Keyboard.Key[];
+    ultimate: Phaser.Input.Keyboard.Key[];
   };
 
   private enabled = true;
@@ -52,6 +53,7 @@ export class NhuYenController {
       qiSlash: addKeys(K.K),
       iceArray: addKeys(K.L),
       dash: addKeys(K.SPACE),
+      ultimate: addKeys(K.U),
     };
   }
 
@@ -64,7 +66,7 @@ export class NhuYenController {
   update(time: number, delta: number): void {
     this.player.tick(time, delta);
 
-    if (!this.enabled || this.player.isDead || isInputGated()) {
+    if (!this.enabled || this.player.isDead || isGameplayGated()) {
       if (!this.player.isDead) this.player.setVelocity(0, 0);
       return;
     }
@@ -76,7 +78,9 @@ export class NhuYenController {
     // way the character was already looking. Order below sets the priority when
     // two land together: dash first, since it is the escape.
     const steer = this.readSteer();
-    if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
+    if (anyJustDown(this.keys.ultimate) || consumePad('skill3')) {
+      this.player.castUltimate(steer);
+    } else if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
       this.player.dash(steer);
     } else if (anyJustDown(this.keys.iceArray) || consumePad('skill1')) {
       this.player.castIceArray(steer);

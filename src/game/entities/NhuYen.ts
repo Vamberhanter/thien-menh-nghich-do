@@ -321,6 +321,11 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
     return this.cast(NhuYenSlot.QiSlash, NhuYenClip.qiSlash, QI_SLASH_REACH, steer);
   }
 
+  /** Thiên Lý Băng Phong — ultimate slot when unlocked in the skill tree. */
+  castUltimate(steer?: Vector2Like): boolean {
+    return this.cast(NhuYenSlot.Ultimate, NhuYenClip.qiSlash, QI_SLASH_REACH * 1.35, steer);
+  }
+
   /** Băng Tinh Trận — a channelled ice eruption on the ground ahead. */
   castIceArray(steer?: Vector2Like): boolean {
     return this.cast(NhuYenSlot.IceArray, NhuYenClip.channel, ICE_ARRAY_REACH, steer);
@@ -503,10 +508,15 @@ export class NhuYen extends Phaser.Physics.Arcade.Sprite {
 
   private rejectSkill(slot: number): void {
     const skill = this.combat.skillAt(slot);
+    const reason = this.combat.isSkillLocked(slot)
+      ? 'locked'
+      : this.combat.hasSpiritFor(skill)
+        ? 'cooldown'
+        : 'spirit';
     GameBus.emit(GameEvent.SkillRejected, {
       name: skill.name,
       slot,
-      reason: this.combat.hasSpiritFor(skill) ? 'cooldown' : 'spirit',
+      reason,
     });
   }
 

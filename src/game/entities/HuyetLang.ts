@@ -258,6 +258,16 @@ export class HuyetLang extends Phaser.Physics.Arcade.Sprite {
     return this.cast(HuyetLangSlot.MagmaSlash, HuyetLangClip.magmaSlash, MAGMA_SLASH_REACH, steer);
   }
 
+  /** Their ultimate, through the factory signature the cast takes now. */
+  castUltimate(steer?: Vector2Like): boolean {
+    return this.cast(
+      HuyetLangSlot.Ultimate,
+      HuyetLangClip.magmaSlash,
+      MAGMA_SLASH_REACH * 1.35,
+      steer,
+    );
+  }
+
   castRoar(steer?: Vector2Like): boolean {
     return this.cast(HuyetLangSlot.Roar, HuyetLangClip.roar, ROAR_REACH, steer);
   }
@@ -427,10 +437,15 @@ export class HuyetLang extends Phaser.Physics.Arcade.Sprite {
 
   private rejectSkill(slot: number): void {
     const skill = this.combat.skillAt(slot);
+    const reason = this.combat.isSkillLocked(slot)
+      ? 'locked'
+      : this.combat.hasSpiritFor(skill)
+        ? 'cooldown'
+        : 'spirit';
     GameBus.emit(GameEvent.SkillRejected, {
       name: skill.name,
       slot,
-      reason: this.combat.hasSpiritFor(skill) ? 'cooldown' : 'spirit',
+      reason,
     });
   }
 

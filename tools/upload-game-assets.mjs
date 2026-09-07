@@ -13,9 +13,19 @@ const SETS = {
   nhuyen: ['public/assets/characters/nhuyen/atlas'],
   huyetlang: ['public/assets/characters/huyetlang/atlas'],
   wukong: ['public/assets/characters/wukong/atlas'],
+  characters: [
+    'public/assets/characters/nhuyen/atlas',
+    'public/assets/characters/huyetlang/atlas',
+    'public/assets/characters/miku/atlas',
+    'public/assets/characters/wukong/atlas',
+  ],
   boss: ['public/assets/boss/boss1/atlas'],
+  environment: ['public/assets/environment/manaseed'],
+  monsters: ['public/assets/monsters'],
+  items: ['public/assets/items'],
+  weapons: ['public/assets/weapons'],
+  resources: ['public/assets/resources'],
 };
-SETS.characters = [...SETS.nhuyen, ...SETS.huyetlang, ...SETS.wukong];
 
 function loadEnv() {
   const text = readFileSync(join(ROOT, '.env'), 'utf8');
@@ -129,7 +139,9 @@ const url = (env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
  */
 const key = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_PUBLISHABLE_KEY;
 if (!url || !key) {
-  throw new Error('Missing VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY in .env');
+  throw new Error(
+    'Missing VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) in .env',
+  );
 }
 
 const files = dirs.flatMap(collect);

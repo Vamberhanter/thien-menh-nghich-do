@@ -1,0 +1,32 @@
+/* Readable bag + on-screen potion pad (loaded after index.css). */
+.bag {
+  width: min(560px, calc(100vw - 32px)) !important;
+  top: 72px !important;
+  max-height: calc(100vh - 100px) !important;
+  overflow: auto !important;
+  padding: 16px !important;
+  z-index: 8 !important;
+}
+
+.bag__title {
+  font-size: 15px !important;
+}
+
+.bag__grid {
+  gap: 8px !important;
+}
+
+.bag__slot {
+  min-height: 84px !important;
+  font-size: 12px !important;
+  padding: 8px 6px !important;
+}
+
+.bag__icon {
+  width: 48px !important;
+  height: 48px !important;
+}
+
+.bag__slot b {
+  font-size: 12px !important;
+}

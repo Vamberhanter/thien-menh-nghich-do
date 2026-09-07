@@ -13,6 +13,10 @@ export interface SkillDefinition {
    * effect outlives its animation does not snap back to idle underneath it.
    */
   recovery?: number;
+  /** True when the skill tree has not unlocked this kit slot yet. */
+  locked?: boolean;
+  /** Matching skill-tree node id, when wired from {@link buildCombatKit}. */
+  treeId?: string;
 }
 
 /**
@@ -139,25 +143,6 @@ export const CAN_DAU_VAN: SkillDefinition = {
   spiritCost: 4,
 };
 
-export const NHU_YEN_SKILLS: readonly SkillDefinition[] = [
-  BANG_PHACH_TRAM,
-  BANG_TINH_TRAN,
-  SUONG_ANH_BO,
-];
-
-export const HUYET_LANG_SKILLS: readonly SkillDefinition[] = [
-  HUYET_DIEM_TRAM,
-  TAM_THU_HONG,
-  LIET_ANH_BO,
-];
-
-/** Slot indices into `NHU_YEN_SKILLS`, so callers never pass a bare number. */
-export const NhuYenSlot = {
-  QiSlash: 0,
-  IceArray: 1,
-  ShadowStep: 2,
-} as const;
-
 export const WUKONG_SKILLS: readonly SkillDefinition[] = [
   CUU_U_NO_DIEM,
   HANG_MA_CHAN_LOI,
@@ -165,12 +150,6 @@ export const WUKONG_SKILLS: readonly SkillDefinition[] = [
   MA_NGUYET_TRAM,
   CAN_DAU_VAN,
 ];
-
-export const HuyetLangSlot = {
-  MagmaSlash: 0,
-  Roar: 1,
-  ShadowStep: 2,
-} as const;
 
 export const TINH_MANG_TRAM: SkillDefinition = {
   name: 'Tinh Mang Trảm',
@@ -194,16 +173,44 @@ export const AO_ANH_BO: SkillDefinition = {
   spiritCost: 4,
 };
 
+export const NHU_YEN_SKILLS: readonly SkillDefinition[] = [
+  BANG_PHACH_TRAM,
+  BANG_TINH_TRAN,
+  SUONG_ANH_BO,
+];
+
+export const HUYET_LANG_SKILLS: readonly SkillDefinition[] = [
+  HUYET_DIEM_TRAM,
+  TAM_THU_HONG,
+  LIET_ANH_BO,
+];
+
 export const MIKU_SKILLS: readonly SkillDefinition[] = [
   TINH_MANG_TRAM,
   TINH_KHONG_TRAN,
   AO_ANH_BO,
 ];
 
+/** Slot indices into `NHU_YEN_SKILLS`, so callers never pass a bare number. */
+export const NhuYenSlot = {
+  QiSlash: 0,
+  IceArray: 1,
+  ShadowStep: 2,
+  Ultimate: 3,
+} as const;
+
+export const HuyetLangSlot = {
+  MagmaSlash: 0,
+  Roar: 1,
+  ShadowStep: 2,
+  Ultimate: 3,
+} as const;
+
 export const MikuSlot = {
   StarSlash: 0,
   StarArray: 1,
   ShadowStep: 2,
+  Ultimate: 3,
 } as const;
 
 /**
@@ -217,6 +224,8 @@ export const WukongSlot = {
   Dragon: 3,
   CloudStep: 4,
 } as const;
+/** Shared ultimate kit slot index after the three base techniques. */
+export const ULTIMATE_SLOT = 3;
 
 export const ATTACK_COOLDOWN = 500;
 
@@ -232,7 +241,7 @@ const SPIRIT_REGEN_PER_SECOND = 2;
  * to 0, so a one-skill character never has to mention it.
  */
 export class CombatSystem {
-  readonly skills: readonly SkillDefinition[];
+  private skillDefs: SkillDefinition[];
 
   private attackReadyAt = 0;
   private readonly skillReadyAt: number[];
@@ -244,18 +253,30 @@ export class CombatSystem {
     skills: SkillDefinition | readonly SkillDefinition[],
     private readonly attackCooldown: number = ATTACK_COOLDOWN,
   ) {
-    this.skills = Array.isArray(skills) ? skills : [skills as SkillDefinition];
-    if (this.skills.length === 0) throw new Error('CombatSystem needs at least one skill');
-    this.skillReadyAt = this.skills.map(() => 0);
+    this.skillDefs = Array.isArray(skills) ? [...skills] : [skills as SkillDefinition];
+    if (this.skillDefs.length === 0) throw new Error('CombatSystem needs at least one skill');
+    this.skillReadyAt = this.skillDefs.map(() => 0);
+  }
+
+  get skills(): readonly SkillDefinition[] {
+    return this.skillDefs;
+  }
+
+  /** Swap kit defs after skill-tree spend / class sync (keeps cooldown clocks). */
+  replaceSkills(next: readonly SkillDefinition[]): void {
+    if (next.length === 0) throw new Error('CombatSystem needs at least one skill');
+    this.skillDefs = [...next];
+    while (this.skillReadyAt.length < next.length) this.skillReadyAt.push(0);
+    this.skillReadyAt.length = next.length;
   }
 
   /** The primary skill — what a single-skill character means by "the skill". */
   get skill(): SkillDefinition {
-    return this.skills[0];
+    return this.skillDefs[0];
   }
 
   skillAt(slot: number): SkillDefinition {
-    const skill = this.skills[slot];
+    const skill = this.skillDefs[slot];
     if (!skill) throw new Error(`no skill in slot ${slot}`);
     return skill;
   }
@@ -290,7 +311,12 @@ export class CombatSystem {
 
   canCastSkill(slot = 0): boolean {
     const skill = this.skillAt(slot);
+    if (skill.locked) return false;
     return this.now >= this.skillReadyAt[slot] && this.stats.spiritualPower >= skill.spiritCost;
+  }
+
+  isSkillLocked(slot = 0): boolean {
+    return Boolean(this.skillAt(slot).locked);
   }
 
   hasSpiritFor(skill: SkillDefinition = this.skill): boolean {

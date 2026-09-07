@@ -2,28 +2,16 @@
 //   node tools/build-miku-atlas.mjs
 //
 // Source is one 4x6 grid on a white canvas. Sprites bleed across cell lines
-// (twin-tails, sword trails). Each cell seeds a flood that may enter a
-// neighbour's margin but never its core, so a pose stays whole.
-import { mkdirSync, writeFileSync, existsSync, openSync, writeSync, closeSync } from 'node:fs';
+// (twin-tails, sword trails). Each connected opaque blob is kept whole and
+// handed to the grid cell that already owns most of its pixels, so a pose is
+// never sliced in half at the border.
+import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Surface } from './pixel.mjs';
 import { encodePNG } from './png.mjs';
 import { decodePNG } from './png-decode.mjs';
 import { packFrames } from './atlas-pack.mjs';
-
-function safeWrite(path, data) {
-  const buf = typeof data === 'string' ? Buffer.from(data) : Buffer.from(data);
-  const CHUNK = 60000;
-  const fd = openSync(path, 'w');
-  try {
-    for (let i = 0; i < buf.length; i += CHUNK) {
-      writeSync(fd, buf.subarray(i, i + CHUNK));
-    }
-  } finally {
-    closeSync(fd);
-  }
-}
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = join(ROOT, 'public', 'assets', 'characters', 'miku', 'source', 'miku-sheet.png');
@@ -69,46 +57,40 @@ const CELL = {
 };
 
 const CLIPS = [
-  { name: 'idle_down', cells: [CELL.idle], anchor: 'feet', breathe: 8 },
-  { name: 'idle_up', cells: [CELL.idle], anchor: 'feet', breathe: 8 },
-  { name: 'idle_right', cells: [CELL.idle], anchor: 'feet', breathe: 8 },
+  { name: 'idle_down', cells: [CELL.idle], anchor: 'feet', breathe: 4 },
+  { name: 'idle_up', cells: [CELL.idle], anchor: 'feet', breathe: 4 },
+  { name: 'idle_right', cells: [CELL.idle], anchor: 'feet', breathe: 4 },
 
   {
     name: 'walk_down',
-    cells: [CELL.ready0, CELL.ready1, CELL.ready2, CELL.ready1, CELL.ready0, CELL.lunge1, CELL.ready0],
+    cells: [CELL.ready0, CELL.ready1, CELL.ready2, CELL.ready1],
     anchor: 'cycle',
-    inbetween: 1,
-    bob: true,
   },
   {
     name: 'walk_up',
-    cells: [CELL.ready0, CELL.ready1, CELL.ready2, CELL.ready1, CELL.ready0, CELL.lunge1, CELL.ready0],
+    cells: [CELL.ready0, CELL.ready1, CELL.ready2, CELL.ready1],
     anchor: 'cycle',
-    inbetween: 1,
-    bob: true,
   },
   {
     name: 'walk_side',
-    cells: [CELL.ready0, CELL.ready1, CELL.ready2, CELL.lunge0, CELL.lunge1, CELL.ready2, CELL.ready1],
+    cells: [CELL.ready0, CELL.ready1, CELL.ready2, CELL.lunge0, CELL.ready2, CELL.ready1],
     anchor: 'cycle',
-    inbetween: 1,
-    bob: true,
   },
 
-  { name: 'atk1_side', cells: [CELL.ready0, CELL.ready1, CELL.ready2, CELL.lunge0, CELL.slashBig], anchor: 'feet', inbetween: 1 },
-  { name: 'atk2_side', cells: [CELL.slashDown, CELL.slashUp, CELL.slashSpin, CELL.slashLeap], anchor: 'feet', inbetween: 1 },
-  { name: 'atk3_side', cells: [CELL.slashLeap, CELL.slashLow, CELL.slashBig, CELL.ready2], anchor: 'feet', inbetween: 1 },
+  { name: 'atk1_side', cells: [CELL.ready0, CELL.ready1, CELL.ready2, CELL.slashBig], anchor: 'feet' },
+  { name: 'atk2_side', cells: [CELL.slashDown, CELL.slashUp, CELL.slashSpin], anchor: 'feet' },
+  { name: 'atk3_side', cells: [CELL.slashLeap, CELL.slashLow, CELL.slashBig], anchor: 'feet' },
 
   {
     name: 'cast_side',
-    cells: [CELL.castCircle, CELL.thrust, CELL.castVortex, CELL.cheer, CELL.castVortex],
+    cells: [CELL.castCircle, CELL.thrust, CELL.castVortex, CELL.cheer],
     anchor: 'feet',
-    inbetween: 1,
   },
 
-  { name: 'hurt', cells: [CELL.crawl, CELL.sit, CELL.crawl], anchor: 'feet', inbetween: 1 },
-  { name: 'death', cells: [CELL.sit, CELL.ko], anchor: 'feet', dissolve: 5 },
+  { name: 'hurt', cells: [CELL.crawl, CELL.sit], anchor: 'feet' },
+  { name: 'death', cells: [CELL.sit, CELL.ko], anchor: 'feet', dissolve: 3 },
 
+  // slashBig keeps the body — callers tint/fade it as an afterimage trail
   { name: 'fx_crescent', cells: [CELL.slashBig], anchor: 'centre', trail: true },
   { name: 'fx_star', cells: [CELL.fxStar], anchor: 'centre' },
   { name: 'fx_eruption', cells: [CELL.fxErupt0, CELL.fxErupt1, CELL.fxErupt2], anchor: 'ground' },
@@ -250,118 +232,151 @@ function cellRects(width, height) {
 }
 
 /**
- * Seed each cell from the opaque pixels inside its grid rectangle, then flood
- * outward so twin-tails / sword trails that cross a grid line stay attached.
- *
- * Expansion may enter a neighbour's margin, but never its *core* (the inset
- * centre of that neighbour). That keeps a pose whole without swallowing the
- * next character on the sheet.
+ * Keep each pose whole: label connected opaque blobs, then hand every blob to
+ * the grid cell that already owns most of its pixels. Twin-tails and sword
+ * trails that cross a grid line stay with the body instead of being sliced in
+ * half at the cell border.
  */
 function cutAllCells(img) {
   const { width, height, data } = img;
   const rects = cellRects(width, height);
-  const CORE_INSET = 0.18;
-  const MARGIN = 0.55;
+  const labels = new Int32Array(width * height);
+  labels.fill(-1);
+  const sizes = [];
+  const counts = []; // per-blob tallies inside each cell rect
+  const centroids = [];
+  const stack = [];
+  let next = 0;
 
-  const cores = rects.map((r) => {
-    const bw = r.x1 - r.x0;
-    const bh = r.y1 - r.y0;
-    const ix = Math.round(bw * CORE_INSET);
-    const iy = Math.round(bh * CORE_INSET);
-    return { x0: r.x0 + ix, y0: r.y0 + iy, x1: r.x1 - ix, y1: r.y1 - iy };
-  });
+  const cellAt = (x, y) => {
+    for (let c = 0; c < rects.length; c++) {
+      const r = rects[c];
+      if (x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1) return c;
+    }
+    return -1;
+  };
 
-  const expands = rects.map((r) => {
-    const bw = r.x1 - r.x0;
-    const bh = r.y1 - r.y0;
-    const mx = Math.round(bw * MARGIN);
-    const my = Math.round(bh * MARGIN);
-    return {
-      x0: Math.max(0, r.x0 - mx),
-      y0: Math.max(0, r.y0 - my),
-      x1: Math.min(width, r.x1 + mx),
-      y1: Math.min(height, r.y1 + my),
-    };
-  });
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const start = y * width + x;
+      if (labels[start] >= 0 || data[start * 4 + 3] === 0) continue;
+      const label = next++;
+      let n = 0;
+      let sx = 0;
+      let sy = 0;
+      const tally = new Int32Array(rects.length);
+      stack.push(x, y);
+      labels[start] = label;
+      while (stack.length) {
+        const cy = stack.pop();
+        const cx = stack.pop();
+        n++;
+        sx += cx;
+        sy += cy;
+        const cell = cellAt(cx, cy);
+        if (cell >= 0) tally[cell]++;
+        for (const [nx, ny] of [
+          [cx - 1, cy],
+          [cx + 1, cy],
+          [cx, cy - 1],
+          [cx, cy + 1],
+        ]) {
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const i = ny * width + nx;
+          if (labels[i] >= 0 || data[i * 4 + 3] === 0) continue;
+          labels[i] = label;
+          stack.push(nx, ny);
+        }
+      }
+      sizes[label] = n;
+      counts[label] = tally;
+      centroids[label] = { x: sx / n, y: sy / n };
+    }
+  }
 
-  const inRect = (r, x, y) => x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1;
-  const cells = [];
-
-  for (let cell = 0; cell < rects.length; cell++) {
-    const owned = new Uint8Array(width * height);
-    const stack = [];
-    const r = rects[cell];
-    const expand = expands[cell];
-
-    for (let y = r.y0; y < r.y1; y++) {
-      for (let x = r.x0; x < r.x1; x++) {
-        const i = y * width + x;
-        if (data[i * 4 + 3] === 0) continue;
-        owned[i] = 1;
-        stack.push(x, y);
+  const owner = new Int32Array(next);
+  owner.fill(-1);
+  for (let label = 0; label < next; label++) {
+    if (sizes[label] < MIN_BLOB) continue;
+    const tally = counts[label];
+    let best = -1;
+    let bestCount = -1;
+    for (let c = 0; c < tally.length; c++) {
+      if (tally[c] > bestCount) {
+        bestCount = tally[c];
+        best = c;
       }
     }
-
-    while (stack.length) {
-      const y = stack.pop();
-      const x = stack.pop();
-      for (const [nx, ny] of [
-        [x - 1, y],
-        [x + 1, y],
-        [x, y - 1],
-        [x, y + 1],
-      ]) {
-        if (!inRect(expand, nx, ny)) continue;
-        const i = ny * width + nx;
-        if (owned[i] || data[i * 4 + 3] === 0) continue;
-        let inForeignCore = false;
-        for (let other = 0; other < cores.length; other++) {
-          if (other === cell) continue;
-          if (inRect(cores[other], nx, ny)) {
-            inForeignCore = true;
-            break;
+    // Pure overflow (no pixels inside any rect — shouldn't happen): nearest centre
+    if (bestCount <= 0) {
+      const c = centroids[label];
+      let bestDist = Infinity;
+      for (let i = 0; i < rects.length; i++) {
+        const d = (c.x - rects[i].cx) ** 2 + (c.y - rects[i].cy) ** 2;
+        if (d < bestDist) {
+          bestDist = d;
+          best = i;
+        }
+      }
+    } else {
+      // Tie-break: among cells with the same count, pick nearest centroid
+      const tied = [];
+      for (let c = 0; c < tally.length; c++) if (tally[c] === bestCount) tied.push(c);
+      if (tied.length > 1) {
+        const c = centroids[label];
+        let bestDist = Infinity;
+        for (const i of tied) {
+          const d = (c.x - rects[i].cx) ** 2 + (c.y - rects[i].cy) ** 2;
+          if (d < bestDist) {
+            bestDist = d;
+            best = i;
           }
         }
-        if (inForeignCore) continue;
-        owned[i] = 1;
-        stack.push(nx, ny);
       }
     }
-
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -1;
-    let maxY = -1;
-    let count = 0;
-    for (let y = expand.y0; y < expand.y1; y++) {
-      for (let x = expand.x0; x < expand.x1; x++) {
-        const i = y * width + x;
-        if (!owned[i]) continue;
-        count++;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
-
-    if (count < MIN_BLOB) {
-      cells[cell] = new Surface(1, 1);
-      continue;
-    }
-
-    const surface = new Surface(maxX - minX + 1, maxY - minY + 1);
-    for (let y = minY; y <= maxY; y++) {
-      for (let x = minX; x <= maxX; x++) {
-        const i = y * width + x;
-        if (!owned[i]) continue;
-        const s = i * 4;
-        surface.set(x - minX, y - minY, [data[s], data[s + 1], data[s + 2], data[s + 3]]);
-      }
-    }
-    cells[cell] = surface;
+    owner[label] = best;
   }
-  return cells;
+
+  const buckets = Array.from({ length: rects.length }, () => ({
+    minX: Infinity,
+    minY: Infinity,
+    maxX: -1,
+    maxY: -1,
+    pixels: /** @type {number[]} */ ([]),
+  }));
+
+  for (let i = 0; i < width * height; i++) {
+    const label = labels[i];
+    if (label < 0) continue;
+    const cell = owner[label];
+    if (cell < 0) continue;
+    const x = i % width;
+    const y = (i / width) | 0;
+    const b = buckets[cell];
+    b.pixels.push(i);
+    if (x < b.minX) b.minX = x;
+    if (x > b.maxX) b.maxX = x;
+    if (y < b.minY) b.minY = y;
+    if (y > b.maxY) b.maxY = y;
+  }
+
+  return buckets.map((b, cell) => {
+    if (b.pixels.length < MIN_BLOB) {
+      // Fall back to a hard crop of the grid rect so empty cells stay empty
+      // rather than borrowing a neighbour's leftover crumb.
+      const r = rects[cell];
+      const surface = new Surface(Math.max(1, r.x1 - r.x0), Math.max(1, r.y1 - r.y0));
+      return surface;
+    }
+    const surface = new Surface(b.maxX - b.minX + 1, b.maxY - b.minY + 1);
+    for (const i of b.pixels) {
+      const x = i % width;
+      const y = (i / width) | 0;
+      const s = i * 4;
+      surface.set(x - b.minX, y - b.minY, [data[s], data[s + 1], data[s + 2], data[s + 3]]);
+    }
+    return surface;
+  });
 }
 
 function cellSize(img) {
@@ -470,48 +485,40 @@ function boxFor(surfaces, anchors) {
 }
 
 function placeOnPivot(surface, box, anchorPx, kind) {
-  let w = box.w;
-  let h = box.h;
-  while (true) {
-    const out = new Surface(w, h);
-    const targetX = w / 2;
-    const targetY = kind === 'centre' ? h / 2 : h - PAD - 1;
-    const ox = Math.round(targetX - anchorPx.x);
-    const oy = Math.round(targetY - anchorPx.y);
-    let kept = 0;
-    let total = 0;
-    for (let y = 0; y < surface.height; y++) {
-      for (let x = 0; x < surface.width; x++) {
-        const [r, g, b, a] = surface.get(x, y);
-        if (!a) continue;
-        total++;
-        const dx = x + ox;
-        const dy = y + oy;
-        if (dx < 0 || dy < 0 || dx >= w || dy >= h) continue;
-        out.set(dx, dy, [r, g, b, a]);
-        kept++;
-      }
+  const out = new Surface(box.w, box.h);
+  const targetX = box.w / 2;
+  const targetY = kind === 'centre' ? box.h / 2 : box.h - PAD - 1;
+  const ox = Math.round(targetX - anchorPx.x);
+  const oy = Math.round(targetY - anchorPx.y);
+  let kept = 0;
+  let total = 0;
+  for (let y = 0; y < surface.height; y++) {
+    for (let x = 0; x < surface.width; x++) {
+      const [r, g, b, a] = surface.get(x, y);
+      if (!a) continue;
+      total++;
+      const dx = x + ox;
+      const dy = y + oy;
+      if (dx < 0 || dy < 0 || dx >= box.w || dy >= box.h) continue;
+      out.set(dx, dy, [r, g, b, a]);
+      kept++;
     }
-    if (kept >= total) {
-      return {
-        surface: out,
-        anchor: { x: (anchorPx.x + ox) / w, y: (anchorPx.y + oy) / h },
-      };
-    }
-    w += PAD * 2;
-    h += PAD * 2;
   }
+  if (kept < total) {
+    throw new Error(
+      `frame clipped while packing: kept ${kept}/${total} in ${box.w}x${box.h} (pad=${PAD})`,
+    );
+  }
+  return {
+    surface: out,
+    anchor: { x: (anchorPx.x + ox) / box.w, y: (anchorPx.y + oy) / box.h },
+  };
 }
 
 function breathe(base, step) {
-  const out = new Surface(base.width + 2, base.height + 3);
-  const ox = 1;
-  const oy = 1;
-  const phase = (step / 8) * Math.PI * 2;
-  const lift = Math.round((1 + Math.sin(phase)) * 1);
-  const glow = Math.sin(phase);
-  const sway = Math.sin(phase) >= 0 ? 1 : -1;
-
+  // Grow 1px vertically so the lift never drops hair off the top of the canvas.
+  const out = new Surface(base.width, base.height + 2);
+  const lift = step % 2 === 0 ? 1 : 0;
   for (let y = 0; y < base.height; y++) {
     for (let x = 0; x < base.width; x++) {
       const [r, g, b, a] = base.get(x, y);
@@ -519,15 +526,11 @@ function breathe(base, step) {
       let nr = r;
       let ng = g;
       let nb = b;
-      if (g > r && b > r) {
-        const boost = Math.round(glow * 6 + 6);
-        ng = Math.min(255, g + boost);
-        nb = Math.min(255, b + Math.round(boost * 0.75));
+      if (step % 2 === 1 && g > r && b > r) {
+        ng = Math.min(255, g + 8);
+        nb = Math.min(255, b + 6);
       }
-      let dx = x + ox;
-      let dy = y + oy - lift;
-      if (y < base.height * 0.45) dx += sway;
-      if (out.inside(dx, dy)) out.set(dx, dy, [nr, ng, nb, a]);
+      out.set(x, y + lift, [nr, ng, nb, a]);
     }
   }
   return out;
@@ -557,75 +560,6 @@ function dissolve(base, step, of) {
   return out;
 }
 
-/** Stamp a frame onto a canvas so its feet land on (feetX, feetY). */
-function stampAtFeet(dest, frame, feetX, feetY) {
-  const ox = Math.round(feetX - frame.anchorPx.x);
-  const oy = Math.round(feetY - frame.anchorPx.y);
-  for (let y = 0; y < frame.surface.height; y++) {
-    for (let x = 0; x < frame.surface.width; x++) {
-      const [r, g, b, a] = frame.surface.get(x, y);
-      if (!a) continue;
-      const dx = x + ox;
-      const dy = y + oy;
-      if (!dest.inside(dx, dy)) continue;
-      const prev = dest.get(dx, dy);
-      if (a >= prev[3]) dest.set(dx, dy, [r, g, b, a]);
-    }
-  }
-}
-
-/**
- * Crossfade two feet-aligned frames. t in (0,1).
- * Soft blend reads as motion on chibi art; hard nearest looks like a flicker.
- */
-function lerpFrames(a, b, t) {
-  const pad = 4;
-  const left = Math.max(a.anchorPx.x, b.anchorPx.x) + pad;
-  const right = Math.max(a.surface.width - a.anchorPx.x, b.surface.width - b.anchorPx.x) + pad;
-  const above = Math.max(a.anchorPx.y, b.anchorPx.y) + pad;
-  const below = Math.max(a.surface.height - a.anchorPx.y, b.surface.height - b.anchorPx.y) + pad;
-  const w = Math.ceil(left + right);
-  const h = Math.ceil(above + below);
-  const feetX = left;
-  const feetY = above;
-  const ca = new Surface(w, h);
-  const cb = new Surface(w, h);
-  stampAtFeet(ca, a, feetX, feetY);
-  stampAtFeet(cb, b, feetX, feetY);
-  const out = new Surface(w, h);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const A = ca.get(x, y);
-      const B = cb.get(x, y);
-      if (!A[3] && !B[3]) continue;
-      const r = Math.round(A[0] * (1 - t) + B[0] * t);
-      const g = Math.round(A[1] * (1 - t) + B[1] * t);
-      const b = Math.round(A[2] * (1 - t) + B[2] * t);
-      const alpha = Math.round(A[3] * (1 - t) + B[3] * t);
-      if (alpha < 8) continue;
-      out.set(x, y, [r, g, b, alpha]);
-    }
-  }
-  return { surface: out, anchorPx: { x: feetX, y: feetY } };
-}
-
-function bobFrame(frame, step) {
-  const lift = step % 2 === 0 ? 0 : -1;
-  const out = new Surface(frame.surface.width, frame.surface.height + 2);
-  for (let y = 0; y < frame.surface.height; y++) {
-    for (let x = 0; x < frame.surface.width; x++) {
-      const px = frame.surface.get(x, y);
-      if (!px[3]) continue;
-      const yy = y + 1 + lift;
-      if (yy >= 0 && yy < out.height) out.set(x, yy, px);
-    }
-  }
-  return {
-    surface: out,
-    anchorPx: { x: frame.anchorPx.x, y: frame.anchorPx.y + 1 + lift },
-  };
-}
-
 function buildClipFrames(cells, clip) {
   const raw = clip.cells.map((index) => {
     let surface = cells[index];
@@ -635,33 +569,16 @@ function buildClipFrames(cells, clip) {
   });
 
   let expanded = [];
-  if (clip.breathe) {
-    const frame = raw[0];
-    for (let i = 0; i < clip.breathe; i++) {
-      const s = breathe(frame.surface, i);
-      expanded.push({ surface: s, anchorPx: anchorOf(s, 'feet') });
-    }
-  } else {
-    expanded = [...raw];
-  }
-
-  if (clip.inbetween > 0) {
-    const n = clip.inbetween;
-    const interleaved = [];
-    for (let i = 0; i < expanded.length; i++) {
-      interleaved.push(expanded[i]);
-      if (i < expanded.length - 1) {
-        const a = expanded[i];
-        const b = expanded[i + 1];
-        for (let k = 0; k < n; k++) {
-          const t = (k + 1) / (n + 1);
-          interleaved.push(lerpFrames(a, b, t));
-        }
+  for (const frame of raw) {
+    if (clip.breathe) {
+      for (let i = 0; i < clip.breathe; i++) {
+        const s = breathe(frame.surface, i);
+        expanded.push({ surface: s, anchorPx: anchorOf(s, 'feet') });
       }
+    } else {
+      expanded.push(frame);
     }
-    expanded = interleaved;
   }
-
   if (clip.dissolve) {
     const last = expanded[expanded.length - 1];
     for (let i = 0; i < clip.dissolve; i++) {
@@ -670,10 +587,6 @@ function buildClipFrames(cells, clip) {
         anchorPx: { ...last.anchorPx },
       });
     }
-  }
-
-  if (clip.bob) {
-    expanded = expanded.map((frame, i) => bobFrame(frame, i));
   }
 
   if (clip.anchor === 'cycle') {
@@ -730,7 +643,7 @@ function main() {
     }
 
     const packed = packFrames(entries);
-    safeWrite(join(OUT_DIR, group.file), encodePNG(packed.surface));
+    writeFileSync(join(OUT_DIR, group.file), encodePNG(packed.surface));
     textures.push({
       image: group.file,
       format: 'RGBA8888',
@@ -741,7 +654,7 @@ function main() {
     console.log(`wrote ${group.file}  ${packed.surface.width}x${packed.surface.height}`);
   }
 
-  safeWrite(
+  writeFileSync(
     join(OUT_DIR, 'miku.json'),
     JSON.stringify(
       {

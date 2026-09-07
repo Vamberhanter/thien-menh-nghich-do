@@ -16,6 +16,8 @@ export const BOSS1_TEXTURE = 'boss1';
 const bossAtlas = remoteAtlas('boss/boss1/atlas/boss1.json', 'boss/boss1/atlas');
 export const BOSS1_ATLAS_URL = bossAtlas.url;
 export const BOSS1_ATLAS_PATH = bossAtlas.path;
+export const BOSS1_ATLAS_LOCAL_URL = bossAtlas.localUrl;
+export const BOSS1_ATLAS_LOCAL_PATH = bossAtlas.localPath;
 
 interface ClipSpec {
   clip: string;

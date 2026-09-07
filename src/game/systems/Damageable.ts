@@ -20,6 +20,12 @@ export interface HitInfo {
   tint?: number;
   /** Who threw it, so a hit can never damage its own side. */
   side: 'player' | 'enemy';
+  /**
+   * A guest replaying its own swing before the host has confirmed it. The
+   * target flinches and its bar drops, but it can never take the last hit
+   * point — only the host is allowed to decide something died.
+   */
+  predicted?: boolean;
 }
 
 /**

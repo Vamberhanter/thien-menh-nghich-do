@@ -13,3 +13,16 @@ public/assets/characters/**/*.png
 public/assets/characters/**/*.webp
 public/assets/boss/**/*.png
 public/assets/boss/**/*.webp
+# Licensed tileset art, staged by `npm run env:manaseed`.
+public/assets/environment/**/*.png
+# Licensed monster art, staged by `npm run env:monsters`.
+public/assets/monsters/**/*.png
+# Licensed item art, staged by `npm run env:items` / env:catalog-icons.
+public/assets/items/**/*.png
+# Licensed weapon art, staged by `npm run env:weapons` from source-art/packs/icons/File.png.
+public/assets/weapons/**/*.png
+# Generated from source-art/gameplay by `npm run env:resources`.
+public/assets/resources/**/*.png
+
+# Large vendor packs (optional local staging; keep out of accidental commits of drafts only if needed)
+# Packs under source-art/packs are intentionally tracked or left to the developer.

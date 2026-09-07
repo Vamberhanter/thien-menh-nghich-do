@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { BootScene } from '../scenes/BootScene';
-import { WorldScene } from '../scenes/WorldScene';
+import { WorldScene } from '../WorldScene';
 
 /** The world the cameras show, in world units. Not the canvas size. */
 export const GAME_WIDTH = 1280;
@@ -66,6 +66,9 @@ export function createGameConfig(parent: HTMLElement): Phaser.Types.Core.GameCon
        * many times for every lit pixel — so it is a ceiling, not a target.
        */
       maxLights: 24,
+      // Without this the WebGL buffer is empty by the time anything outside the
+      // render loop reads it, so dev screenshots come out blank.
+      preserveDrawingBuffer: import.meta.env.DEV,
     },
 
     scale: {

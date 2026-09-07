@@ -20,7 +20,7 @@ export function parseNetCharacter(raw: unknown): NetCharacter {
 export const DEFAULT_WORLD = 'thien-menh';
 
 /** How often a pose is published. Interpolation covers the gaps. */
-export const POSE_HZ = 12;
+export const POSE_HZ = 15;
 export const POSE_INTERVAL_MS = 1000 / POSE_HZ;
 
 /**
@@ -75,18 +75,55 @@ export interface WorldSnap {
   host: string;
   t: number;
   mobs: Array<{ i: number; x: number; y: number; hp: number; a: 0 | 1 }>;
-  boss?: { x: number; y: number; hp: number; a: 0 | 1 };
+  boss?: { x: number; y: number; hp: number; a: 0 | 1; w?: 0 | 1; f?: Direction };
   stones: Array<{ i: number; hp: number }>;
   loot: Array<{ id: string; x: number; y: number; items: string[] }>;
 }
 
+/**
+ * One resolved hit on the shared PvE layer.
+ *
+ * The snapshot alone would make an ally's damage arrive up to a full snapshot
+ * late, so the host echoes every landed hit on the frame it lands and lets the
+ * snapshot go back to being a slow correction.
+ */
+export interface NetHitRow {
+  /** `m` mob (by spawn index), `b` boss. */
+  k: 'm' | 'b';
+  i: number;
+  /** Damage the host actually subtracted. */
+  d: number;
+  /** Authoritative hp left, so a guest that mispredicted snaps back. */
+  hp: number;
+  /** Who landed it — the thrower already drew its own number. */
+  by: string;
+}
+
 export type WorldNetEvent =
   | { kind: 'snap'; snap: WorldSnap }
+  | { kind: 'hit'; rows: NetHitRow[] }
+  | { kind: 'boss-act'; act: 'melee' | 'bolt' | 'nova'; ax: number; ay: number }
   | { kind: 'hurt'; playerId: string; damage: number; ax: number; ay: number }
   | { kind: 'reward'; playerId: string; xp?: number; items?: string[]; x: number; y: number }
   | { kind: 'loot-take'; pileId: string; playerId: string };
 
-export const WORLD_SNAP_MS = 160;
+export const WORLD_SNAP_MS = 100;
+
+/**
+ * Window a replica takes to glide onto the host's position. Longer than the
+ * snapshot gap so a dropped packet stretches the glide instead of stalling it.
+ */
+export const SNAP_LERP_MS = 140;
+
+/** Past this gap the host is somewhere else entirely: cut, do not glide. */
+export const SNAP_TELEPORT_PX = 180;
+
+/**
+ * Longest a landed hit waits before the host echoes it. Well under a snapshot
+ * so damage still reads as instant, but capped: a four-player pile-on lands
+ * something on most frames and one message per frame would blow the budget.
+ */
+export const HIT_ECHO_MS = 50;
 
 export interface PeerInfo {
   id: string;

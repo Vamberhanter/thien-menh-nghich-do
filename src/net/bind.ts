@@ -6,11 +6,36 @@ import { clampPlayerName, parseNetCharacter, slugifyWorld, type NetCharacter, ty
 
 let current: WorldSession | null = null;
 let inputGated = true;
+let systemMenuOpen = false;
+let uiTyping = false;
 let beat: number | null = null;
 
 /** True while the join overlay owns the keyboard. */
 export function isInputGated(): boolean {
   return inputGated;
+}
+
+/** Pause menu — blocks world actions but still accepts Start to close. */
+export function isSystemMenuOpen(): boolean {
+  return systemMenuOpen;
+}
+
+export function setSystemMenuOpen(value: boolean): void {
+  systemMenuOpen = value;
+}
+
+/** Chat / form focus — blocks WASD and skills without closing the world. */
+export function setUiTyping(value: boolean): void {
+  uiTyping = value;
+}
+
+export function isUiTyping(): boolean {
+  return uiTyping;
+}
+
+/** Lobby gate, pause menu, or typing in a HUD field. */
+export function isGameplayGated(): boolean {
+  return inputGated || systemMenuOpen || uiTyping;
 }
 
 export function setInputGated(value: boolean): void {
@@ -64,6 +89,18 @@ export async function leaveWorld(): Promise<void> {
   current.disconnect();
   current = null;
   await leaveRoom(world, id);
+  GameBus.emit(GameEvent.NetSession, null);
+  GameBus.emit(GameEvent.NetRoster, { world: '', selfName: '', nearby: [] });
+}
+
+/**
+ * Leaves the multiplayer room (if any) and hands the keyboard back to the
+ * lobby overlay. Works for solo play too — there is no session to tear down,
+ * but NetSession(null) still tells Lobby to reopen.
+ */
+export async function returnToLobby(): Promise<void> {
+  await leaveWorld();
+  inputGated = true;
   GameBus.emit(GameEvent.NetSession, null);
   GameBus.emit(GameEvent.NetRoster, { world: '', selfName: '', nearby: [] });
 }

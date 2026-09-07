@@ -13,11 +13,11 @@ import react from '@vitejs/plugin-react';
  * them into `dist/` ships megabytes nothing fetches.
  *
  * The list of what to keep is *derived*, not written down: every atlas JSON in
- * the build names the images it needs, and any other PNG under `assets/` is by
- * definition unreachable. A hardcoded list used to do this and silently rotted
- * twice — it never learned about the five boss sheets, and it still named
- * `nhuyen-attack (1).png` after that file was renamed — leaving 12MB of dead
- * art in `dist`.
+ * the build names the images it needs, and the bundled CSS/JS names the UI art
+ * it points at. Anything else under `assets/` is by definition unreachable. A
+ * hardcoded list used to do this and silently rotted twice — it never learned
+ * about the five boss sheets, and it still named `nhuyen-attack (1).png` after
+ * that file was renamed — leaving 12MB of dead art in `dist`.
  */
 function stripSourceSheets(): Plugin {
   let outDir = 'dist';
@@ -40,6 +40,17 @@ function stripSourceSheets(): Plugin {
           }
         } catch {
           // not an atlas: leave whatever it is alone
+        }
+      }
+
+      // The lobby art is reached from a stylesheet rather than an atlas, so
+      // whatever the emitted bundles name is reachable too. Root-relative and
+      // document-relative spellings both count — Phaser loaders use the latter.
+      const bundles = (await walk(outDir)).filter((file) => /\.(css|js|html)$/i.test(file));
+      for (const file of bundles) {
+        const text = await readFile(file, 'utf8');
+        for (const [url] of text.matchAll(/\/?assets\/[\w\-./@]+\.(?:png|webp|jpe?g)/gi)) {
+          referenced.add(resolve(outDir, url.replace(/^\//, '')));
         }
       }
 

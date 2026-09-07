@@ -52,6 +52,8 @@ export const WUKONG_ART_SCALE = 1.5;
 const wukongAtlas = remoteAtlas('characters/wukong/atlas/wukong.json', 'characters/wukong/atlas');
 export const WUKONG_ATLAS_URL = wukongAtlas.url;
 export const WUKONG_ATLAS_PATH = wukongAtlas.path;
+export const WUKONG_ATLAS_LOCAL_URL = wukongAtlas.localUrl;
+export const WUKONG_ATLAS_LOCAL_PATH = wukongAtlas.localPath;
 
 /* ------------------------------------------------------------------- clips */
 

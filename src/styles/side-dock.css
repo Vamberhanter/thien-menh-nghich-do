@@ -1,0 +1,285 @@
+/* Right-edge news + chat dock (in-game only). */
+
+.side-dock {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: stretch;
+  pointer-events: none;
+}
+
+.side-dock__rail {
+  pointer-events: auto;
+  align-self: center;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  padding: 14px 8px;
+  margin-right: 0;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #e9f3ff;
+  background: rgba(12, 16, 28, 0.94);
+  border: 2px solid #39406a;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  box-shadow: inset 0 0 0 1px #10131f, -2px 0 12px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.side-dock__rail:hover,
+.side-dock.is-open .side-dock__rail {
+  color: #ffe9a8;
+  border-color: #c9a24a;
+  background: rgba(18, 22, 38, 0.96);
+}
+
+.side-dock__rail-label {
+  display: inline-block;
+  transform: rotate(180deg);
+}
+
+.side-dock__panel {
+  pointer-events: auto;
+  width: min(320px, 86vw);
+  height: min(72vh, 560px);
+  align-self: center;
+  margin-right: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgba(8, 10, 18, 0.94);
+  border: 2px solid #39406a;
+  border-right: none;
+  border-radius: 10px 0 0 10px;
+  box-shadow: inset 0 0 0 1px #12162a, -6px 0 24px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.side-dock__panel[hidden] {
+  display: none !important;
+}
+
+.side-dock__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 6px 10px;
+  border-bottom: 1px solid #2a3150;
+}
+
+.side-dock__tabs {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.side-dock__tabs button {
+  flex: 1;
+  padding: 7px 8px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #8fa0c4;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.side-dock__tabs button.is-active {
+  color: #ffe9a8;
+  border-color: #c9a24a;
+  background: rgba(40, 32, 16, 0.45);
+}
+
+.side-dock__close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  color: #b9c8e4;
+  background: transparent;
+  border: 1px solid #39406a;
+  cursor: pointer;
+}
+
+.side-dock__close:hover {
+  color: #ffe9a8;
+  border-color: #c9a24a;
+}
+
+.side-dock__news {
+  flex: 1;
+  overflow: auto;
+  padding: 10px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.side-dock__build {
+  margin: 0;
+  font-size: 10px;
+  color: #6fd8ff;
+  letter-spacing: 0.5px;
+}
+
+.side-dock__build code {
+  color: #e9f3ff;
+  font-family: ui-monospace, monospace;
+}
+
+.side-dock__note {
+  padding: 8px 9px 9px;
+  background: rgba(16, 20, 34, 0.9);
+  border: 1px solid #2a3150;
+}
+
+.side-dock__note header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.side-dock__note strong {
+  font-size: 12px;
+  color: #e9f3ff;
+}
+
+.side-dock__note time {
+  font-size: 10px;
+  color: #8fa0c4;
+  white-space: nowrap;
+}
+
+.side-dock__note ul {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.side-dock__note li {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #b9c8e4;
+}
+
+.side-dock__chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.side-dock__chat-status {
+  padding: 6px 10px;
+  font-size: 10px;
+  color: #6fd8ff;
+  border-bottom: 1px solid #2a3150;
+}
+
+.side-dock__log {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.side-dock__empty {
+  margin: 12px 0;
+  font-size: 11px;
+  color: #8fa0c4;
+  text-align: center;
+}
+
+.side-dock__line {
+  padding: 5px 7px;
+  background: rgba(16, 20, 34, 0.75);
+  border: 1px solid #2a3150;
+}
+
+.side-dock__line.is-self {
+  border-color: #4a5a88;
+  background: rgba(24, 32, 52, 0.85);
+}
+
+.side-dock__from {
+  font-size: 10px;
+  color: #ffe9a8;
+  margin-right: 6px;
+}
+
+.side-dock__time {
+  font-size: 9px;
+  color: #6a7898;
+}
+
+.side-dock__line p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #e9f3ff;
+  word-break: break-word;
+}
+
+.side-dock__compose {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid #2a3150;
+  background: rgba(6, 8, 14, 0.92);
+}
+
+.side-dock__compose input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 9px;
+  font: inherit;
+  font-size: 12px;
+  color: #e9f3ff;
+  background: #10131f;
+  border: 1px solid #39406a;
+  outline: none;
+}
+
+.side-dock__compose input:focus {
+  border-color: #c9a24a;
+}
+
+.side-dock__compose button {
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #07070a;
+  background: #c9a24a;
+  border: 1px solid #8a6a28;
+  cursor: pointer;
+}
+
+.side-dock__compose button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+html.is-touch .side-dock__panel {
+  height: min(64vh, 480px);
+  width: min(300px, 88vw);
+}
+
+html.is-touch .side-dock__rail {
+  padding: 18px 10px;
+  font-size: 12px;
+}

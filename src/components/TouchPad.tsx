@@ -3,10 +3,13 @@ import { GameBus, GameEvent } from '../game/events';
 import type { CharacterChangedPayload, CooldownPayload } from '../game/events';
 import { NHU_YEN_PROFILE } from '../game/entities/NhuYen';
 import {
+  controlModeShowsPad,
   prefersTouchUi,
   pressPad,
+  readControlMode,
   resetPadMove,
   setPadMove,
+  writeControlMode,
   writeTouchPadForced,
   type PadAction,
 } from '../game/touchPad';
@@ -44,20 +47,48 @@ export function TouchPad() {
   useEffect(() => {
     const onLoot = ({ label }: { label: string | null }) => setLoot(Boolean(label));
     const onCool = (payload: CooldownPayload) => setCooldowns(payload.skills);
+    const onPadSet = (payload: { show?: boolean }) => {
+      if (typeof payload?.show !== 'boolean') return;
+      writeControlMode(payload.show ? 'touch' : 'keyboard');
+      setShow(payload.show);
+      if (!payload.show) resetPadMove();
+    };
+    const onMode = (payload: { mode?: string; showPad?: boolean }) => {
+      if (typeof payload?.showPad === 'boolean') {
+        setShow(payload.showPad);
+        if (!payload.showPad) resetPadMove();
+        return;
+      }
+      if (payload?.mode === 'keyboard' || payload?.mode === 'touch' || payload?.mode === 'gamepad') {
+        const showPad = controlModeShowsPad(payload.mode);
+        setShow(showPad);
+        if (!showPad) resetPadMove();
+      }
+    };
     GameBus.on(GameEvent.CharacterChanged, setCharacter);
     GameBus.on(GameEvent.Cooldowns, onCool);
     GameBus.on(GameEvent.LootPrompt, onLoot);
+    GameBus.on(GameEvent.TouchPadSet, onPadSet);
+    GameBus.on(GameEvent.ControlModeChanged, onMode);
+    setShow(controlModeShowsPad(readControlMode()) || prefersTouchUi());
     return () => {
       GameBus.off(GameEvent.CharacterChanged, setCharacter);
       GameBus.off(GameEvent.Cooldowns, onCool);
       GameBus.off(GameEvent.LootPrompt, onLoot);
+      GameBus.off(GameEvent.TouchPadSet, onPadSet);
+      GameBus.off(GameEvent.ControlModeChanged, onMode);
     };
   }, []);
 
   const toggle = () => {
     setShow((on) => {
       const next = !on;
+      writeControlMode(next ? 'touch' : 'keyboard');
       writeTouchPadForced(next);
+      GameBus.emit(GameEvent.ControlModeChanged, {
+        mode: next ? 'touch' : 'keyboard',
+        showPad: next,
+      });
       if (!next) resetPadMove();
       return next;
     });
@@ -148,12 +179,17 @@ export function TouchPad() {
           </div>
 
           <div className="pad__skills">
-            <button type="button" className="pad__util" onPointerDown={tap('bag')}>
-              Túi
-            </button>
-            <button type="button" className={`pad__util${loot ? ' is-hot' : ''}`} onPointerDown={tap('pick')}>
-              Nhặt
-            </button>
+            <div className="pad__utilities">
+              <button type="button" className="pad__util" onPointerDown={tap('bag')}>
+                Túi
+              </button>
+              <button type="button" className={`pad__util${loot ? ' is-hot' : ''}`} onPointerDown={tap('pick')}>
+                Nhặt
+              </button>
+              <button type="button" className="pad__util" onPointerDown={tap('envArt')}>
+                Cảnh
+              </button>
+            </div>
 
             <button type="button" className="pad__atk" onPointerDown={tap('attack')}>
               Đánh

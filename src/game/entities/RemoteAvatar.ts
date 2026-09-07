@@ -279,6 +279,7 @@ function huyetLangClip(
     case 'attack':
       return HuyetLangClip.attack(facing, atk);
     case 'skill':
+      // an unnamed skill is the roar, whose charge is the safest thing to show
       return skillName === HUYET_DIEM_TRAM.name
         ? HuyetLangClip.magmaSlash(facing)
         : HuyetLangClip.roar(facing);

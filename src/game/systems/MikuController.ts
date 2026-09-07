@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { Miku } from '../entities/Miku';
 import type { Vector2Like } from '../types';
-import { isInputGated } from '../../net/bind';
+import { isGameplayGated } from '../../net/bind';
 import { consumePad, padMove } from '../touchPad';
 
 /**
@@ -23,6 +23,7 @@ export class MikuController {
     starSlash: Phaser.Input.Keyboard.Key[];
     starArray: Phaser.Input.Keyboard.Key[];
     dash: Phaser.Input.Keyboard.Key[];
+    ultimate: Phaser.Input.Keyboard.Key[];
   };
 
   private enabled = true;
@@ -46,6 +47,7 @@ export class MikuController {
       starSlash: addKeys(K.K),
       starArray: addKeys(K.L),
       dash: addKeys(K.SPACE),
+      ultimate: addKeys(K.U),
     };
   }
 
@@ -57,7 +59,7 @@ export class MikuController {
   update(time: number, delta: number): void {
     this.player.tick(time, delta);
 
-    if (!this.enabled || this.player.isDead || isInputGated()) {
+    if (!this.enabled || this.player.isDead || isGameplayGated()) {
       if (!this.player.isDead) this.player.setVelocity(0, 0);
       return;
     }
@@ -68,7 +70,9 @@ export class MikuController {
     // and pressing a direction and a skill together used to fire the skill the
     // way the character was already looking.
     const steer = this.readSteer();
-    if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
+    if (anyJustDown(this.keys.ultimate) || consumePad('skill3')) {
+      this.player.castUltimate(steer);
+    } else if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
       this.player.dash(steer);
     } else if (anyJustDown(this.keys.starArray) || consumePad('skill1')) {
       this.player.castStarArray(steer);

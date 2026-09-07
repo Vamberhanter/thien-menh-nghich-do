@@ -22,7 +22,9 @@ export function getSupabase(): SupabaseClient {
       storageKey: 'tmnd.auth',
     },
     realtime: {
-      params: { eventsPerSecond: 40 },
+      // Poses, swings, hit echoes and host snapshots all share this budget;
+      // the client-side limiter silently drops anything over it.
+      params: { eventsPerSecond: 60 },
     },
   });
   return client;
