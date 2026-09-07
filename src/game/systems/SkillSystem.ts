@@ -1,4 +1,4 @@
-export type SkillClass = 'wukong' | 'nhuyen' | 'huyetlang' | 'miku';
+export type SkillClass = 'wukong' | 'nhuyen' | 'huyetlang' | 'miku' | 'kiemtien';
 export type SkillKind = 'active' | 'passive';
 
 export interface SkillEffect {
@@ -83,6 +83,19 @@ export const SKILL_TREES: Readonly<Record<SkillClass, readonly SkillNode[]>> = {
     node('wukong', 'con-cot', 'Côn Cốt', 'passive', 6, { 'can-dau-van': 1 }, { stat: 'defense', value: 2, description: 'Tăng phòng ngự.' }),
     node('wukong', 'phan-thien-ma-diem', 'Phần Thiên Ma Diễm', 'active', 7, { 'hang-ma-chan-loi': 1 }, { damageMultiplier: 2.6, cooldownSeconds: 6.8, spiritualCost: 14, description: 'Lửa dựng quanh mình thành mặt ma.' }),
     node('wukong', 'ma-nguyet-tram', 'Ma Nguyệt Trảm', 'active', 9, { 'hang-ma-chan-loi': 2, 'con-cot': 2 }, { damageMultiplier: 3, cooldownSeconds: 16, spiritualCost: 18, description: 'Tuyệt kỹ rồng khí.' }, 1, 2),
+  ],
+  // Eight nodes like Tôn Ngộ Không's, because the shape is the same: four
+  // techniques and a flight, so there is one more active to place than the
+  // three-technique kits have.
+  kiemtien: [
+    node('kiemtien', 'thanh-phong-tram', 'Thanh Phong Trảm', 'active', 1, {}, { damageMultiplier: 1.7, spiritualCost: 6, description: 'Kiếm khí xanh chém tới.' }),
+    node('kiemtien', 'ngu-kiem-quyet', 'Ngự Kiếm Quyết', 'active', 1, {}, { damageMultiplier: 1.3, spiritualCost: 3, description: 'Một nhát kiếm theo hướng ngắm.' }),
+    node('kiemtien', 'kiem-tam', 'Kiếm Tâm', 'passive', 2, { 'thanh-phong-tram': 1 }, { stat: 'attack', value: 3, description: 'Tăng công kích.' }),
+    node('kiemtien', 'ngu-kiem-hanh', 'Ngự Kiếm Hành', 'active', 3, { 'thanh-phong-tram': 1 }, { cooldownSeconds: 1.2, spiritualCost: 5, description: 'Đứng lên kiếm mà bay.' }),
+    node('kiemtien', 'lac-anh-kiem-quang', 'Lạc Ảnh Kiếm Quang', 'active', 5, { 'kiem-tam': 2 }, { damageMultiplier: 2.5, cooldownSeconds: 4.2, spiritualCost: 11, description: 'Chùm kiếm quang xuyên thẳng.' }),
+    node('kiemtien', 'kiem-cot', 'Kiếm Cốt', 'passive', 6, { 'ngu-kiem-hanh': 1 }, { stat: 'defense', value: 2, description: 'Tăng phòng ngự.' }),
+    node('kiemtien', 'van-kiem-quy-tong', 'Vạn Kiếm Quy Tông', 'active', 7, { 'lac-anh-kiem-quang': 1 }, { damageMultiplier: 3.1, cooldownSeconds: 13, spiritualCost: 17, description: 'Vạn kiếm toả ra bốn phía.' }),
+    node('kiemtien', 'huyet-kiem-sat', 'Huyết Kiếm Sát', 'active', 9, { 'lac-anh-kiem-quang': 2, 'kiem-cot': 2 }, { damageMultiplier: 3.4, cooldownSeconds: 17, spiritualCost: 20, description: 'Tuyệt kỹ huyết kiếm.' }, 1, 2),
   ],
   nhuyen: [
     node('nhuyen', 'han-bang-chuong', 'Hàn Băng Chưởng', 'active', 1, {}, { damageMultiplier: 1.15, spiritualCost: 4, description: 'Chưởng lực mang hàn khí.' }),

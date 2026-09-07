@@ -71,6 +71,23 @@ export const DEFAULT_MIKU_STATS: CharacterStats = {
 };
 
 /**
+ * Kiếm Tiên of Thanh Vân Kiếm Các. A duellist: the single heaviest basic swing
+ * in the roster, drawn on all eight headings so it lands where it is aimed, and
+ * almost nothing to fall back on when it misses. Her defence is her flight and
+ * her reach, not her hide — between Như Yên and Tôn Ngộ Không on health, with a
+ * spirit pool deep enough to carry four techniques and Ngự Kiếm Hành.
+ */
+export const DEFAULT_KIEM_TIEN_STATS: CharacterStats = {
+  maxHp: 88,
+  hp: 88,
+  attack: 16,
+  defense: 4,
+  speed: 138,
+  spiritualPower: 32,
+  maxSpiritualPower: 32,
+};
+
+/**
  * Tôn Ngộ Không of Hoa Quả Sơn. Built around reach and options rather than
  * around either of the other poles: the lightest armour in the roster, the
  * fastest stride, and by far the deepest spirit pool, because his kit is three

@@ -19,15 +19,23 @@ import {
   castScaleOf as wukongCastScale,
   createWukongAnimations,
 } from '../animations/wukongAnimations';
+import {
+  KIEMTIEN_ART_SCALE,
+  KiemTienClip,
+  createKiemTienAnimations,
+} from '../animations/kiemtienAnimations';
 import type { CharacterState, Direction } from '../types';
 import {
   BANG_PHACH_TRAM,
   BANG_TINH_TRAN,
   HUYET_DIEM_TRAM,
+  HUYET_KIEM_SAT,
+  LAC_ANH_KIEM_QUANG,
   TINH_MANG_TRAM,
   MA_NGUYET_TRAM,
   HANG_MA_CHAN_LOI,
   PHAN_THIEN_MA_DIEM,
+  VAN_KIEM_QUY_TONG,
 } from '../systems/CombatSystem';
 import type { NetAction, NetPose } from '../../net/types';
 
@@ -38,6 +46,7 @@ const LABEL_COLOR: Record<PlayerId, string> = {
   huyetlang: '#ff7a4a',
   miku: '#c9a0ff',
   wukong: '#c98aff',
+  kiemtien: '#8fd0ff',
 };
 
 /**
@@ -76,6 +85,7 @@ export class RemoteAvatar {
     createHuyetLangAnimations(scene);
     createMikuAnimations(scene);
     createWukongAnimations(scene);
+    createKiemTienAnimations(scene);
 
     this.sprite = this.makeSprite(pose.character, pose.x, pose.y);
     this.label = scene.add
@@ -176,6 +186,9 @@ export class RemoteAvatar {
     if (this.character === 'wukong') {
       return wukongClip(state, this.facing, this.atk, this.skillName);
     }
+    if (this.character === 'kiemtien') {
+      return kiemTienClip(state, this.facing, this.skillName);
+    }
     return nhuYenClip(state, this.facing, this.atk, this.skillName);
   }
 
@@ -188,7 +201,12 @@ export class RemoteAvatar {
     // Divided by the art scale for the same reason the local one is: his atlas is
     // baked larger than the world. The other three kits are still 1:1, so they
     // divide by 1 and nothing changes for them.
-    const art = this.character === 'wukong' ? WUKONG_ART_SCALE : 1;
+    const art =
+      this.character === 'wukong'
+        ? WUKONG_ART_SCALE
+        : this.character === 'kiemtien'
+          ? KIEMTIEN_ART_SCALE
+          : 1;
     this.sprite.setScale((cast ? wukongCastScale(clip) : 1) / art);
     if (!force && this.playedKey === clip.key) return;
     this.playedKey = clip.key;
@@ -326,6 +344,44 @@ function mikuClip(
  * techniques; an unnamed one is Cửu U Nộ Diễm, whose qi gathers from nothing
  * and so is the safest thing to show while the packet naming it is in flight.
  */
+/**
+ * Kiếm Tiên's replica.
+ *
+ * No `atk` argument, unlike the other four: her attack is one drawn cut rather
+ * than a chain, so there is no step to pick between. The aim is not carried
+ * over the wire either, so a remote swing plays the cardinal of the eight
+ * headings that matches her facing — the diagonals are a local nicety.
+ */
+function kiemTienClip(
+  state: CharacterState,
+  facing: Direction,
+  skillName: string,
+): { key: string; flip: boolean } {
+  switch (state) {
+    case 'walk':
+    case 'run':
+      return KiemTienClip.move(facing);
+    case 'dash':
+      return KiemTienClip.fly(facing);
+    case 'attack':
+      return KiemTienClip.attack(facing);
+    case 'skill':
+      return skillName === HUYET_KIEM_SAT.name
+        ? KiemTienClip.skill4(facing)
+        : skillName === VAN_KIEM_QUY_TONG.name
+          ? KiemTienClip.skill3(facing)
+          : skillName === LAC_ANH_KIEM_QUANG.name
+            ? KiemTienClip.skill2(facing)
+            : KiemTienClip.skill1(facing);
+    case 'hurt':
+      return KiemTienClip.hurt();
+    case 'dead':
+      return KiemTienClip.death();
+    default:
+      return KiemTienClip.idle(facing);
+  }
+}
+
 function wukongClip(
   state: CharacterState,
   facing: Direction,

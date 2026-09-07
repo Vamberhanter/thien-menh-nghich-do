@@ -22,6 +22,7 @@ import { NHU_YEN_PROFILE } from '../game/entities/NhuYen';
 import { HUYET_LANG_PROFILE } from '../game/entities/HuyetLang';
 import { MIKU_PROFILE } from '../game/entities/Miku';
 import { WUKONG_PROFILE } from '../game/entities/Wukong';
+import { KIEM_TIEN_PROFILE } from '../game/entities/KiemTien';
 import { CHARACTER_NAME } from '../net/types';
 import { isInputGated, returnToLobby, setSystemMenuOpen } from '../net/bind';
 import { consumePad } from '../game/touchPad';
@@ -50,6 +51,8 @@ const SKILL_KEYS: Record<string, readonly string[]> = {
   [MIKU_PROFILE.id]: ['K', 'L', 'Space'],
   // five, not three — he is the only kit carrying a third and fourth technique
   [WUKONG_PROFILE.id]: ['K', 'L', 'U', 'O', 'Space'],
+  // the other four-technique kit, same row
+  [KIEM_TIEN_PROFILE.id]: ['K', 'L', 'U', 'O', 'Space'],
 };
 
 const HINTS: Record<string, string> = {
@@ -61,6 +64,9 @@ const HINTS: Record<string, string> = {
     'WASD di chuyển · J liên chiêu · K / L / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
   [WUKONG_PROFILE.id]:
     'WASD di chuyển · Shift chạy · J liên chiêu · K / L / U / O / Space chiêu · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
+  // no sprint line: her sheet has no running stride
+  [KIEM_TIEN_PROFILE.id]:
+    'WASD di chuyển · J chém · K / L / U / O chiêu · Space ngự kiếm · F nhặt / đặt hồi sinh · T dịch chuyển · I túi · Q tại huyết mạch',
 };
 
 const SEGMENTS = 12;

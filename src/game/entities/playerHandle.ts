@@ -3,14 +3,17 @@ import { HUYET_LANG_TEXTURE } from '../animations/huyetLangAnimations';
 import { MIKU_TEXTURE } from '../animations/mikuAnimations';
 import { NHU_YEN_TEXTURE } from '../animations/nhuYenAnimations';
 import { WUKONG_TEXTURE } from '../animations/wukongAnimations';
+import { KIEMTIEN_TEXTURE } from '../animations/kiemtienAnimations';
 import { HUYET_LANG_PROFILE, HuyetLang } from './HuyetLang';
 import { MIKU_PROFILE, Miku } from './Miku';
 import { NHU_YEN_PROFILE, NhuYen } from './NhuYen';
 import { WUKONG_PROFILE, Wukong } from './Wukong';
+import { KIEM_TIEN_PROFILE, KiemTien } from './KiemTien';
 import { HuyetLangController } from '../systems/HuyetLangController';
 import { MikuController } from '../systems/MikuController';
 import { NhuYenController } from '../systems/NhuYenController';
 import { WukongController } from '../systems/WukongController';
+import { KiemTienController } from '../systems/KiemTienController';
 import type { CharacterChangedPayload } from '../events';
 import type { CharacterStats } from '../types';
 import type { PlayerNetState } from '../../net/types';
@@ -180,6 +183,38 @@ export function createWukong(
   });
 }
 
+export function createKiemTien(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  stats?: Partial<CharacterStats>,
+): PlayerHandle {
+  const sprite = new KiemTien(scene, x, y, stats);
+  const controller = new KiemTienController(scene, sprite);
+  return wrapPlayer({ ...KIEM_TIEN_PROFILE }, sprite, controller, {
+    footY: () => sprite.y,
+    hitPoint: () => ({ x: sprite.x, y: sprite.y }),
+    invulnerable: () => sprite.isInvulnerable,
+    // Ngự Kiếm Hành, the only other kit that leaves the ground.
+    airborne: () => sprite.airHeight > 0,
+    snapshot: () => {
+      const pending = sprite.combo.pending;
+      const atk = pending === 0 ? sprite.combo.length - 1 : pending - 1;
+      return {
+        character: 'kiemtien',
+        x: sprite.x,
+        y: sprite.y,
+        facing: sprite.facingDirection,
+        aim: sprite.aimVector,
+        state: sprite.characterState,
+        hp: sprite.stats.hp,
+        atk,
+        zone: currentZone(),
+      };
+    },
+  });
+}
+
 interface LivingSprite extends Phaser.Physics.Arcade.Sprite {
   readonly stats: CharacterStats;
   readonly combat: CombatSystem;
@@ -253,6 +288,7 @@ export const PLAYER_FACTORIES = {
   huyetlang: createHuyetLang,
   miku: createMiku,
   wukong: createWukong,
+  kiemtien: createKiemTien,
 } as const;
 
 export type PlayerId = keyof typeof PLAYER_FACTORIES;
@@ -272,4 +308,5 @@ export const PLAYER_TEXTURES: Record<PlayerId, string> = {
   huyetlang: HUYET_LANG_TEXTURE,
   miku: MIKU_TEXTURE,
   wukong: WUKONG_TEXTURE,
+  kiemtien: KIEMTIEN_TEXTURE,
 };

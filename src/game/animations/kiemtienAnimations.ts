@@ -21,6 +21,16 @@ import type { Direction, Vector2Like } from '../types';
  * the flip does not read as the wrong hand.
  */
 export const KIEMTIEN_TEXTURE = 'kiemtien';
+
+/**
+ * The art is baked larger than the world it is drawn into.
+ *
+ * Her walk frame stands 189px of solid pixels tall where Như Yên is 121 and
+ * Huyết Lang 118; dividing by this lands her at 118, the same height as the
+ * people she walks beside. Applied as a world scale on the sprite rather than
+ * by resampling the atlas, so the frames keep every pixel the artist drew.
+ */
+export const KIEMTIEN_ART_SCALE = 1.6;
 const kiemtienAtlas = remoteAtlas(
   'characters/kiemtien/atlas/kiemtien.json',
   'characters/kiemtien/atlas',
@@ -71,8 +81,13 @@ const CLIPS: readonly ClipSpec[] = [
   ...EIGHT.map((dir) => ({ clip: `atk_${dir}`, frames: 8, frameRate: 16, repeat: 0 })),
   ...FOUR.map((dir) => ({ clip: `skill1_${dir}`, frames: 7, frameRate: 14, repeat: 0 })),
   ...FOUR.map((dir) => ({ clip: `skill2_${dir}`, frames: 8, frameRate: 14, repeat: 0 })),
-  ...FOUR.map((dir) => ({ clip: `skill3_${dir}`, frames: 1, frameRate: 1, repeat: 0 })),
-  ...FOUR.map((dir) => ({ clip: `skill4_${dir}`, frames: 1, frameRate: 1, repeat: 0 })),
+  // 8fps rather than 1: these are single frames, and the rate is what decides
+  // how long the clip claims to run. At 1fps each claimed a full second, which
+  // `castHoldUntil` then added its recovery on top of — nearly two seconds
+  // rooted for one drawn pose. The clip is now brief and the recovery owns the
+  // hold, which is what the recovery is for.
+  ...FOUR.map((dir) => ({ clip: `skill3_${dir}`, frames: 1, frameRate: 8, repeat: 0 })),
+  ...FOUR.map((dir) => ({ clip: `skill4_${dir}`, frames: 1, frameRate: 8, repeat: 0 })),
 
   // Flight loops slowly on purpose: it is a glide, not a run. The side cycle is
   // twice the frames for about the same period.
@@ -171,6 +186,29 @@ export const kiemtienFxFrame = (index: number): string => `fx_${index}`;
  */
 export const KIEMTIEN_FLYFX_FRAMES = 7;
 export const kiemtienFlyFxFrame = (index: number): string => `flyfx_${index}`;
+
+/**
+ * The frame a clip's damage lands on, 1-based the way Phaser numbers them.
+ *
+ * Read off the art rather than split down the middle: the swing's arc is at its
+ * widest on beat 5 of 8 and beats 7-8 are the blade coming back, so resolving
+ * at the midpoint would hit before the edge arrives. Both cycling techniques
+ * land late because their last frames *are* the effect — skill2's whole point
+ * is the burst it ends on. The two held ultimates have one frame, so they land
+ * on it.
+ */
+const IMPACT_FRAME: Record<string, number> = {
+  skill1: 5,
+  skill2: 6,
+  skill3: 1,
+  skill4: 1,
+};
+
+export function impactFrameOf(ref: ClipRef): number {
+  const name = clipNameOf(ref);
+  if (name.startsWith('atk_')) return 5;
+  return IMPACT_FRAME[name.replace(/_(up|down|left|right)$/, '')] ?? 1;
+}
 
 export function refDuration(ref: ClipRef): number {
   const { frames, frameRate } = spec(clipNameOf(ref));

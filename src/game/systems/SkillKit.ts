@@ -9,7 +9,11 @@ import {
   CUU_U_NO_DIEM,
   HANG_MA_CHAN_LOI,
   HUYET_DIEM_TRAM,
+  HUYET_KIEM_SAT,
+  LAC_ANH_KIEM_QUANG,
+  NGU_KIEM_HANH,
   PHAN_THIEN_MA_DIEM,
+  THANH_PHONG_TRAM,
   LIET_ANH_BO,
   SUONG_ANH_BO,
   TAM_THU_HONG,
@@ -55,6 +59,16 @@ export const KIT_BINDINGS: Readonly<Record<SkillClass, KitBinding>> = {
     bases: [CUU_U_NO_DIEM, HANG_MA_CHAN_LOI, PHAN_THIEN_MA_DIEM],
     tail: ['can-dau-van'],
     tailBases: [CAN_DAU_VAN],
+    keys: ['K', 'L', 'U', 'O', 'Space'],
+  },
+  // Same five-slot shape as Tôn Ngộ Không, in `KiemTienSlot` order — Cut,
+  // Lance, then Rain as the ultimate and Blood and the flight past it.
+  kiemtien: {
+    slots: ['thanh-phong-tram', 'lac-anh-kiem-quang'],
+    ultimate: 'van-kiem-quy-tong',
+    bases: [THANH_PHONG_TRAM, LAC_ANH_KIEM_QUANG],
+    tail: ['huyet-kiem-sat', 'ngu-kiem-hanh'],
+    tailBases: [HUYET_KIEM_SAT, NGU_KIEM_HANH],
     keys: ['K', 'L', 'U', 'O', 'Space'],
   },
   nhuyen: {

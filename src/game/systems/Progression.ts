@@ -4,6 +4,7 @@ import {
   DEFAULT_HUYET_LANG_STATS,
   DEFAULT_MIKU_STATS,
   DEFAULT_WUKONG_STATS,
+  DEFAULT_KIEM_TIEN_STATS,
 } from '../types';
 import type { PlayerId } from '../entities/playerHandle';
 
@@ -37,6 +38,7 @@ const BASE_STATS: Record<PlayerId, CharacterStats> = {
   huyetlang: DEFAULT_HUYET_LANG_STATS,
   miku: DEFAULT_MIKU_STATS,
   wukong: DEFAULT_WUKONG_STATS,
+  kiemtien: DEFAULT_KIEM_TIEN_STATS,
 };
 
 const ATTACK_PER_RANK: Record<PlayerId, number> = {
@@ -44,6 +46,9 @@ const ATTACK_PER_RANK: Record<PlayerId, number> = {
   huyetlang: 2.2,
   miku: 1.8,
   wukong: 1.4,
+  // The steepest of the five: one cut per press rather than a chain, so every
+  // rank has to make that one cut land harder.
+  kiemtien: 2.4,
 };
 
 /** XP to leave each global rank. Index 0 is level 1 → 2. Realm peaks need none. */

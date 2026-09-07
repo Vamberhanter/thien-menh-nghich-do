@@ -1,7 +1,7 @@
 import type { CharacterState, Direction, Vector2Like } from '../game/types';
 import type { AttackPayload, DashPayload, SkillPayload } from '../game/events';
 
-export const NET_CHARACTERS = ['nhuyen', 'huyetlang', 'miku', 'wukong'] as const;
+export const NET_CHARACTERS = ['nhuyen', 'huyetlang', 'miku', 'wukong', 'kiemtien'] as const;
 export type NetCharacter = (typeof NET_CHARACTERS)[number];
 
 export const CHARACTER_NAME: Record<NetCharacter, string> = {
@@ -9,6 +9,7 @@ export const CHARACTER_NAME: Record<NetCharacter, string> = {
   huyetlang: 'Huyết Lang',
   miku: 'Miku',
   wukong: 'Tôn Ngộ Không',
+  kiemtien: 'Kiếm Tiên',
 };
 
 export function parseNetCharacter(raw: unknown): NetCharacter {

@@ -49,6 +49,15 @@ export const CLASSES: readonly ClassEntry[] = [
     blurb: 'Pháp sư âm phù — linh lực sâu, khống chế diện rộng.',
   },
   {
+    id: 'kiemtien',
+    archetype: 'Kiếm Tu',
+    name: 'Kiếm Tiên',
+    sect: 'Thanh Vân Kiếm Các',
+    gender: 'female',
+    portrait: '/assets/ui/class-lamuyen.jpg',
+    blurb: 'Một kiếm tám hướng — bốn tuyệt kỹ và Ngự Kiếm Hành đạp kiếm mà bay.',
+  },
+  {
     id: 'huyetlang',
     archetype: 'Tử Linh',
     name: 'Huyết Lang',

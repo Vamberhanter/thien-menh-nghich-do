@@ -53,6 +53,10 @@ import {
   HUYET_DIEM_TRAM,
   MA_NGUYET_TRAM,
   PHAN_THIEN_MA_DIEM,
+  THANH_PHONG_TRAM,
+  LAC_ANH_KIEM_QUANG,
+  VAN_KIEM_QUY_TONG,
+  HUYET_KIEM_SAT,
   TAM_THU_HONG,
   TINH_MANG_TRAM,
   TINH_KHONG_TRAN,
@@ -256,7 +260,7 @@ const FARM_PLOT_RADIUS = 56;
 const PLANT_RESPAWN_MS = 30000;
 const CHEST_RESPAWN_MS = 90000;
 const MOB_RESPAWN_MS = 12000;
-const ROSTER: readonly PlayerId[] = ['nhuyen', 'huyetlang', 'miku', 'wukong'];
+const ROSTER: readonly PlayerId[] = ['nhuyen', 'huyetlang', 'miku', 'wukong', 'kiemtien'];
 
 interface TrainingStone {
   sprite: Phaser.Physics.Arcade.Sprite;
@@ -3428,6 +3432,22 @@ export class WorldScene extends Phaser.Scene {
       case PHAN_THIEN_MA_DIEM.name:
         this.castQiWrath(payload);
         return;
+      // Kiếm Tiên's sheets draw their own effect around her, so these borrow
+      // the shape of the existing casts rather than adding art on top: a
+      // travelling slash for the cut, the lance for the beam, and the two
+      // ultimates break in a circle the way the wrath does.
+      case THANH_PHONG_TRAM.name:
+        this.castQiSlash(payload);
+        this.juiceHitStop(50);
+        return;
+      case LAC_ANH_KIEM_QUANG.name:
+        this.castQiThunder(payload);
+        return;
+      case VAN_KIEM_QUY_TONG.name:
+      case HUYET_KIEM_SAT.name:
+        this.castQiWrath(payload);
+        this.juiceHitStop(70);
+        return;
       default:
         this.resolveHit(payload, {
           damage: payload.damage,
@@ -3913,6 +3933,13 @@ export class WorldScene extends Phaser.Scene {
       // Cân Đẩu Vân leaves the ground, so the scorch he pushed off is drawn
       // where he started rather than trailing him the whole way.
       this.qiFx.scorch(payload.x, payload.y, 0.6);
+      this.qiFx.shadowTrail(sprite, 6, payload.duration / 6);
+      return;
+    }
+    if (sprite.texture.key === 'kiemtien') {
+      // Ngự Kiếm Hành leaves the ground the same way, so the mark stays where
+      // she pushed off from rather than following her up.
+      this.qiFx.scorch(payload.x, payload.y, 0.5);
       this.qiFx.shadowTrail(sprite, 6, payload.duration / 6);
       return;
     }

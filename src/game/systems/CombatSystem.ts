@@ -173,6 +173,65 @@ export const AO_ANH_BO: SkillDefinition = {
   spiritCost: 4,
 };
 
+/**
+ * Kiếm Tiên's kit, read off what the sheets actually draw.
+ *
+ * Two cycling techniques, two held ultimates and the flight. The two ultimates
+ * are one drawn moment each rather than a cycle, so they carry a `recovery`
+ * that holds the pose after the single frame — without it they would flash for
+ * one tick and snap back to idle, which is not what a held pose is for.
+ *
+ * Ngự Kiếm Hành costs its spirit once to get on the blade and nothing after,
+ * the way Cân Đẩu Vân does: the limit on staying up is how often you pay to
+ * get back on, not a timer.
+ */
+export const THANH_PHONG_TRAM: SkillDefinition = {
+  name: 'Thanh Phong Trảm',
+  damageMultiplier: 1.7,
+  cooldown: 1500,
+  spiritCost: 6,
+};
+
+export const LAC_ANH_KIEM_QUANG: SkillDefinition = {
+  name: 'Lạc Ảnh Kiếm Quang',
+  damageMultiplier: 2.5,
+  cooldown: 4200,
+  spiritCost: 11,
+  recovery: 260,
+};
+
+export const VAN_KIEM_QUY_TONG: SkillDefinition = {
+  name: 'Vạn Kiếm Quy Tông',
+  damageMultiplier: 3.1,
+  cooldown: 13000,
+  spiritCost: 17,
+  // One drawn frame; the pose is held by the recovery rather than by the clip.
+  recovery: 900,
+};
+
+export const HUYET_KIEM_SAT: SkillDefinition = {
+  name: 'Huyết Kiếm Sát',
+  damageMultiplier: 3.4,
+  cooldown: 17000,
+  spiritCost: 20,
+  recovery: 950,
+};
+
+export const NGU_KIEM_HANH: SkillDefinition = {
+  name: 'Ngự Kiếm Hành',
+  damageMultiplier: 0,
+  cooldown: 1200,
+  spiritCost: 5,
+};
+
+export const KIEM_TIEN_SKILLS: readonly SkillDefinition[] = [
+  THANH_PHONG_TRAM,
+  LAC_ANH_KIEM_QUANG,
+  VAN_KIEM_QUY_TONG,
+  HUYET_KIEM_SAT,
+  NGU_KIEM_HANH,
+];
+
 export const NHU_YEN_SKILLS: readonly SkillDefinition[] = [
   BANG_PHACH_TRAM,
   BANG_TINH_TRAN,
@@ -211,6 +270,19 @@ export const MikuSlot = {
   StarArray: 1,
   ShadowStep: 2,
   Ultimate: 3,
+} as const;
+
+/**
+ * Kiếm Tiên's four techniques and her sword-flight, in the order of the sheets
+ * they were drawn on — the same shape as Tôn Ngộ Không, and named the same way
+ * for the same reason.
+ */
+export const KiemTienSlot = {
+  Cut: 0,
+  Lance: 1,
+  Rain: 2,
+  Blood: 3,
+  Ride: 4,
 } as const;
 
 /**
