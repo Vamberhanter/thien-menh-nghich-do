@@ -1,26 +1,41 @@
-// Cuts the Kiếm Tiên sheet into a feet-pivot Phaser atlas.
+// Cuts the Kiếm Tiên sheets into a feet-pivot Phaser atlas.
 //   node tools/build-kiemtien-atlas.mjs [--dump]
 //
-// The source is one 1536x1024 sheet: four rows of eight, each row a walk cycle
-// in one facing. Movement only — there is no attack, cast, hurt or death art
-// yet, so this builds what exists and nothing more.
+// Seven 1536x1024 sheets, each a grid of poses: one walk, one attack, four
+// skills and a sheet of extras. They are not one uniform grid — the rows differ
+// per sheet, two sheets carry a printed label down the left edge, and the skill
+// effects are far bigger than the pose they belong to.
 //
-// Two things about this sheet shape the cutting:
+// How a pose is found, and why not on the nominal grid:
 //
-//  * **Columns are found, not assumed.** The nominal cell is 192 wide, but the
-//    sword crosses that line — in the up row a tip sits at x=192-193, two
-//    pixels into the next cell — so a cut on the grid would clip a blade and
-//    then paste its tip onto the neighbouring pose. Each row is split on its
-//    own empty columns instead, which land in the gaps between poses and never
-//    inside one. Rows do stay inside their 256-tall bands, so those are taken
-//    as given, and both counts are checked rather than trusted.
+//  * **Rows come from the art.** Dividing the height by the row count is wrong
+//    on the attack sheet, whose poses run 143px tall inside a 128px cell and
+//    drift up to 57px off the grid line as the sheet goes down. A horizontal
+//    projection finds the real bands, which are separated cleanly on every
+//    sheet.
+//  * **Columns come from the art too, when they can.** Empty-column splitting
+//    lands in the gaps between poses rather than inside one — on the walk sheet
+//    a sword tip sits 2px into the next cell, so a grid cut would slice a blade
+//    and paste its tip onto the neighbour. Fragments closer than MERGE are
+//    joined back, which reunites a pose with its own detached sparks without
+//    swallowing the label beside it.
+//  * **When the effects fuse, the grid is the fallback.** On the later skill
+//    sheets a single burst spans 1300px and there are no gaps left to split on.
+//    Those sheets say so in their spec, and a band is divided evenly instead.
+//    Every sheet declares what it expects and the split is checked against it,
+//    so a mis-cut is a build error rather than a silently mangled frame.
 //
-//  * **Left and right are both kept.** The other kits draw one profile and
-//    flip it, which is why their clips are named `_side`. These two rows are
-//    separate drawings (163x189 against 149x180, and 25/255 mean difference
-//    against a mirror), and mirroring either one would move the sword to the
-//    wrong hand. So this atlas carries four facings and the animation module
-//    never sets `flip`.
+// Two more things about this art:
+//
+//  * **Left and right are both drawn.** The other kits draw one profile and
+//    flip it, which is why their clips read `_side`. Here they are separate
+//    drawings (163x189 against 149x180, 25/255 mean difference from a mirror),
+//    and mirroring either would move the sword to the wrong hand. So the atlas
+//    carries whole facings and the animation module never sets `flip`.
+//  * **The attack is drawn on eight headings**, including the diagonals, while
+//    the walk is drawn on four. Both are kept as drawn; picking a diagonal
+//    swing off the aim vector is the animation module's problem, not the
+//    cutter's.
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,30 +45,114 @@ import { decodePNG } from './png-decode.mjs';
 import { packFrames } from './atlas-pack.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const SOURCE = join(ROOT, 'public', 'assets', 'characters', 'kiemtien', 'kiemtien.png');
-const OUT_DIR = join(ROOT, 'public', 'assets', 'characters', 'kiemtien', 'atlas');
+const SRC_DIR = join(ROOT, 'public', 'assets', 'characters', 'kiemtien');
+const OUT_DIR = join(SRC_DIR, 'atlas');
 const DUMP = process.argv.includes('--dump') ? join(ROOT, '.tmp', 'kiemtien-frames') : null;
 
-const ROWS = 4;
-const COLS = 8;
-const ROW_HEIGHT = 256;
 /** Breathing room around the pivot box, in pixels. */
 const PAD = 12;
-/** Below this the pixel is canvas, not art. The source is cleanly cut already. */
+/** Below this a pixel is canvas. The sheets carry an invisible wash at 1-7. */
 const ALPHA_FLOOR = 8;
+/** Bands and columns are measured well above the wash, on real paint. */
+const SOLID = 48;
+/** Fragments closer than this belong to the same pose. */
+const MERGE = 10;
+/** Ignore specks: a band this short, or a run this narrow, is noise. */
+const MIN_BAND = 25;
+const MIN_RUN = 20;
 
-/** Sheet row → facing. Row 0 shows the back of the head, row 1 the face. */
-const FACINGS = ['up', 'down', 'left', 'right'];
+const FOUR = ['up', 'down', 'left', 'right'];
+/** The attack sheet's row order, read off the arrows printed beside each row. */
+const EIGHT = ['up', 'down', 'left', 'right', 'upleft', 'upright', 'downleft', 'downright'];
 
 /**
- * Idle is derived, not drawn.
+ * What each sheet holds.
  *
- * A character that stands perfectly still reads as a stuck frame rather than a
- * person, so the neutral pose of each walk — the frame whose feet are closest
- * together — is given a slow two-pixel bob. It is the cheapest honest idle:
- * every pixel is the artist's, and when a real idle sheet arrives this whole
- * function goes away with the clip definition that calls it.
+ * `labelWidth` is the printed caption down the left edge — an arrow glyph on the
+ * attack sheet, "Skill 1 (Lên)" and the like on the first two skill sheets.
+ * Those columns are erased before anything is measured, rather than filtered
+ * out afterwards: on the attack sheet the caption sits as little as 6px from
+ * the first pose and on the up-left row it touches, so no gap rule separates
+ * them. The numbers are the widest caption plus clearance, checked against the
+ * leftmost pose on every row (attack captions end at 47 and poses start at 49;
+ * the skill captions end at 87 and their poses start at 96).
+ *
+ * `split: 'grid'` forces even division of a band. The last three sheets need it:
+ * one burst covers most of the row, so there is no empty column to cut on.
  */
+const SHEETS = [
+  {
+    file: 'kiemtien.png',
+    clip: (dir) => `walk_${dir}`,
+    rows: FOUR,
+    cols: 8,
+    labelWidth: 0,
+    texture: 'kiemtien-walk.png',
+  },
+  {
+    file: 'kiemtien-attack.png',
+    clip: (dir) => `atk_${dir}`,
+    rows: EIGHT,
+    cols: 8,
+    labelWidth: 48,
+    texture: 'kiemtien-attack.png',
+  },
+  {
+    file: 'kiemtien-skill1.png',
+    clip: (dir) => `skill1_${dir}`,
+    rows: FOUR,
+    cols: 7,
+    labelWidth: 92,
+    texture: 'kiemtien-skill1.png',
+  },
+  {
+    file: 'kiemtien-skill2.png',
+    clip: (dir) => `skill2_${dir}`,
+    rows: FOUR,
+    cols: 8,
+    labelWidth: 92,
+    split: 'grid',
+    texture: 'kiemtien-skill2.png',
+  },
+  // One drawn pose per heading rather than a cycle: these read as the held
+  // moment of an ultimate, so each becomes a single-frame clip.
+  {
+    file: 'kiemtien-skill3.png',
+    clip: (dir) => `skill3_${dir}`,
+    rows: ['up', 'left'],
+    cols: 2,
+    rowMajor: ['up', 'left', 'down', 'right'],
+    labelWidth: 0,
+    texture: 'kiemtien-skill3.png',
+  },
+  {
+    file: 'kiemtien-skill4.png',
+    clip: (dir) => `skill4_${dir}`,
+    rows: ['up', 'left'],
+    cols: 2,
+    rowMajor: ['up', 'down', 'left', 'right'],
+    labelWidth: 0,
+    texture: 'kiemtien-skill4.png',
+  },
+  // Mixed extras: some cells hold the character mid-cast, others a detached
+  // impact with nobody in it. Cut by position and numbered, because nothing on
+  // the sheet says what order they go in.
+  {
+    file: 'kiemtien-skill3.1.png',
+    clip: () => 'fx',
+    rows: 3,
+    cols: 4,
+    labelWidth: 0,
+    // Both axes: its middle and bottom rows touch, so there is no empty scanline
+    // to separate them either.
+    split: 'grid',
+    rowSplit: 'grid',
+    numbered: true,
+    texture: 'kiemtien-fx.png',
+  },
+];
+
+/** Idle is derived from the walk — see the note in kiemtienAnimations.ts. */
 const IDLE_FRAMES = 4;
 const IDLE_BOB = [0, 1, 2, 1];
 
@@ -62,35 +161,84 @@ function alphaAt(img, x, y) {
   return img.data[(y * img.width + x) * 4 + 3];
 }
 
-/** Empty-column split of one row band. Returns the 8 pose extents. */
-function poseRuns(img, band) {
+/** Horizontal projection → the rows the art actually occupies. */
+function bandsOf(img) {
+  const bands = [];
+  let start = -1;
+  for (let y = 0; y <= img.height; y++) {
+    let lit = 0;
+    if (y < img.height) {
+      for (let x = 0; x < img.width; x++) {
+        if (alphaAt(img, x, y) >= SOLID && ++lit > 2) break;
+      }
+    }
+    const on = lit > 2;
+    if (on && start < 0) start = y;
+    if (!on && start >= 0) {
+      bands.push({ top: start, bottom: y - 1 });
+      start = -1;
+    }
+  }
+  return bands.filter((b) => b.bottom - b.top + 1 >= MIN_BAND);
+}
+
+/** Empty-column split of one band, fragments rejoined, captions dropped. */
+function runsOf(img, band, labelWidth) {
   const filled = new Uint8Array(img.width);
   for (let x = 0; x < img.width; x++) {
-    for (let y = band.top; y < band.top + band.height; y++) {
-      if (alphaAt(img, x, y) >= ALPHA_FLOOR) {
+    for (let y = band.top; y <= band.bottom; y++) {
+      if (alphaAt(img, x, y) >= SOLID) {
         filled[x] = 1;
         break;
       }
     }
   }
-  const runs = [];
+  const raw = [];
   let start = -1;
   for (let x = 0; x <= img.width; x++) {
     const on = x < img.width && filled[x] === 1;
     if (on && start < 0) start = x;
     if (!on && start >= 0) {
-      runs.push({ x0: start, x1: x - 1 });
+      raw.push({ x0: start, x1: x - 1 });
       start = -1;
     }
   }
-  return runs;
+  const merged = [];
+  for (const run of raw) {
+    const last = merged[merged.length - 1];
+    if (last && run.x0 - last.x1 <= MERGE) last.x1 = run.x1;
+    else merged.push({ ...run });
+  }
+  return merged.filter((r) => r.x1 >= labelWidth && r.x1 - r.x0 + 1 >= MIN_RUN);
 }
 
-function cut(img, x0, x1, top, height) {
-  const out = new Surface(x1 - x0 + 1, height);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < out.width; x++) {
-      const i = ((top + y) * img.width + (x0 + x)) * 4;
+/** Even division of a band's painted span — the fallback when effects fuse. */
+function gridRuns(img, band, labelWidth, cols) {
+  let left = img.width;
+  let right = -1;
+  for (let x = labelWidth; x < img.width; x++) {
+    for (let y = band.top; y <= band.bottom; y++) {
+      if (alphaAt(img, x, y) < SOLID) continue;
+      if (x < left) left = x;
+      if (x > right) right = x;
+      break;
+    }
+  }
+  if (right < 0) return [];
+  const span = (right - left + 1) / cols;
+  return Array.from({ length: cols }, (_, i) => ({
+    x0: Math.round(left + i * span),
+    x1: Math.round(left + (i + 1) * span) - 1,
+  }));
+}
+
+function cut(img, run, band) {
+  const w = run.x1 - run.x0 + 1;
+  const h = band.bottom - band.top + 1;
+  const out = new Surface(w, h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = ((band.top + y) * img.width + (run.x0 + x)) * 4;
       const a = img.data[i + 3];
       if (a < ALPHA_FLOOR) continue;
       out.set(x, y, [img.data[i], img.data[i + 1], img.data[i + 2], a]);
@@ -120,19 +268,35 @@ function contentBounds(surface) {
 /**
  * Where the character meets the floor.
  *
- * The lowest band of the silhouette, weighted towards dark pixels: boots are
- * the darkest thing down there, and the pale robe and any glow on the ground
- * would otherwise drag the point sideways. Averaging the outermost columns that
- * clear the threshold puts it between the two feet rather than on one of them.
+ * Measured on solid paint only, and on the body rather than the whole frame:
+ * a skill's effect reaches well past the feet — under them, on the ground, and
+ * out to the side — so the silhouette's own lowest row is not the floor. The
+ * lowest band of *opaque* pixels is, because the effects are translucent and
+ * the character is not.
  */
 function measureFeet(surface) {
-  const box = contentBounds(surface);
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < surface.height; y++) {
+    for (let x = 0; x < surface.width; x++) {
+      if (surface.alphaAt(x, y) < 200) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  const box =
+    maxX < 0 ? contentBounds(surface) : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
   if (!box) return { x: surface.width / 2, y: surface.height - 1 };
+
   const from = Math.max(box.y, box.y + box.h - Math.max(4, Math.round(box.h * 0.14)));
   const hist = new Int32Array(box.w);
   for (let y = from; y < box.y + box.h; y++) {
     for (let x = box.x; x < box.x + box.w; x++) {
-      if (!surface.alphaAt(x, y)) continue;
+      if (surface.alphaAt(x, y) < 200) continue;
       const [r, g, b] = surface.get(x, y);
       hist[x - box.x] += r + g + b < 280 ? 2 : 1;
     }
@@ -167,7 +331,6 @@ function feetSpan(surface) {
   return right < 0 ? Infinity : right - left;
 }
 
-/** One box that fits every frame once they are stacked on their pivots. */
 function boxFor(surfaces, anchors) {
   let maxLeft = 0;
   let maxRight = 0;
@@ -183,13 +346,22 @@ function boxFor(surfaces, anchors) {
   });
   const w = Math.ceil(maxLeft + maxRight) + PAD * 2 + 2;
   const h = Math.ceil(maxAbove + maxBelow) + PAD * 2 + 2;
-  return { w: Math.max(16, w + (w % 2)), h: Math.max(16, h + (h % 2)) };
+  // Where the pivot sits inside that box, rather than assuming the floor is a
+  // fixed inset from the bottom. A skill's effect reaches *below* the feet —
+  // cracks and a shockwave on the ground, 31px of it on skill1's rising cut —
+  // and the walk, which has nothing under its soles, hid that assumption.
+  return {
+    w: Math.max(16, w + (w % 2)),
+    h: Math.max(16, h + (h % 2)),
+    anchorX: PAD + Math.ceil(maxLeft),
+    anchorY: PAD + Math.ceil(maxAbove),
+  };
 }
 
-function placeOnPivot(surface, box, anchorPx, lift = 0) {
+function placeOnPivot(surface, box, anchorPx, lift = 0, name = '?') {
   const out = new Surface(box.w, box.h);
-  const ox = Math.round(box.w / 2 - anchorPx.x);
-  const oy = Math.round(box.h - PAD - 1 - anchorPx.y) - lift;
+  const ox = Math.round(box.anchorX - anchorPx.x);
+  const oy = Math.round(box.anchorY - anchorPx.y) - lift;
   let kept = 0;
   let total = 0;
   for (let y = 0; y < surface.height; y++) {
@@ -205,102 +377,120 @@ function placeOnPivot(surface, box, anchorPx, lift = 0) {
     }
   }
   if (kept < total) {
-    throw new Error(`frame clipped: kept ${kept}/${total} in ${box.w}x${box.h} (PAD=${PAD})`);
+    const b = contentBounds(surface);
+    throw new Error(
+      `frame "${name}" clipped: kept ${kept}/${total} in ${box.w}x${box.h} (PAD=${PAD})\n` +
+        `  content ${b.w}x${b.h} at ${b.x},${b.y}  anchor ${anchorPx.x.toFixed(1)},` +
+        `${anchorPx.y.toFixed(1)}  offset ${ox},${oy}`,
+    );
   }
-  // The pivot stays on the floor even when the bob lifts the drawing, so a
-  // breathing character does not slide up and down the ground plane.
+  // The pivot stays on the floor through the bob, so breathing does not slide
+  // the character along the ground plane.
   return {
     surface: out,
     anchor: { x: (anchorPx.x + ox) / box.w, y: (anchorPx.y + oy + lift) / box.h },
   };
 }
 
-function main() {
-  if (!existsSync(SOURCE)) throw new Error(`missing source sheet: ${SOURCE}`);
-  const img = decodePNG(SOURCE);
-  if (img.height !== ROWS * ROW_HEIGHT) {
-    throw new Error(`expected ${ROWS * ROW_HEIGHT}px tall sheet, got ${img.height}`);
+/** Blanks the caption columns so nothing downstream can see them. */
+function eraseCaption(img, width) {
+  if (!width) return;
+  for (let y = 0; y < img.height; y++) {
+    for (let x = 0; x < width; x++) {
+      img.data[(y * img.width + x) * 4 + 3] = 0;
+    }
   }
+}
+
+/** Every pose on one sheet, as { clip, index, surface }. */
+function readSheet(sheet) {
+  const path = join(SRC_DIR, sheet.file);
+  if (!existsSync(path)) {
+    console.log(`  skipped ${sheet.file} — not present`);
+    return null;
+  }
+  const img = decodePNG(path);
+  eraseCaption(img, sheet.labelWidth);
+  const wantRows = Array.isArray(sheet.rows) ? sheet.rows.length : sheet.rows;
+  const bands =
+    sheet.rowSplit === 'grid'
+      ? Array.from({ length: wantRows }, (_, i) => ({
+          top: Math.round((i * img.height) / wantRows),
+          bottom: Math.round(((i + 1) * img.height) / wantRows) - 1,
+        }))
+      : bandsOf(img);
+  if (bands.length !== wantRows) {
+    throw new Error(
+      `${sheet.file}: found ${bands.length} bands, expected ${wantRows} ` +
+        `(${bands.map((b) => `${b.top}-${b.bottom}`).join(' ')})`,
+    );
+  }
+
+  const poses = [];
+  bands.forEach((band, row) => {
+    let runs =
+      sheet.split === 'grid'
+        ? gridRuns(img, band, sheet.labelWidth, sheet.cols)
+        : runsOf(img, band, sheet.labelWidth);
+    if (runs.length !== sheet.cols) {
+      const found = runs.length;
+      runs = gridRuns(img, band, sheet.labelWidth, sheet.cols);
+      console.log(
+        `    row ${row}: split found ${found} poses, fell back to an even ${sheet.cols}-way grid`,
+      );
+    }
+    runs.forEach((run, col) => poses.push({ row, col, surface: cut(img, run, band) }));
+  });
+
+  // rowMajor lets a 2x2 sheet name its cells in reading order rather than by
+  // row, which is how the ultimates are laid out.
+  const named = poses.map(({ row, col, surface }) => {
+    if (sheet.numbered) return { clip: sheet.clip(), index: row * sheet.cols + col, surface };
+    if (sheet.rowMajor) {
+      const dir = sheet.rowMajor[row * sheet.cols + col];
+      return { clip: sheet.clip(dir), index: 0, surface };
+    }
+    return { clip: sheet.clip(sheet.rows[row]), index: col, surface };
+  });
+  console.log(
+    `  ${sheet.file.padEnd(24)} ${bands.length} bands x ${sheet.cols} = ${named.length} frames`,
+  );
+  return named;
+}
+
+function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   if (DUMP) mkdirSync(DUMP, { recursive: true });
 
-  // facing -> the eight poses of its walk, in sheet order
-  const walks = new Map();
-  for (let row = 0; row < ROWS; row++) {
-    const band = { top: row * ROW_HEIGHT, height: ROW_HEIGHT };
-    const runs = poseRuns(img, band);
-    if (runs.length !== COLS) {
-      throw new Error(
-        `row ${row} split into ${runs.length} poses, expected ${COLS} ` +
-          `(${runs.map((r) => `${r.x0}-${r.x1}`).join(' ')})`,
-      );
-    }
-    const facing = FACINGS[row];
-    const poses = runs.map((run) => cut(img, run.x0, run.x1, band.top, band.height));
-    walks.set(facing, poses);
-    const spans = poses.map(feetSpan);
-    console.log(
-      `row ${row} -> ${facing.padEnd(5)} ${poses.length} poses` +
-        `  x ${runs[0].x0}-${runs[runs.length - 1].x1}`,
-    );
-    if (DUMP) {
-      poses.forEach((s, i) =>
-        writeFileSync(join(DUMP, `${facing}_${i}.png`), encodePNG(s)),
-      );
-    }
-    // remember which pose stands squarest, for the derived idle
-    poses.neutral = spans.indexOf(Math.min(...spans));
-  }
-
   const textures = [];
-  const groups = [
-    { file: 'kiemtien-walk.png', kind: 'walk' },
-    { file: 'kiemtien-idle.png', kind: 'idle' },
-  ];
+  let walkPoses = null;
 
-  for (const group of groups) {
-    const entries = [];
-    const surfaces = [];
-    const anchors = [];
-    const plan = [];
+  for (const sheet of SHEETS) {
+    const poses = readSheet(sheet);
+    if (!poses) continue;
+    if (sheet.file === 'kiemtien.png') walkPoses = poses;
 
-    for (const facing of FACINGS) {
-      const poses = walks.get(facing);
-      if (group.kind === 'walk') {
-        poses.forEach((surface, i) =>
-          plan.push({ name: `walk_${facing}_${i}`, surface, lift: 0 }),
-        );
-      } else {
-        const surface = poses[poses.neutral];
-        for (let i = 0; i < IDLE_FRAMES; i++) {
-          plan.push({ name: `idle_${facing}_${i}`, surface, lift: IDLE_BOB[i] });
-        }
+    const plan = poses.map((p) => ({ name: `${p.clip}_${p.index}`, surface: p.surface, lift: 0 }));
+    emit(sheet.texture, plan, textures);
+    if (DUMP) {
+      for (const item of plan) {
+        writeFileSync(join(DUMP, `${item.name}.png`), encodePNG(item.surface));
       }
     }
-    for (const item of plan) {
-      surfaces.push(item.surface);
-      anchors.push(measureFeet(item.surface));
+  }
+
+  // Idle rides on the walk: the pose whose feet sit closest together, bobbed.
+  if (walkPoses) {
+    const plan = [];
+    for (const dir of FOUR) {
+      const row = walkPoses.filter((p) => p.clip === `walk_${dir}`);
+      const spans = row.map((p) => feetSpan(p.surface));
+      const neutral = row[spans.indexOf(Math.min(...spans))];
+      for (let i = 0; i < IDLE_FRAMES; i++) {
+        plan.push({ name: `idle_${dir}_${i}`, surface: neutral.surface, lift: IDLE_BOB[i] });
+      }
     }
-    const box = boxFor(surfaces, anchors);
-
-    plan.forEach((item, i) => {
-      const placed = placeOnPivot(item.surface, box, anchors[i], item.lift);
-      entries.push({ name: item.name, surface: placed.surface, anchor: placed.anchor });
-    });
-
-    const packed = packFrames(entries);
-    writeFileSync(join(OUT_DIR, group.file), encodePNG(packed.surface));
-    textures.push({
-      image: group.file,
-      format: 'RGBA8888',
-      size: { w: packed.surface.width, h: packed.surface.height },
-      scale: 1,
-      frames: packed.frames,
-    });
-    console.log(
-      `wrote ${group.file}  ${packed.surface.width}x${packed.surface.height}` +
-        `  ${entries.length} frames  box ${box.w}x${box.h}`,
-    );
+    emit('kiemtien-idle.png', plan, textures);
   }
 
   writeFileSync(
@@ -320,7 +510,32 @@ function main() {
       2,
     ),
   );
-  console.log(`atlas ${OUT_DIR}/kiemtien.json  (${textures.length} sheets)`);
+  console.log(`atlas ${join(OUT_DIR, 'kiemtien.json')}  (${textures.length} sheets)`);
+}
+
+function emit(file, plan, textures) {
+  const anchors = plan.map((item) => measureFeet(item.surface));
+  const box = boxFor(
+    plan.map((item) => item.surface),
+    anchors,
+  );
+  const entries = plan.map((item, i) => {
+    const placed = placeOnPivot(item.surface, box, anchors[i], item.lift, item.name);
+    return { name: item.name, surface: placed.surface, anchor: placed.anchor };
+  });
+  const packed = packFrames(entries);
+  writeFileSync(join(OUT_DIR, file), encodePNG(packed.surface));
+  textures.push({
+    image: file,
+    format: 'RGBA8888',
+    size: { w: packed.surface.width, h: packed.surface.height },
+    scale: 1,
+    frames: packed.frames,
+  });
+  console.log(
+    `wrote ${file.padEnd(24)} ${packed.surface.width}x${packed.surface.height}` +
+      `  ${entries.length} frames  box ${box.w}x${box.h}`,
+  );
 }
 
 main();
