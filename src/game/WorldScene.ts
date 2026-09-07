@@ -252,6 +252,13 @@ const QI_BEAM_RADIUS = 54;
  * column, so the lane is narrower than the lance's 54.
  */
 const SWORD_RAY_RANGE = 400;
+/**
+ * Aimed up or down she does not throw it as far — 270px drawn against 414
+ * sideways, because that view foreshortens everything going away from the
+ * camera. Reaching the sideways distance on a vertical cast would hit things
+ * well outside the picture.
+ */
+const SWORD_RAY_RANGE_VERTICAL = 260;
 const SWORD_RAY_RADIUS = 44;
 /** The bloom is drawn beside the ray, so it wears the ray clip's own scale. */
 const SWORD_BLOOM_SCALE = clipScaleOf(KiemTienClip.skill2('right'));
@@ -3922,20 +3929,27 @@ export class WorldScene extends Phaser.Scene {
    * already spanning its length, so anything standing in it is already in it.
    */
   private castSwordRay(payload: SkillPayload): void {
+    const sideways = payload.direction === 'left' || payload.direction === 'right';
+    const range = sideways ? SWORD_RAY_RANGE : SWORD_RAY_RANGE_VERTICAL;
     const from = { x: payload.x, y: payload.y };
     const to = {
-      x: payload.x + payload.aim.x * SWORD_RAY_RANGE,
-      y: payload.y + payload.aim.y * SWORD_RAY_RANGE,
+      x: payload.x + payload.aim.x * range,
+      y: payload.y + payload.aim.y * range,
     };
     this.lighting.flash(
-      payload.x + payload.aim.x * (SWORD_RAY_RANGE / 2),
-      payload.y + payload.aim.y * (SWORD_RAY_RANGE / 2),
+      payload.x + payload.aim.x * (range / 2),
+      payload.y + payload.aim.y * (range / 2),
       460,
       0x9fd4ff,
       2.4,
       620,
     );
-    this.swordBloom(to.x, to.y);
+    // Only when she fires sideways. Aimed up or down the sheet draws the whole
+    // technique inside the sprite, lotus and all, so adding one out at the end
+    // of the lane gave the cast two blooms — the drawn one at her feet and a
+    // second a full lane away. Sideways is the case where the bloom was cut
+    // out as its own frame precisely because it is *not* in her pose.
+    if (sideways) this.swordBloom(to.x, to.y);
     this.sweepQi(payload, from, to, SWORD_RAY_RADIUS, 7, 0x8fd0ff);
   }
 

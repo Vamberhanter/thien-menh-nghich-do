@@ -125,6 +125,7 @@ const SHEETS = [
     // own frame and the scene puts it at the end of the lane.
     tailClip: 'raybloom',
     requireCharacter: true,
+    anchorFromFirst: true,
     texture: 'kiemtien-skill2.png',
   },
   // One drawn pose per heading rather than a cycle: these read as the held
@@ -619,6 +620,28 @@ function readSheet(sheet) {
       }
       poses.push({ row, col, surface });
     });
+
+    /*
+     * Take the whole row's floor from the pose she stands in alone.
+     *
+     * `measureFeet` looks for the lowest solid pixels, which is her boots right
+     * up until a technique puts something solid *below* them. The ray aimed
+     * down draws a lotus under her: the pivot landed on the bottom of that, 142
+     * pixels below her feet, and she was drawn that much into the air for the
+     * whole cast.
+     *
+     * Where she stands does not change across a row — the poses are drawn at
+     * one height in one band — so the first pose, which is her and nothing
+     * else, says where the floor is for all of them. Each frame keeps its own
+     * horizontal anchor, because she does drift sideways.
+     */
+    if (sheet.anchorFromFirst) {
+      const mine = poses.filter((p) => p.row === row);
+      if (mine.length) {
+        const floor = measureFeet(mine[0].surface).y;
+        for (const pose of mine) pose.anchor = { x: measureFeet(pose.surface).x, y: floor };
+      }
+    }
     // The effect the technique leaves behind, kept out of her clip and given a
     // name of its own so the scene can place it where the drawing says it lands
     // rather than on top of her.
@@ -637,23 +660,23 @@ function readSheet(sheet) {
   // side flight — comes out as one clip numbered 0..11 instead of two halves
   // that both start at zero.
   const seen = new Map();
-  const named = poses.map(({ row, col, surface, clip: override }) => {
+  const named = poses.map(({ row, col, surface, clip: override, anchor }) => {
     if (override) {
       const index = (seen.get(override) ?? -1) + 1;
       seen.set(override, index);
-      return { clip: override, index, surface };
+      return { clip: override, index, surface, anchor };
     }
     if (sheet.numbered) {
-      return { clip: sheet.clip(), index: seen.set('n', (seen.get('n') ?? -1) + 1).get('n'), surface };
+      return { clip: sheet.clip(), index: seen.set('n', (seen.get('n') ?? -1) + 1).get('n'), surface, anchor };
     }
     if (sheet.rowMajor) {
       const dir = sheet.rowMajor[row * colsOf(sheet, row) + col];
-      return { clip: sheet.clip(dir), index: 0, surface };
+      return { clip: sheet.clip(dir), index: 0, surface, anchor };
     }
     const clip = sheet.clip(sheet.rows[row]);
     const index = (seen.get(clip) ?? -1) + 1;
     seen.set(clip, index);
-    return { clip, index, surface };
+    return { clip, index, surface, anchor };
   });
   const shape = bands.map((_, r) => colsOf(sheet, r)).join('+');
   console.log(`  ${sheet.file.padEnd(24)} ${bands.length} bands (${shape}) = ${named.length} frames`);
@@ -696,7 +719,7 @@ function main() {
     if (!poses) continue;
     if (sheet.file === 'kiemtien.png') walkPoses = poses;
 
-    const plan = poses.map((p) => ({ name: `${p.clip}_${p.index}`, surface: p.surface, lift: 0 }));
+    const plan = poses.map((p) => ({ name: `${p.clip}_${p.index}`, surface: p.surface, lift: 0, anchor: p.anchor }));
     emit(sheet.texture, plan, textures);
     if (DUMP) {
       for (const item of plan) {
@@ -740,7 +763,8 @@ function main() {
 }
 
 function emit(file, plan, textures) {
-  const anchors = plan.map((item) => measureFeet(item.surface));
+  // A row may have been given one floor for all its frames — see anchorFromFirst.
+  const anchors = plan.map((item) => item.anchor ?? measureFeet(item.surface));
   const box = boxFor(
     plan.map((item) => item.surface),
     anchors,
