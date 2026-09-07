@@ -44,6 +44,12 @@ import { MikuEffects } from './systems/MikuEffects';
 import { WukongEffects } from './systems/WukongEffects';
 import { WorldLights } from './systems/WorldLights';
 import { WukongClip, castScaleOf } from './animations/wukongAnimations';
+import {
+  KIEMTIEN_ART_SCALE,
+  KIEMTIEN_TEXTURE,
+  KiemTienClip,
+  clipScaleOf,
+} from './animations/kiemtienAnimations';
 import { FrostMark } from './systems/FrostMark';
 import {
   BANG_PHACH_TRAM,
@@ -247,6 +253,8 @@ const QI_BEAM_RADIUS = 54;
  */
 const SWORD_RAY_RANGE = 400;
 const SWORD_RAY_RADIUS = 44;
+/** The bloom is drawn beside the ray, so it wears the ray clip's own scale. */
+const SWORD_BLOOM_SCALE = clipScaleOf(KiemTienClip.skill2('right'));
 /**
  * Depth added to a flying character, chosen to clear the map rather than to
  * look right: the tallest zone is 1800px, so a foot Y can never reach 4000 and
@@ -3927,10 +3935,35 @@ export class WorldScene extends Phaser.Scene {
       2.4,
       620,
     );
-    // Where the sheet opens its crystal bloom, so the world lights up in the
-    // same place the picture does.
-    this.qiFx.qiBurst(to.x, to.y, 0.7);
+    this.swordBloom(to.x, to.y);
     this.sweepQi(payload, from, to, SWORD_RAY_RADIUS, 7, 0x8fd0ff);
+  }
+
+  /**
+   * The crystal bloom the ray opens where it lands.
+   *
+   * Her own drawing, cut off the far end of the sideways rows as `raybloom_0`
+   * and placed here rather than left in the clip. In the clip it played as a
+   * frame she was absent from and opened at her feet, because a frame is drawn
+   * on the sprite; out here it opens where the ray ends, which is what the
+   * sheet draws and what the technique is for.
+   */
+  private swordBloom(x: number, y: number): void {
+    if (!this.textures.exists(KIEMTIEN_TEXTURE)) return;
+    const bloom = this.add
+      .sprite(x, y, KIEMTIEN_TEXTURE, 'raybloom_0')
+      // Its own clip's scale, so it lands the size it was drawn beside her.
+      .setScale((SWORD_BLOOM_SCALE / KIEMTIEN_ART_SCALE) * 0.7)
+      .setDepth(y + 250)
+      .setAlpha(0.95);
+    this.tweens.add({
+      targets: bloom,
+      scale: SWORD_BLOOM_SCALE / KIEMTIEN_ART_SCALE,
+      alpha: 0,
+      duration: 320,
+      ease: 'Quad.easeOut',
+      onComplete: () => bloom.destroy(),
+    });
   }
 
   /**

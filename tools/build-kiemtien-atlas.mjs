@@ -120,6 +120,10 @@ const SHEETS = [
     // Vertical rows on the sheet's own 192px grid; sideways rows on the
     // character, because there the ray runs along the cut.
     split: ['cells', 'cells', 'chars', 'chars'],
+    // The crystal bloom the ray opens where it lands. Drawn at the far end of
+    // the sideways rows, past the last pose she is in, so it is cut out as its
+    // own frame and the scene puts it at the end of the lane.
+    tailClip: 'raybloom',
     texture: 'kiemtien-skill2.png',
   },
   // One drawn pose per heading rather than a cycle: these read as the held
@@ -331,6 +335,7 @@ function characterRuns(img, band, cols, labelWidth) {
   const last = runs[runs.length - 1];
   const tail = runsOf(img, band, labelWidth).filter((r) => r.x0 > last.x0);
   if (tail.length) last.x1 = tail[0].x0 - 1;
+  runs.tail = tail;
 
   if (runs.length !== cols) {
     console.log(
@@ -596,6 +601,14 @@ function readSheet(sheet) {
       );
     }
     runs.forEach((run, col) => poses.push({ row, col, surface: cut(img, run, band) }));
+    // The effect the technique leaves behind, kept out of her clip and given a
+    // name of its own so the scene can place it where the drawing says it lands
+    // rather than on top of her.
+    if (sheet.tailClip && runs.tail) {
+      for (const run of runs.tail) {
+        poses.push({ row, col: 0, clip: sheet.tailClip, surface: cut(img, run, band) });
+      }
+    }
   });
 
   // rowMajor lets a 2x2 sheet name its cells in reading order rather than by
@@ -606,7 +619,12 @@ function readSheet(sheet) {
   // side flight — comes out as one clip numbered 0..11 instead of two halves
   // that both start at zero.
   const seen = new Map();
-  const named = poses.map(({ row, col, surface }) => {
+  const named = poses.map(({ row, col, surface, clip: override }) => {
+    if (override) {
+      const index = (seen.get(override) ?? -1) + 1;
+      seen.set(override, index);
+      return { clip: override, index, surface };
+    }
     if (sheet.numbered) {
       return { clip: sheet.clip(), index: seen.set('n', (seen.get('n') ?? -1) + 1).get('n'), surface };
     }
