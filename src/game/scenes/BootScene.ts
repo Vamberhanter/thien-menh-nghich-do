@@ -29,6 +29,13 @@ import {
   WUKONG_TEXTURE,
 } from '../animations/wukongAnimations';
 import {
+  KIEMTIEN_ATLAS_LOCAL_PATH,
+  KIEMTIEN_ATLAS_LOCAL_URL,
+  KIEMTIEN_ATLAS_PATH,
+  KIEMTIEN_ATLAS_URL,
+  KIEMTIEN_TEXTURE,
+} from '../animations/kiemtienAnimations';
+import {
   BOSS1_ATLAS_LOCAL_PATH,
   BOSS1_ATLAS_LOCAL_URL,
   BOSS1_ATLAS_PATH,
@@ -75,6 +82,15 @@ const ATLASES = [
     path: WUKONG_ATLAS_PATH,
     localUrl: WUKONG_ATLAS_LOCAL_URL,
     localPath: WUKONG_ATLAS_LOCAL_PATH,
+  },
+  // Movement art only so far, and not yet a playable kit — it loads here so the
+  // texture is there to build the class on.
+  {
+    key: KIEMTIEN_TEXTURE,
+    url: KIEMTIEN_ATLAS_URL,
+    path: KIEMTIEN_ATLAS_PATH,
+    localUrl: KIEMTIEN_ATLAS_LOCAL_URL,
+    localPath: KIEMTIEN_ATLAS_LOCAL_PATH,
   },
   {
     key: BOSS1_TEXTURE,
