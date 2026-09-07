@@ -9,15 +9,16 @@ import type { Direction, Vector2Like } from '../types';
  * with a feet pivot, same geometry as the other kits, so a sprite's own position
  * is the point it stands on.
  *
- * Unlike the other three kits nothing here is mirrored. They draw one profile
- * and flip it, which is why their clips read `_side`; every facing of this one
- * is a separate drawing, and a mirror would move the sword to the wrong hand.
- * `ClipRef` keeps its `flip` field to stay the shape the entities expect, and it
- * is always false.
+ * Almost nothing here is mirrored. The other kits draw one profile and flip it,
+ * which is why their clips read `_side`; every facing of this one was drawn
+ * out, and a mirror would move the sword to the wrong hand.
  *
- * Still missing art: hurt and death. Those two states have no sheet, so no clip
- * claims to be them — an entity built on this should hold the idle rather than
- * play a stagger it does not have.
+ * The sword-flight is the one exception, and it is why `ClipRef` still carries
+ * `flip`. Its sheet has an up row, a down row and *two* side rows that are the
+ * same heading rather than a left and a right — 29.5/255 apart as drawn against
+ * 58.3 mirrored — so they are one twelve-frame loop and there is no left
+ * drawing to use. Lying along the blade, the pose is near enough symmetric that
+ * the flip does not read as the wrong hand.
  */
 export const KIEMTIEN_TEXTURE = 'kiemtien';
 const kiemtienAtlas = remoteAtlas(
@@ -72,6 +73,16 @@ const CLIPS: readonly ClipSpec[] = [
   ...FOUR.map((dir) => ({ clip: `skill2_${dir}`, frames: 8, frameRate: 14, repeat: 0 })),
   ...FOUR.map((dir) => ({ clip: `skill3_${dir}`, frames: 1, frameRate: 1, repeat: 0 })),
   ...FOUR.map((dir) => ({ clip: `skill4_${dir}`, frames: 1, frameRate: 1, repeat: 0 })),
+
+  // Flight loops slowly on purpose: it is a glide, not a run. The side cycle is
+  // twice the frames for about the same period.
+  { clip: 'fly_up', frames: 6, frameRate: 10, repeat: -1 },
+  { clip: 'fly_down', frames: 6, frameRate: 10, repeat: -1 },
+  { clip: 'fly_side', frames: 12, frameRate: 12, repeat: -1 },
+
+  // The stagger is quick enough to interrupt; the death is not meant to be.
+  { clip: 'hurt', frames: 6, frameRate: 14, repeat: 0 },
+  { clip: 'death', frames: 12, frameRate: 9, repeat: 0 },
 ];
 
 const PREFIX = 'kiemtien-';
@@ -126,6 +137,18 @@ export const KiemTienClip = {
   skill2: (direction: Direction): ClipRef => drawn('skill2', direction),
   skill3: (direction: Direction): ClipRef => drawn('skill3', direction),
   skill4: (direction: Direction): ClipRef => drawn('skill4', direction),
+
+  /**
+   * Riding the sword. Up and down are drawn; sideways exists only facing right,
+   * so left is that same loop mirrored — the only flip in this kit.
+   */
+  fly: (direction: Direction): ClipRef =>
+    direction === 'up' || direction === 'down'
+      ? drawn('fly', direction)
+      : { key: key('fly_side'), flip: direction === 'left' },
+
+  hurt: (): ClipRef => ({ key: key('hurt'), flip: false }),
+  death: (): ClipRef => ({ key: key('death'), flip: false }),
 } as const;
 
 /**
@@ -139,6 +162,15 @@ export const KiemTienClip = {
  */
 export const KIEMTIEN_FX_FRAMES = 12;
 export const kiemtienFxFrame = (index: number): string => `fx_${index}`;
+
+/**
+ * The flight sheet's last row, same treatment: 0-1 are the take-off charge,
+ * 2-3 the landing, 4-6 the sword-light burning off the ground behind her.
+ * Grouped by eye, not by anything the sheet declares, so they stay frames until
+ * a take-off and a landing clip are actually wanted.
+ */
+export const KIEMTIEN_FLYFX_FRAMES = 7;
+export const kiemtienFlyFxFrame = (index: number): string => `flyfx_${index}`;
 
 export function refDuration(ref: ClipRef): number {
   const { frames, frameRate } = spec(clipNameOf(ref));

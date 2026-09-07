@@ -134,6 +134,38 @@ const SHEETS = [
     labelWidth: 0,
     texture: 'kiemtien-skill4.png',
   },
+  // Sword-flight. Up and down are six frames each; the side cycle is twelve,
+  // drawn across two rows the way the death is — the two rows are the same
+  // heading (29.5/255 apart as drawn, 58.3 against a mirror of each other), so
+  // they are one loop rather than a left and a right. Only the right was ever
+  // drawn; the animation module mirrors it, which is the single place anything
+  // about this character flips.
+  //
+  // The last row is takeoff, landing and the light left on the ground after —
+  // mixed, so it is numbered rather than sequenced, same as the extras sheet.
+  {
+    file: 'kiemtien-fly.png',
+    clip: (name) => name,
+    rows: ['fly_up', 'fly_down', 'fly_side', 'fly_side', 'flyfx'],
+    cols: [6, 6, 6, 6, 7],
+    labelWidth: 0,
+    texture: 'kiemtien-fly.png',
+  },
+  // Hurt is one row of six. Death is twelve, drawn across two rows: she folds,
+  // falls, and the sword-light burns off the ground where she lay.
+  //
+  // Both are titled with a pill above the row rather than a caption beside it,
+  // so there is nothing to erase from the left edge — the titles are their own
+  // bands, 52px tall against 168+ for a row of poses, and `minBand` drops them.
+  {
+    file: 'kiemtien-hurt-death.png',
+    clip: (name) => name,
+    rows: ['hurt', 'death', 'death'],
+    cols: 6,
+    labelWidth: 0,
+    minBand: 80,
+    texture: 'kiemtien-hurt.png',
+  },
   // Mixed extras: some cells hold the character mid-cast, others a detached
   // impact with nobody in it. Cut by position and numbered, because nothing on
   // the sheet says what order they go in.
@@ -418,7 +450,7 @@ function readSheet(sheet) {
           top: Math.round((i * img.height) / wantRows),
           bottom: Math.round(((i + 1) * img.height) / wantRows) - 1,
         }))
-      : bandsOf(img);
+      : bandsOf(img).filter((b) => b.bottom - b.top + 1 >= (sheet.minBand ?? MIN_BAND));
   if (bands.length !== wantRows) {
     throw new Error(
       `${sheet.file}: found ${bands.length} bands, expected ${wantRows} ` +
@@ -428,15 +460,16 @@ function readSheet(sheet) {
 
   const poses = [];
   bands.forEach((band, row) => {
+    const cols = colsOf(sheet, row);
     let runs =
       sheet.split === 'grid'
-        ? gridRuns(img, band, sheet.labelWidth, sheet.cols)
+        ? gridRuns(img, band, sheet.labelWidth, cols)
         : runsOf(img, band, sheet.labelWidth);
-    if (runs.length !== sheet.cols) {
+    if (runs.length !== cols) {
       const found = runs.length;
-      runs = gridRuns(img, band, sheet.labelWidth, sheet.cols);
+      runs = gridRuns(img, band, sheet.labelWidth, cols);
       console.log(
-        `    row ${row}: split found ${found} poses, fell back to an even ${sheet.cols}-way grid`,
+        `    row ${row}: split found ${found} poses, fell back to an even ${cols}-way grid`,
       );
     }
     runs.forEach((run, col) => poses.push({ row, col, surface: cut(img, run, band) }));
@@ -444,18 +477,33 @@ function readSheet(sheet) {
 
   // rowMajor lets a 2x2 sheet name its cells in reading order rather than by
   // row, which is how the ultimates are laid out.
+  //
+  // Otherwise a frame's number runs on per clip rather than restarting per
+  // band, so a cycle drawn across two rows — the twelve-frame death, and the
+  // side flight — comes out as one clip numbered 0..11 instead of two halves
+  // that both start at zero.
+  const seen = new Map();
   const named = poses.map(({ row, col, surface }) => {
-    if (sheet.numbered) return { clip: sheet.clip(), index: row * sheet.cols + col, surface };
+    if (sheet.numbered) {
+      return { clip: sheet.clip(), index: seen.set('n', (seen.get('n') ?? -1) + 1).get('n'), surface };
+    }
     if (sheet.rowMajor) {
-      const dir = sheet.rowMajor[row * sheet.cols + col];
+      const dir = sheet.rowMajor[row * colsOf(sheet, row) + col];
       return { clip: sheet.clip(dir), index: 0, surface };
     }
-    return { clip: sheet.clip(sheet.rows[row]), index: col, surface };
+    const clip = sheet.clip(sheet.rows[row]);
+    const index = (seen.get(clip) ?? -1) + 1;
+    seen.set(clip, index);
+    return { clip, index, surface };
   });
-  console.log(
-    `  ${sheet.file.padEnd(24)} ${bands.length} bands x ${sheet.cols} = ${named.length} frames`,
-  );
+  const shape = bands.map((_, r) => colsOf(sheet, r)).join('+');
+  console.log(`  ${sheet.file.padEnd(24)} ${bands.length} bands (${shape}) = ${named.length} frames`);
   return named;
+}
+
+/** Columns in one band — a sheet may declare a different count per row. */
+function colsOf(sheet, row) {
+  return Array.isArray(sheet.cols) ? sheet.cols[row] : sheet.cols;
 }
 
 function main() {
