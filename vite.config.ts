@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readdir, readFile, rm, stat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { defineConfig } from 'vite';
@@ -91,8 +92,40 @@ async function walk(dir: string): Promise<string[]> {
   return out;
 }
 
+/**
+ * Makes a missing asset 404 in dev instead of falling back to `index.html`.
+ *
+ * Nearly all of the art is generated and gitignored — the `env:*` scripts and
+ * the atlas builders stage it — so a fresh clone asks for hundreds of files it
+ * does not have yet. Vite's SPA fallback answered every one of those with the
+ * index page at status 200, and Phaser then reported a PNG that decodes to HTML
+ * as `Failed to process file`, which reads like a corrupt image rather than an
+ * absent one. Worse, anything that only checks `response.ok` concludes the file
+ * is there.
+ *
+ * Only `/assets/`, and only in dev: that prefix is all static art, never a
+ * client route, so there is nothing there the fallback should be catching.
+ */
+function assets404(): Plugin {
+  return {
+    name: 'assets-404',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const path = (req.url ?? '').split('?')[0];
+        if (!path.startsWith('/assets/') || path.endsWith('/')) return next();
+        const file = resolve(server.config.publicDir, path.slice(1));
+        if (existsSync(file)) return next();
+        res.statusCode = 404;
+        res.setHeader('content-type', 'text/plain');
+        res.end(`missing asset: ${path}\nstage it with the env:* / atlas scripts`);
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), stripSourceSheets()],
+  plugins: [react(), stripSourceSheets(), assets404()],
   server: {
     /**
      * 5173 unless the environment names a port. Nothing here depends on the
