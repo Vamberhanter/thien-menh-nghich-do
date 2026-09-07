@@ -124,6 +124,7 @@ const SHEETS = [
     // the sideways rows, past the last pose she is in, so it is cut out as its
     // own frame and the scene puts it at the end of the lane.
     tailClip: 'raybloom',
+    requireCharacter: true,
     texture: 'kiemtien-skill2.png',
   },
   // One drawn pose per heading rather than a cycle: these read as the held
@@ -600,7 +601,24 @@ function readSheet(sheet) {
         `    row ${row}: split found ${found} poses, fell back to an even ${cols}-way grid`,
       );
     }
-    runs.forEach((run, col) => poses.push({ row, col, surface: cut(img, run, band) }));
+    runs.forEach((run, col) => {
+      const surface = cut(img, run, band);
+      /*
+       * Skip a cell the artist left her out of.
+       *
+       * The ray's downward row has eight cells and she is drawn in seven: the
+       * fourth is the beam and the lotus with nobody there. Kept, it played as
+       * a one-frame blink out of existence in the middle of the cast. Dropping
+       * it costs a beat of the beam growing and keeps her on screen, which is
+       * the better trade. Opt-in, because plenty of frames elsewhere are
+       * *meant* to have no one in them.
+       */
+      if (sheet.requireCharacter && !hasCharacter(surface)) {
+        console.log(`    row ${row} cell ${col}: no character drawn, skipped`);
+        return;
+      }
+      poses.push({ row, col, surface });
+    });
     // The effect the technique leaves behind, kept out of her clip and given a
     // name of its own so the scene can place it where the drawing says it lands
     // rather than on top of her.
@@ -640,6 +658,25 @@ function readSheet(sheet) {
   const shape = bands.map((_, r) => colsOf(sheet, r)).join('+');
   console.log(`  ${sheet.file.padEnd(24)} ${bands.length} bands (${shape}) = ${named.length} frames`);
   return named;
+}
+
+/**
+ * Is she in this frame at all?
+ *
+ * Her hair is the one thing on these sheets that is both opaque and near-black
+ * while every effect glows, so a frame with none of it has nobody in it. Used
+ * to drop a cell the artist left her out of — see `requireCharacter`.
+ */
+function hasCharacter(surface) {
+  let dark = 0;
+  for (let y = 0; y < surface.height; y++) {
+    for (let x = 0; x < surface.width; x++) {
+      if (surface.alphaAt(x, y) < 200) continue;
+      const [r, g, b] = surface.get(x, y);
+      if (r + g + b < 200 && ++dark >= 300) return true;
+    }
+  }
+  return false;
 }
 
 /** Columns in one band — a sheet may declare a different count per row. */

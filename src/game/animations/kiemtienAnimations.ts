@@ -124,7 +124,10 @@ const CLIPS: readonly ClipSpec[] = [
   // vertical poses left it. Same duration either way: the sideways cast runs
   // slower per frame so both take about half a second.
   { clip: 'skill2_up', frames: 8, frameRate: 14, repeat: 0 },
-  { clip: 'skill2_down', frames: 8, frameRate: 14, repeat: 0 },
+  // Seven, not eight: the downward row has a cell the artist left her out of,
+  // and the cutter drops it rather than let her blink out mid-cast. Slightly
+  // slower so the cast still takes about as long as the upward one.
+  { clip: 'skill2_down', frames: 7, frameRate: 12, repeat: 0 },
   { clip: 'skill2_left', frames: 5, frameRate: 9, repeat: 0 },
   { clip: 'skill2_right', frames: 4, frameRate: 8, repeat: 0 },
   // 8fps rather than 1: these are single frames, and the rate is what decides
@@ -278,7 +281,9 @@ const IMPACT_FRAME: Record<string, number> = {
   // 6th there asks for a frame that never arrives, and the hit would never
   // resolve at all.
   skill2_up: 6,
-  skill2_down: 6,
+  // One earlier than the upward cast, because the frame that was dropped sat
+  // before this one — the beam is at the same point in the motion.
+  skill2_down: 5,
   skill2_left: 4,
   skill2_right: 3,
   skill3: 1,
