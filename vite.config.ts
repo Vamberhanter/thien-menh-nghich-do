@@ -94,7 +94,14 @@ async function walk(dir: string): Promise<string[]> {
 export default defineConfig({
   plugins: [react(), stripSourceSheets()],
   server: {
-    port: 5173,
+    /**
+     * 5173 unless the environment names a port. Nothing here depends on the
+     * number — there is no OAuth callback or webhook pointed at it — so a
+     * second dev server for the same repo can be handed its own rather than
+     * silently landing on 5174 and leaving the tooling looking at the wrong
+     * one.
+     */
+    port: Number(process.env.PORT) || 5173,
     /**
      * Bind every interface, not just loopback, so a phone or a second machine
      * on the same LAN can open the game. This is a dev server with no auth —

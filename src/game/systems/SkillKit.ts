@@ -7,6 +7,7 @@ import {
   BANG_TINH_TRAN,
   CAN_DAU_VAN,
   CUU_U_NO_DIEM,
+  HANG_MA_CHAN_LOI,
   HUYET_DIEM_TRAM,
   PHAN_THIEN_MA_DIEM,
   LIET_ANH_BO,
@@ -17,7 +18,7 @@ import {
 } from './CombatSystem';
 
 /** Keyboard / pad binding labels for the character panel. */
-export type KitBindKey = 'K' | 'L' | 'Space' | 'U';
+export type KitBindKey = 'K' | 'L' | 'O' | 'Space' | 'U';
 
 export interface KitBinding {
   /** Tree skill ids for combat slots 0..n-1 (K, L, Space, …). */
@@ -26,18 +27,35 @@ export interface KitBinding {
   ultimate: string;
   /** Base kit defs aligned with `slots` (before tree scaling). */
   bases: readonly SkillDefinition[];
-  /** Display key labels aligned with slots + ultimate. */
+  /**
+   * Slots that sit *past* the ultimate, with their bases.
+   *
+   * Only Tôn Ngộ Không has any. Three kits are three techniques plus an
+   * ultimate, so "ultimate last" describes them exactly; he has four drawn
+   * techniques and the cloud, and his ultimate is the fourth of those rather
+   * than the end of the list. The alternative was to renumber `WukongSlot` so
+   * the cloud came before the ultimate, which would have put the HUD order out
+   * of step with the sheets the art was drawn on.
+   */
+  tail?: readonly string[];
+  tailBases?: readonly SkillDefinition[];
+  /** Display key labels aligned with the built kit: slots, ultimate, tail. */
   keys: readonly KitBindKey[];
 }
 
 export const KIT_BINDINGS: Readonly<Record<SkillClass, KitBinding>> = {
   wukong: {
-    slots: ['cuu-chuyen-con-phap', 'cuu-u-no-diem', 'can-dau-van'],
+    // In `WukongSlot` order — Nova, Lance, Wrath, then Dragon as the ultimate
+    // and the cloud on slot 4. The entity casts by those indices, so this list
+    // is what makes each key fire the technique the HUD names against it.
+    slots: ['cuu-u-no-diem', 'hang-ma-chan-loi', 'phan-thien-ma-diem'],
     ultimate: 'ma-nguyet-tram',
     // His own definitions rather than restated numbers, so the tree scales the
     // same values the kit actually fires.
-    bases: [CUU_U_NO_DIEM, PHAN_THIEN_MA_DIEM, CAN_DAU_VAN],
-    keys: ['K', 'L', 'Space', 'U'],
+    bases: [CUU_U_NO_DIEM, HANG_MA_CHAN_LOI, PHAN_THIEN_MA_DIEM],
+    tail: ['can-dau-van'],
+    tailBases: [CAN_DAU_VAN],
+    keys: ['K', 'L', 'U', 'O', 'Space'],
   },
   nhuyen: {
     slots: ['han-bang-chuong', 'bang-lien', 'suong-anh-bo'],
@@ -80,12 +98,16 @@ export function seedStarterRanks(classId: SkillClass): Record<string, number> {
   return id ? { [id]: 1 } : {};
 }
 
+/** Tree ids in built-kit order, so a slot index means the same thing everywhere. */
+function kitOrder(bind: KitBinding): readonly string[] {
+  return [...bind.slots, bind.ultimate, ...(bind.tail ?? [])];
+}
+
 export function kitBindHint(skillId: string, classId: SkillClass): string | null {
   const bind = KIT_BINDINGS[classId];
-  const slot = bind.slots.indexOf(skillId);
-  if (slot >= 0) return bind.keys[slot] ?? null;
-  if (bind.ultimate === skillId) return 'U';
-  return null;
+  const slot = kitOrder(bind).indexOf(skillId);
+  if (slot < 0) return null;
+  return bind.keys[slot] ?? null;
 }
 
 function scaleDef(base: SkillDefinition, treeId: string, rank: number): SkillDefinition {
@@ -137,5 +159,8 @@ export function buildCombatKit(
     bind.ultimate,
     ultRank,
   );
-  return [...slots, ultimate];
+  const tail = (bind.tail ?? []).map((id, index) =>
+    scaleDef(bind.tailBases?.[index] ?? CAN_DAU_VAN, id, ranks[id] ?? 0),
+  );
+  return [...slots, ultimate, ...tail];
 }

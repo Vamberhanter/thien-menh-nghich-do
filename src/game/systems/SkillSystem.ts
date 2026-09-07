@@ -65,13 +65,24 @@ const node = (
 });
 
 export const SKILL_TREES: Readonly<Record<SkillClass, readonly SkillNode[]>> = {
+  // Five kit keys, not three: he has four drawn techniques plus the cloud, so
+  // his tree carries two actives the other three do not.
+  //
+  // Cửu U Nộ Diễm leads deliberately. `seedStarterRanksInline` hands every new
+  // hero the *first* active with no prerequisites, and for the other three that
+  // skill is the one on K — so his has to be on K too, or he starts with every
+  // kit key locked while they start with one. Cửu Chuyển Côn Pháp follows it
+  // rather than leading: that node is his J staff chain, which is his basic
+  // attack and works whatever the tree says, so it must not take the free rank.
   wukong: [
+    node('wukong', 'cuu-u-no-diem', 'Cửu U Nộ Diễm', 'active', 1, {}, { damageMultiplier: 1.8, spiritualCost: 9, description: 'Lửa chạy dưới đất rồi nổ ở xa.' }),
     node('wukong', 'cuu-chuyen-con-phap', 'Cửu Chuyển Côn Pháp', 'active', 1, {}, { damageMultiplier: 1.25, spiritualCost: 4, description: 'Côn khí chém thẳng.' }),
-    node('wukong', 'con-tam', 'Côn Tâm', 'passive', 2, { 'cuu-chuyen-con-phap': 1 }, { stat: 'attack', value: 2, description: 'Tăng công kích.' }),
-    node('wukong', 'can-dau-van', 'Cân Đẩu Vân', 'active', 3, { 'cuu-chuyen-con-phap': 1 }, { cooldownSeconds: 6, spiritualCost: 5, description: 'Lên mây, bay theo hướng ngắm.' }),
-    node('wukong', 'cuu-u-no-diem', 'Cửu U Nộ Diễm', 'active', 5, { 'con-tam': 2 }, { damageMultiplier: 1.8, spiritualCost: 9, description: 'Lửa chạy dưới đất rồi nổ ở xa.' }),
+    node('wukong', 'con-tam', 'Côn Tâm', 'passive', 2, { 'cuu-u-no-diem': 1 }, { stat: 'attack', value: 2, description: 'Tăng công kích.' }),
+    node('wukong', 'can-dau-van', 'Cân Đẩu Vân', 'active', 3, { 'cuu-u-no-diem': 1 }, { cooldownSeconds: 6, spiritualCost: 5, description: 'Lên mây, bay theo hướng ngắm.' }),
+    node('wukong', 'hang-ma-chan-loi', 'Hàng Ma Chân Lôi', 'active', 5, { 'con-tam': 2 }, { damageMultiplier: 2.4, cooldownSeconds: 3.8, spiritualCost: 9, description: 'Thương lôi đóng xuống mục tiêu.' }),
     node('wukong', 'con-cot', 'Côn Cốt', 'passive', 6, { 'can-dau-van': 1 }, { stat: 'defense', value: 2, description: 'Tăng phòng ngự.' }),
-    node('wukong', 'ma-nguyet-tram', 'Ma Nguyệt Trảm', 'active', 9, { 'cuu-u-no-diem': 2, 'con-cot': 2 }, { damageMultiplier: 3, cooldownSeconds: 16, spiritualCost: 18, description: 'Tuyệt kỹ rồng khí.' }, 1, 2),
+    node('wukong', 'phan-thien-ma-diem', 'Phần Thiên Ma Diễm', 'active', 7, { 'hang-ma-chan-loi': 1 }, { damageMultiplier: 2.6, cooldownSeconds: 6.8, spiritualCost: 14, description: 'Lửa dựng quanh mình thành mặt ma.' }),
+    node('wukong', 'ma-nguyet-tram', 'Ma Nguyệt Trảm', 'active', 9, { 'hang-ma-chan-loi': 2, 'con-cot': 2 }, { damageMultiplier: 3, cooldownSeconds: 16, spiritualCost: 18, description: 'Tuyệt kỹ rồng khí.' }, 1, 2),
   ],
   nhuyen: [
     node('nhuyen', 'han-bang-chuong', 'Hàn Băng Chưởng', 'active', 1, {}, { damageMultiplier: 1.15, spiritualCost: 4, description: 'Chưởng lực mang hàn khí.' }),
@@ -128,8 +139,13 @@ export function snapshotSkills(state: Readonly<SkillTreeState>): SkillTreeState 
   for (const [id, rank] of Object.entries(state.ranks)) {
     if (allowed.has(id) && whole(rank) > 0) ranks[id] = whole(rank);
   }
-  if (Object.keys(ranks).length === 0) {
-    Object.assign(ranks, seedStarterRanksInline(state.classId));
+  // The starter is free by design rather than bought, so guarantee it instead
+  // of only filling it in when the map came back empty. That second form also
+  // doubles as the migration for a hero saved under an older tree, whose free
+  // skill may since have moved: Tôn Ngộ Không's heroes hold their seeded rank
+  // in the staff chain, and without this they keep every kit key locked.
+  for (const [id, rank] of Object.entries(seedStarterRanksInline(state.classId))) {
+    if ((ranks[id] ?? 0) < rank) ranks[id] = rank;
   }
   return { classId: state.classId, availablePoints: whole(state.availablePoints), ranks };
 }

@@ -309,14 +309,29 @@ export class CombatSystem {
     return this.stats.attack;
   }
 
+  /**
+   * Both of these answer for a slot the kit may not have.
+   *
+   * `skillAt` throws, which is right for a caller that is about to fire: a slot
+   * that does not exist is a wiring mistake and should say so loudly. But these
+   * two are asked every frame from inside the controllers, where a throw does
+   * not surface as an error — it unwinds the scene's update and the character
+   * simply stops responding, which is how a five-slot kit rebuilt with four
+   * entries showed up as "the cloud freezes him" rather than as a stack trace.
+   *
+   * So a missing slot reads as a skill that cannot be cast and is locked. The
+   * button does nothing, the game keeps running, and the mismatch stays visible
+   * as a dead key rather than a dead character.
+   */
   canCastSkill(slot = 0): boolean {
-    const skill = this.skillAt(slot);
-    if (skill.locked) return false;
+    const skill = this.skillDefs[slot];
+    if (!skill || skill.locked) return false;
     return this.now >= this.skillReadyAt[slot] && this.stats.spiritualPower >= skill.spiritCost;
   }
 
   isSkillLocked(slot = 0): boolean {
-    return Boolean(this.skillAt(slot).locked);
+    const skill = this.skillDefs[slot];
+    return !skill || Boolean(skill.locked);
   }
 
   hasSpiritFor(skill: SkillDefinition = this.skill): boolean {

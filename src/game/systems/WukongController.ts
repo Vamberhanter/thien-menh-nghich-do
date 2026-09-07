@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { Wukong } from '../entities/Wukong';
 import type { Vector2Like } from '../types';
-import { isInputGated } from '../../net/bind';
+import { isGameplayGated } from '../../net/bind';
 import { consumePad, padMove } from '../touchPad';
 
 /**
@@ -78,7 +78,11 @@ export class WukongController {
   update(time: number, delta: number): void {
     this.player.tick(time, delta);
 
-    if (!this.enabled || this.player.isDead || isInputGated()) {
+    // The wide gate, like the other three kits: the lobby overlay, the pause
+    // menu, and a focused HUD field all have to stop him. He was written
+    // against `isInputGated`, which is only the lobby, so typing a message
+    // containing "k" threw Cửu U Nộ Diễm across the room.
+    if (!this.enabled || this.player.isDead || isGameplayGated()) {
       if (!this.player.isDead) this.player.setVelocity(0, 0);
       return;
     }
