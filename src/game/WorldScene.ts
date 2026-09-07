@@ -296,7 +296,6 @@ const BLOOD_SWORD_NARROW = 0.34;
 const BLOOD_SWORD_LONG = 1.7;
 const BLOOD_SWORD_DROP = 420;
 const BLOOD_SWORD_FALL = 190;
-const BLOOD_SWORD_TINT = 0xff6a80;
 /** The bloom is drawn beside the ray, so it wears the ray clip's own scale. */
 const SWORD_BLOOM_SCALE = clipScaleOf(KiemTienClip.skill2('right'));
 /**
@@ -4081,7 +4080,9 @@ export class WorldScene extends Phaser.Scene {
       for (const lean of [-1, 1]) {
         const x = payload.x + aim.x * along + side.x * spread * lean;
         const y = payload.y + aim.y * along + side.y * spread * lean;
-        this.time.delayedCall(i * BLOOD_STEP, () => this.magmaFx.magmaBurst(x, y, 0.5 + 0.1 * i));
+        this.time.delayedCall(i * BLOOD_STEP, () =>
+          this.swordFall(x, y, 0.6 + 0.12 * i, i % SWORD_RAIN_FRAMES, 'rain_red'),
+        );
       }
     }
 
@@ -4110,17 +4111,11 @@ export class WorldScene extends Phaser.Scene {
     }
     const art = BLOOD_SWORD_SCALE / KIEMTIEN_ART_SCALE;
     const blade = this.add
-      .sprite(x, y - BLOOD_SWORD_DROP, KIEMTIEN_TEXTURE, 'rain_hit_4')
+      .sprite(x, y - BLOOD_SWORD_DROP, KIEMTIEN_TEXTURE, 'rain_red_4')
       // Point down, and narrower than it is tall: the frame is a burst, and
       // squeezing it is what turns the spike in the middle of it into a blade.
       .setFlipY(true)
       .setScale(art * BLOOD_SWORD_NARROW, art * BLOOD_SWORD_LONG)
-      .setTint(BLOOD_SWORD_TINT)
-      // Added rather than multiplied. The frame is blue and the technique is
-      // red: multiplying a red tint through it takes the blue channel most of
-      // the way to nothing and the blade came out a dark smear. Added, it
-      // glows the way light does, which is what it is.
-      .setBlendMode(Phaser.BlendModes.ADD)
       .setAlpha(0)
       .setDepth(y + 260);
 
@@ -4132,7 +4127,8 @@ export class WorldScene extends Phaser.Scene {
       // Gathering speed the whole way down, so it lands rather than arrives.
       ease: 'Quad.easeIn',
       onComplete: () => {
-        this.magmaFx.magmaBurst(x, y, 0.95);
+        // Her own impact, in her own red, rather than a magma burst on top of it.
+        this.swordFall(x, y, 1.15, 3, 'rain_red');
         this.lighting.flash(x, y, 680, 0xff3a5c, 3.6, 820);
         this.qiFx.shake(0.018, 260);
         this.juiceHitStop(110);
@@ -4148,12 +4144,19 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  /** One sword-fall from the `.1` sheet, dropped in and fading out. */
-  private swordFall(x: number, y: number, scale: number, frame: number): void {
+  /**
+   * One sword-fall from the `.1` sheet, dropped in and fading out.
+   *
+   * `set` picks the palette: `rain_hit` is the blue the sheet was drawn in, and
+   * `rain_red` the same frames dyed to her blood palette at build time. Dyed,
+   * not tinted — see `hueShifted` in the atlas builder for why a tint could not
+   * do it.
+   */
+  private swordFall(x: number, y: number, scale: number, frame: number, set = 'rain_hit'): void {
     if (!this.textures.exists(KIEMTIEN_TEXTURE)) return;
     const art = scale / KIEMTIEN_ART_SCALE;
     const hit = this.add
-      .sprite(x, y, KIEMTIEN_TEXTURE, `rain_hit_${frame}`)
+      .sprite(x, y, KIEMTIEN_TEXTURE, `${set}_${frame}`)
       .setDepth(y + 250)
       .setScale(art * 0.75)
       .setAlpha(0)

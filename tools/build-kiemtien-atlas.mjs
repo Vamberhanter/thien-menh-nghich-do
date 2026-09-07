@@ -201,6 +201,10 @@ const SHEETS = [
     rowSplit: 'grid',
     numbered: true,
     sortByCharacter: { with: 'rain_cast', without: 'rain_hit' },
+    // A red copy of the impacts for Huyết Kiếm Sát, which has no impact art of
+    // its own. Measured rather than picked: these crystals sit at 225° on the
+    // wheel and her blood palette at 352°, so +127° carries one onto the other.
+    recolour: { from: 'rain_hit', to: 'rain_red', hue: 127 },
     texture: 'kiemtien-fx.png',
   },
 ];
@@ -729,6 +733,75 @@ function hasCharacter(surface) {
  * Not used for `requireCharacter`, because a pose with her back turned or her
  * face behind the beam scores as low as 39 and would be thrown away.
  */
+/**
+ * The same art in another colour, dyed rather than tinted.
+ *
+ * Huyết Kiếm Sát wants these crystal impacts, in red. A runtime tint cannot do
+ * it: a tint multiplies, and multiplying red through art whose blue channel
+ * carries the picture takes that channel most of the way to nothing — the first
+ * attempt at the blade fell as a dark smear. Additive blending glows, but
+ * washes the shape out against bright ground.
+ *
+ * Rotating the hue keeps every value the artist set — the white-hot cores stay
+ * white, the facets keep their contrast — and only moves where on the wheel
+ * they sit. Saturation and lightness are untouched, so the copy is the same
+ * drawing in another colour rather than a wash laid over it.
+ */
+function hueShifted(surface, degrees) {
+  const out = new Surface(surface.width, surface.height);
+  const shift = (((degrees % 360) + 360) % 360) / 360;
+  for (let y = 0; y < surface.height; y++) {
+    for (let x = 0; x < surface.width; x++) {
+      const [r, g, b, a] = surface.get(x, y);
+      if (!a) continue;
+      const [h, s, l] = rgbToHsl(r, g, b);
+      const [nr, ng, nb] = hslToRgb((h + shift) % 1, s, l);
+      out.set(x, y, [nr, ng, nb, a]);
+    }
+  }
+  return out;
+}
+
+function rgbToHsl(r, g, b) {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h;
+  if (max === rn) h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
+  else if (max === gn) h = ((bn - rn) / d + 2) / 6;
+  else h = ((rn - gn) / d + 4) / 6;
+  return [h, s, l];
+}
+
+function hslToRgb(h, s, l) {
+  if (s === 0) {
+    const v = Math.round(l * 255);
+    return [v, v, v];
+  }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const channel = (t) => {
+    let tt = t;
+    if (tt < 0) tt += 1;
+    if (tt > 1) tt -= 1;
+    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+    if (tt < 1 / 2) return q;
+    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+    return p;
+  };
+  return [
+    Math.round(channel(h + 1 / 3) * 255),
+    Math.round(channel(h) * 255),
+    Math.round(channel(h - 1 / 3) * 255),
+  ];
+}
+
 function hasFace(surface) {
   let skin = 0;
   for (let y = 0; y < surface.height; y++) {
@@ -759,6 +832,18 @@ function main() {
     if (sheet.file === 'kiemtien.png') walkPoses = poses;
 
     const plan = poses.map((p) => ({ name: `${p.clip}_${p.index}`, surface: p.surface, lift: 0, anchor: p.anchor }));
+    if (sheet.recolour) {
+      const { from, to, hue } = sheet.recolour;
+      for (const p of poses) {
+        if (p.clip !== from) continue;
+        plan.push({
+          name: `${to}_${p.index}`,
+          surface: hueShifted(p.surface, hue),
+          lift: 0,
+          anchor: p.anchor,
+        });
+      }
+    }
     emit(sheet.texture, plan, textures);
     if (DUMP) {
       for (const item of plan) {
