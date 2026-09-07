@@ -22,6 +22,7 @@ import {
 import {
   KIEMTIEN_ART_SCALE,
   KiemTienClip,
+  clipScaleOf as kiemTienClipScale,
   createKiemTienAnimations,
 } from '../animations/kiemtienAnimations';
 import type { CharacterState, Direction } from '../types';
@@ -198,6 +199,10 @@ export class RemoteAvatar {
     // per technique (CAST_SCALE in wukongAnimations), so somebody else casting
     // one has to read the same size on your screen as it does on theirs.
     const cast = this.character === 'wukong' && this.state === 'skill';
+    // Kiếm Tiên's sheets were each drawn at their own size, so her replica has
+    // to apply the same per-clip correction the local one does or she would
+    // shrink on somebody else's screen exactly where she used to shrink here.
+    const kiemTien = this.character === 'kiemtien' ? kiemTienClipScale(clip) : 1;
     // Divided by the art scale for the same reason the local one is: his atlas is
     // baked larger than the world. The other three kits are still 1:1, so they
     // divide by 1 and nothing changes for them.
@@ -207,7 +212,7 @@ export class RemoteAvatar {
         : this.character === 'kiemtien'
           ? KIEMTIEN_ART_SCALE
           : 1;
-    this.sprite.setScale((cast ? wukongCastScale(clip) : 1) / art);
+    this.sprite.setScale((cast ? wukongCastScale(clip) : kiemTien) / art);
     if (!force && this.playedKey === clip.key) return;
     this.playedKey = clip.key;
     if (this.scene.anims.exists(clip.key)) {

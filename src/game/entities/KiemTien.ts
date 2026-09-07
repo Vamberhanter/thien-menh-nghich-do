@@ -3,6 +3,7 @@ import {
   KIEMTIEN_ART_SCALE,
   KIEMTIEN_TEXTURE,
   KiemTienClip,
+  clipScaleOf,
   createKiemTienAnimations,
   impactFrameOf,
   refDuration,
@@ -599,10 +600,11 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
     if (next !== 'dash') this.flying = false;
 
     this.setFlipX(clip.flip);
-    // The art is baked 1.6x the world; nothing here is blown up per technique
-    // the way Tôn Ngộ Không's is, because her skill sheets already draw the
-    // effect at the size it should read.
-    this.setScale(1 / KIEMTIEN_ART_SCALE);
+    // Two scales in one: the atlas is baked 1.6x the world, and each sheet was
+    // drawn at its own size on top of that, so the clip carries a correction
+    // that makes her the same person swinging, casting and flying as she is
+    // walking. `syncBody` below divides the collision box back out of it.
+    this.setScale(clipScaleOf(clip) / KIEMTIEN_ART_SCALE);
     if (force || this.playedKey !== clip.key) {
       this.playedKey = clip.key;
       if (force && next !== 'attack' && next !== 'skill') this.pending = null;

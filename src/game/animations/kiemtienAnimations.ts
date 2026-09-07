@@ -31,6 +31,39 @@ export const KIEMTIEN_TEXTURE = 'kiemtien';
  * by resampling the atlas, so the frames keep every pixel the artist drew.
  */
 export const KIEMTIEN_ART_SCALE = 1.6;
+
+/**
+ * How much each sheet has to be resized to make her one person.
+ *
+ * The nine sheets were not drawn to a common scale — each packs a different
+ * number of rows into the same 1536x1024, and the artist filled the row it got.
+ * She stands 185px tall walking, 96px swinging and 251px being staggered, so a
+ * single art scale made her shrink whenever she attacked, cast or flew and
+ * swell whenever she was hit. The walk is the reference because it is what she
+ * spends most of her time doing.
+ *
+ * Measured on her head rather than her height: the flight poses kneel and lie
+ * along the blade, so head-to-heel is not comparable between them, while the
+ * head is the same head in every drawing.
+ *
+ * The two ultimates need far less than the rest (1.12 and 1.28) — the character
+ * is small in those frames because the technique around her is enormous, which
+ * is the drawing doing its job. Correcting them to match the walk would have
+ * scaled the effect up with her and filled the screen; these numbers put *her*
+ * right and leave the effect close to as drawn.
+ */
+const CLIP_SCALE: Record<string, number> = {
+  atk: 1.9,
+  skill1: 1.3,
+  skill2: 1.5,
+  skill3: 1.12,
+  skill4: 1.28,
+  fly_up: 1.7,
+  fly_down: 1.7,
+  fly_side: 1.8,
+  hurt: 0.82,
+  death: 0.88,
+};
 const kiemtienAtlas = remoteAtlas(
   'characters/kiemtien/atlas/kiemtien.json',
   'characters/kiemtien/atlas',
@@ -203,6 +236,18 @@ const IMPACT_FRAME: Record<string, number> = {
   skill3: 1,
   skill4: 1,
 };
+
+/**
+ * Per-clip size correction, to be divided by {@link KIEMTIEN_ART_SCALE} before
+ * it reaches the sprite. 1 for the walk and the idle, which are the reference.
+ */
+export function clipScaleOf(ref: ClipRef): number {
+  const name = clipNameOf(ref);
+  if (name.startsWith('atk_')) return CLIP_SCALE.atk;
+  // Whole name first: `fly_up` and `fly_down` are their own entries, and
+  // stripping the facing off them would look up a `fly` that does not exist.
+  return CLIP_SCALE[name] ?? CLIP_SCALE[name.replace(/_(up|down|left|right)$/, '')] ?? 1;
+}
 
 export function impactFrameOf(ref: ClipRef): number {
   const name = clipNameOf(ref);
