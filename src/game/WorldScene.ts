@@ -238,6 +238,15 @@ const QI_BEAM_RANGE = 560;
  */
 const LANCE_FX_SCALE = castScaleOf(WukongClip.lance('right'));
 const QI_BEAM_RADIUS = 54;
+
+/**
+ * Lạc Ảnh Kiếm Quang, read off her sheet the same way the lance's was read off
+ * his: at full extension the drawn ray reaches 414px past her feet once the
+ * clip's own scale is applied, and it is a thin blade of light rather than a
+ * column, so the lane is narrower than the lance's 54.
+ */
+const SWORD_RAY_RANGE = 400;
+const SWORD_RAY_RADIUS = 44;
 /**
  * Depth added to a flying character, chosen to clear the map rather than to
  * look right: the tallest zone is 1800px, so a foot Y can never reach 4000 and
@@ -3441,7 +3450,7 @@ export class WorldScene extends Phaser.Scene {
         this.juiceHitStop(50);
         return;
       case LAC_ANH_KIEM_QUANG.name:
-        this.castQiThunder(payload);
+        this.castSwordRay(payload);
         return;
       case VAN_KIEM_QUY_TONG.name:
       case HUYET_KIEM_SAT.name:
@@ -3889,6 +3898,39 @@ export class WorldScene extends Phaser.Scene {
       760,
     );
     this.sweepQi(payload, from, to, QI_BEAM_RADIUS, 6, 0xff70e0);
+  }
+
+  /**
+   * Lạc Ảnh Kiếm Quang — a ray of sword-qi thrown out along the aim.
+   *
+   * Unlike the lance, nothing is drawn into the world for the ray itself: her
+   * own sheet draws it, the whole length of it, out to a bloom where it lands.
+   * Borrowing `lanceBolt` here laid Tôn Ngộ Không's pink bolt over her blue one
+   * and the two disagreed about where the beam was. So this contributes only
+   * what the sprite cannot: the light it throws, a burst where the drawn bloom
+   * opens, and the hit.
+   *
+   * It resolves the moment it appears rather than travelling — the ray is drawn
+   * already spanning its length, so anything standing in it is already in it.
+   */
+  private castSwordRay(payload: SkillPayload): void {
+    const from = { x: payload.x, y: payload.y };
+    const to = {
+      x: payload.x + payload.aim.x * SWORD_RAY_RANGE,
+      y: payload.y + payload.aim.y * SWORD_RAY_RANGE,
+    };
+    this.lighting.flash(
+      payload.x + payload.aim.x * (SWORD_RAY_RANGE / 2),
+      payload.y + payload.aim.y * (SWORD_RAY_RANGE / 2),
+      460,
+      0x9fd4ff,
+      2.4,
+      620,
+    );
+    // Where the sheet opens its crystal bloom, so the world lights up in the
+    // same place the picture does.
+    this.qiFx.qiBurst(to.x, to.y, 0.7);
+    this.sweepQi(payload, from, to, SWORD_RAY_RADIUS, 7, 0x8fd0ff);
   }
 
   /**

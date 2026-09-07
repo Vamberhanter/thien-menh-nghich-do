@@ -119,7 +119,14 @@ const CLIPS: readonly ClipSpec[] = [
   ...FOUR.map((dir) => ({ clip: `walk_${dir}`, frames: 8, frameRate: 10, repeat: -1 })),
   ...EIGHT.map((dir) => ({ clip: `atk_${dir}`, frames: 8, frameRate: 16, repeat: 0 })),
   ...FOUR.map((dir) => ({ clip: `skill1_${dir}`, frames: 7, frameRate: 14, repeat: 0 })),
-  ...FOUR.map((dir) => ({ clip: `skill2_${dir}`, frames: 8, frameRate: 14, repeat: 0 })),
+  // Eight frames aimed up or down, five aimed sideways — the sheet draws it
+  // that way, and the ray needs more room across the cell than the eight
+  // vertical poses left it. Same duration either way: the sideways cast runs
+  // slower per frame so both take about half a second.
+  { clip: 'skill2_up', frames: 8, frameRate: 14, repeat: 0 },
+  { clip: 'skill2_down', frames: 8, frameRate: 14, repeat: 0 },
+  { clip: 'skill2_left', frames: 5, frameRate: 9, repeat: 0 },
+  { clip: 'skill2_right', frames: 5, frameRate: 9, repeat: 0 },
   // 8fps rather than 1: these are single frames, and the rate is what decides
   // how long the clip claims to run. At 1fps each claimed a full second, which
   // `castHoldUntil` then added its recovery on top of — nearly two seconds
@@ -198,14 +205,25 @@ export const KiemTienClip = {
    * always claimed, and keeps it as its own drawing rather than throwing it
    * away for a mirror of Phải.
    *
-   * Only skill1. Every other action was checked against its own art: the
-   * swing, skill2, both ultimates and the walk all face where they say.
+   * Skill 2's sideways rows have the same fault and the same fix. The swing,
+   * both ultimates and the walk were each checked against their own art and
+   * face where they say.
    */
   skill1: (direction: Direction): ClipRef =>
     direction === 'left'
       ? { key: key('skill1_left'), flip: true }
       : drawn('skill1', direction),
-  skill2: (direction: Direction): ClipRef => drawn('skill2', direction),
+  /**
+   * Lạc Ảnh Kiếm Quang — a ray of sword-qi thrown out along the aim.
+   *
+   * Its sideways rows have the same mislabelling as skill1: the sheet captions
+   * one Trái and draws it firing right, so the left cast is mirrored. Up and
+   * down are drawn as they say and are left alone.
+   */
+  skill2: (direction: Direction): ClipRef =>
+    direction === 'left'
+      ? { key: key('skill2_left'), flip: true }
+      : drawn('skill2', direction),
   skill3: (direction: Direction): ClipRef => drawn('skill3', direction),
   skill4: (direction: Direction): ClipRef => drawn('skill4', direction),
 
@@ -255,7 +273,14 @@ export const kiemtienFlyFxFrame = (index: number): string => `flyfx_${index}`;
  */
 const IMPACT_FRAME: Record<string, number> = {
   skill1: 5,
-  skill2: 6,
+  // Eight frames aimed up or down, with the ray at full reach on 6. The
+  // sideways rows are only five frames long, so they land on 4 — asking for a
+  // 6th there asks for a frame that never arrives, and the hit would never
+  // resolve at all.
+  skill2_up: 6,
+  skill2_down: 6,
+  skill2_left: 4,
+  skill2_right: 4,
   skill3: 1,
   skill4: 1,
 };
@@ -275,7 +300,8 @@ export function clipScaleOf(ref: ClipRef): number {
 export function impactFrameOf(ref: ClipRef): number {
   const name = clipNameOf(ref);
   if (name.startsWith('atk_')) return 5;
-  return IMPACT_FRAME[name.replace(/_(up|down|left|right)$/, '')] ?? 1;
+  // Whole name first, for the clips whose frame count differs by facing.
+  return IMPACT_FRAME[name] ?? IMPACT_FRAME[name.replace(/_(up|down|left|right)$/, '')] ?? 1;
 }
 
 export function refDuration(ref: ClipRef): number {

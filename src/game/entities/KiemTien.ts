@@ -84,7 +84,15 @@ const FLY_SPEED = 1.7;
  * own feet and a forward offset would only drag the centre off the picture.
  */
 const CUT_REACH = 46;
-const LANCE_REACH = 40;
+/*
+ * Zero, and for the reason the lance's is.
+ *
+ * `reach` shifts the whole hit a step along the aim, and that step is not
+ * foreshortened. The ray already resolves as a lane running out from wherever
+ * it starts, so a forward offset buys nothing sideways and, aimed up, lifts the
+ * lane off her hands into the air above her head. It leaves her feet.
+ */
+const RAY_REACH = 0;
 const RAIN_REACH = 0;
 const BLOOD_REACH = 0;
 
@@ -311,7 +319,7 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
   }
 
   castLance(steer?: Vector2Like): boolean {
-    return this.cast(KiemTienSlot.Lance, KiemTienClip.skill2, LANCE_REACH, steer);
+    return this.cast(KiemTienSlot.Lance, KiemTienClip.skill2, RAY_REACH, steer);
   }
 
   castRain(steer?: Vector2Like): boolean {

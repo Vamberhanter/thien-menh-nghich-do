@@ -105,13 +105,18 @@ const SHEETS = [
     labelWidth: 92,
     texture: 'kiemtien-skill1.png',
   },
+  // The ray. Its two vertical rows are eight poses on a clean grid — the beam
+  // goes up or down, across the cut rather than along it, so nothing overlaps.
+  // Its two sideways rows are six, and the beam runs straight down the axis
+  // being cut: it crosses into the next cell and lies over the next pose, so
+  // they are split on the character instead. See `characterRuns`.
   {
     file: 'kiemtien-skill2.png',
     clip: (dir) => `skill2_${dir}`,
     rows: FOUR,
-    cols: 8,
+    cols: [8, 8, 5, 5],
     labelWidth: 92,
-    split: 'grid',
+    split: ['grid', 'grid', 'chars', 'chars'],
     texture: 'kiemtien-skill2.png',
   },
   // One drawn pose per heading rather than a cycle: these read as the held
@@ -242,6 +247,78 @@ function runsOf(img, band, labelWidth) {
     else merged.push({ ...run });
   }
   return merged.filter((r) => r.x1 >= labelWidth && r.x1 - r.x0 + 1 >= MIN_RUN);
+}
+
+/**
+ * Split a band on the character rather than on the art around her.
+ *
+ * For the one case nothing else can do: a technique whose effect runs *along*
+ * the axis being cut. Skill 2 fires a ray of sword-qi, and in its two sideways
+ * rows that ray crosses two cells and overlaps the next pose, so there is no
+ * empty column to cut on and an even grid slices the ray in half and pastes the
+ * far end onto its neighbour — the frames came out as beam fragments with
+ * nobody in them.
+ *
+ * Her hair is the one thing on these sheets that is both opaque and near-black;
+ * every beam glows. So the dark columns are her, one cluster per pose, and a
+ * cut just before each cluster keeps every character with the ray she is
+ * firing. Whatever trails past the last of them — the ray after it has left
+ * her, and the bloom where it lands — is split on gaps, which work again out
+ * there because there is no longer a character in the way.
+ */
+function characterRuns(img, band, cols) {
+  const dark = new Int32Array(img.width);
+  for (let x = 0; x < img.width; x++) {
+    let n = 0;
+    for (let y = band.top; y <= band.bottom; y++) {
+      if (alphaAt(img, x, y) < 230) continue;
+      const i = (y * img.width + x) * 4;
+      if (img.data[i] + img.data[i + 1] + img.data[i + 2] < 150) n++;
+    }
+    dark[x] = n;
+  }
+  const clusters = [];
+  let start = -1;
+  for (let x = 0; x <= img.width; x++) {
+    const on = x < img.width && dark[x] >= 6;
+    if (on && start < 0) start = x;
+    if (!on && start >= 0) {
+      if (x - start >= 12) clusters.push({ x0: start, x1: x - 1 });
+      start = -1;
+    }
+  }
+  // A highlight through her hair can break one head into two clusters.
+  const heads = [];
+  for (const c of clusters) {
+    const last = heads[heads.length - 1];
+    if (last && c.x0 - last.x1 < 30) last.x1 = c.x1;
+    else heads.push({ ...c });
+  }
+  if (!heads.length) return [];
+
+  // Give each head the strip that starts a little before her and runs to just
+  // before the next one, so her ray stays with her.
+  const LEAD = 24;
+  const runs = [];
+  for (let i = 0; i < heads.length; i++) {
+    const x0 = i === 0 ? 0 : Math.max(0, heads[i].x0 - LEAD);
+    const x1 = i + 1 < heads.length ? Math.max(x0, heads[i + 1].x0 - LEAD - 1) : img.width - 1;
+    runs.push({ x0, x1 });
+  }
+  // Then the tail: everything past the last character, split on its own gaps.
+  const tailFrom = runs[runs.length - 1].x0;
+  const tail = runsOf(img, band, 0).filter((r) => r.x0 > tailFrom);
+  if (tail.length) {
+    runs[runs.length - 1].x1 = tail[0].x0 - 1;
+    runs.push(...tail);
+  }
+  if (runs.length !== cols) {
+    console.log(
+      `    character split found ${runs.length} poses, expected ${cols}` +
+        ` (${runs.map((r) => `${r.x0}-${r.x1}`).join(' ')})`,
+    );
+  }
+  return runs;
 }
 
 /** Even division of a band's painted span — the fallback when effects fuse. */
@@ -461,10 +538,13 @@ function readSheet(sheet) {
   const poses = [];
   bands.forEach((band, row) => {
     const cols = colsOf(sheet, row);
+    const mode = Array.isArray(sheet.split) ? sheet.split[row] : sheet.split;
     let runs =
-      sheet.split === 'grid'
+      mode === 'grid'
         ? gridRuns(img, band, sheet.labelWidth, cols)
-        : runsOf(img, band, sheet.labelWidth);
+        : mode === 'chars'
+          ? characterRuns(img, band, cols)
+          : runsOf(img, band, sheet.labelWidth);
     if (runs.length !== cols) {
       const found = runs.length;
       runs = gridRuns(img, band, sheet.labelWidth, cols);
