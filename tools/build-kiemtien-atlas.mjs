@@ -207,6 +207,26 @@ const SHEETS = [
     recolour: { from: 'rain_hit', to: 'rain_red', hue: 127 },
     texture: 'kiemtien-fx.png',
   },
+  // Huyết Kiếm Sát's climax, drawn at last: one enormous red blade standing in
+  // the ground, shards still in the air around it and the floor split open
+  // where it went in. Until this arrived the scene faked it — a crystal impact
+  // turned upside down, squeezed thin and dyed — and it now replaces that.
+  //
+  // A single painting rather than a grid, and portrait where every other sheet
+  // is landscape, so it is read whole. It gets a texture to itself because the
+  // atlas sizes one box for a whole sheet: dropped in with the twelve fx frames
+  // it would have grown all of them to 1024x1536.
+  {
+    file: 'kiemtien-skill4.1.png',
+    clip: () => 'bloodsword',
+    whole: true,
+    // Where the blade enters the earth: the shaft's white core runs down x=520,
+    // and the splash is widest and brightest across y=1435, which is the ground
+    // plane it is spreading along.
+    anchor: { x: 520, y: 1435 },
+    labelWidth: 0,
+    texture: 'kiemtien-bloodsword.png',
+  },
 ];
 
 /** Idle is derived from the walk — see the note in kiemtienAnimations.ts. */
@@ -579,6 +599,25 @@ function readSheet(sheet) {
   }
   const img = decodePNG(path);
   eraseCaption(img, sheet.labelWidth);
+
+  /*
+   * A sheet that is not a sheet: one drawing filling the whole file.
+   *
+   * Every other file here is a grid of poses, so the band-and-run machinery
+   * earns its keep. Huyết Kiếm Sát's impact is a single painting of one sword
+   * standing in the ground — there are no cells to find, and asking the cutter
+   * for a 1x1 grid would be claiming a layout the file does not have.
+   *
+   * Its pivot is declared rather than measured, for the same reason the
+   * downward ray needed `anchorFromFirst`: the lowest solid pixels here are the
+   * far edge of the splash, not the point the blade went into the ground.
+   */
+  if (sheet.whole) {
+    const surface = cut(img, { x0: 0, x1: img.width - 1 }, { top: 0, bottom: img.height - 1 });
+    console.log(`  ${sheet.file.padEnd(24)} whole image = 1 frame`);
+    return [{ clip: sheet.clip(), index: 0, surface, anchor: sheet.anchor }];
+  }
+
   const wantRows = Array.isArray(sheet.rows) ? sheet.rows.length : sheet.rows;
   const bands =
     sheet.rowSplit === 'grid'

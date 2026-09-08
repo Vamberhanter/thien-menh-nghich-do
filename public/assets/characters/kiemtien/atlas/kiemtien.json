@@ -5675,6 +5675,42 @@
       ]
     },
     {
+      "image": "kiemtien-bloodsword.png",
+      "format": "RGBA8888",
+      "size": {
+        "w": 1004,
+        "h": 1530
+      },
+      "scale": 1,
+      "frames": [
+        {
+          "filename": "bloodsword_0",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 1028,
+            "h": 1554
+          },
+          "spriteSourceSize": {
+            "x": 12,
+            "y": 12,
+            "w": 1002,
+            "h": 1528
+          },
+          "frame": {
+            "x": 1,
+            "y": 1,
+            "w": 1002,
+            "h": 1528
+          },
+          "anchor": {
+            "x": 0.5136186770428015,
+            "y": 0.9285714285714286
+          }
+        }
+      ]
+    },
+    {
       "image": "kiemtien-idle.png",
       "format": "RGBA8888",
       "size": {

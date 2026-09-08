@@ -289,13 +289,21 @@ const BLOOD_RADIUS = 110;
 const BLOOD_SPREAD = 96;
 const BLOOD_BEATS = 4;
 const BLOOD_STEP = 70;
-/** The blade that finishes it: how big, how far above, how long to fall. */
-const BLOOD_SWORD_SCALE = 2.6;
-/** Squeezed narrow and drawn long — that is what turns a burst into a blade. */
-const BLOOD_SWORD_NARROW = 0.34;
-const BLOOD_SWORD_LONG = 1.7;
-const BLOOD_SWORD_DROP = 420;
-const BLOOD_SWORD_FALL = 190;
+/**
+ * The blade that finishes it: how big, how far above it starts, how long it
+ * takes to come down.
+ *
+ * The scale is against the drawing rather than divided by KIEMTIEN_ART_SCALE
+ * like her poses are — this frame is not drawn at her scale, it is its own
+ * painting, 1443px of sword above the point it went in. At 0.3 that stands
+ * about six times her height — big enough to end a fight with, still short of
+ * the top of the screen.
+ */
+const BLOOD_SWORD_SCALE = 0.3;
+const BLOOD_SWORD_DROP = 520;
+const BLOOD_SWORD_FALL = 170;
+/** Fades in over the first stretch of the fall, so the splash is not seen flying. */
+const BLOOD_SWORD_FADE = 80;
 /** The bloom is drawn beside the ray, so it wears the ray clip's own scale. */
 const SWORD_BLOOM_SCALE = clipScaleOf(KiemTienClip.skill2('right'));
 /**
@@ -4097,46 +4105,54 @@ export class WorldScene extends Phaser.Scene {
    * The blade that ends Huyết Kiếm Sát: one enormous sword driven into the
    * ground point-first.
    *
-   * There is no drawn sword to use — nothing in the atlas is a blade on its own.
-   * The nearest thing is `rain_hit_4`, the impact whose centre is a single tall
-   * spike, so it is turned over to put that point at the bottom, stretched
-   * narrow to read as a blade rather than a burst, and tinted to her blood
-   * palette. It falls from well above, accelerating, and the ground answers on
-   * the frame it arrives.
+   * Drawn art now, `bloodsword_0` — a whole painting of the landed blade, the
+   * shards still in the air around it and the ground split where it went in.
+   * Before it existed the scene faked one: a crystal impact turned upside down
+   * and squeezed thin, which read as a blade only if you did not look.
+   *
+   * The frame is the sword *already landed*, so the fall has to hide that it is
+   * carrying its own splash down with it. It does that by being fast and by
+   * arriving out of nothing — alpha comes up over the first `BLOOD_SWORD_FADE`
+   * of a `BLOOD_SWORD_FALL` drop — and the moment it lands, the ground answers.
    */
   private bloodSword(x: number, y: number): void {
     if (!this.textures.exists(KIEMTIEN_TEXTURE)) {
       this.magmaFx.magmaPillar(x, y, 1.2, 0.016);
       return;
     }
-    const art = BLOOD_SWORD_SCALE / KIEMTIEN_ART_SCALE;
+    // The frame carries its own pivot: the point of the blade, on the ground.
+    // Placing the sprite at (x, y) stands it there without any offset of ours.
     const blade = this.add
-      .sprite(x, y - BLOOD_SWORD_DROP, KIEMTIEN_TEXTURE, 'rain_red_4')
-      // Point down, and narrower than it is tall: the frame is a burst, and
-      // squeezing it is what turns the spike in the middle of it into a blade.
-      .setFlipY(true)
-      .setScale(art * BLOOD_SWORD_NARROW, art * BLOOD_SWORD_LONG)
+      .sprite(x, y - BLOOD_SWORD_DROP, KIEMTIEN_TEXTURE, 'bloodsword_0')
+      .setScale(BLOOD_SWORD_SCALE)
       .setAlpha(0)
       .setDepth(y + 260);
 
+    this.tweens.add({ targets: blade, alpha: 1, duration: BLOOD_SWORD_FADE });
     this.tweens.add({
       targets: blade,
       y,
-      alpha: 1,
       duration: BLOOD_SWORD_FALL,
       // Gathering speed the whole way down, so it lands rather than arrives.
       ease: 'Quad.easeIn',
       onComplete: () => {
-        // Her own impact, in her own red, rather than a magma burst on top of it.
-        this.swordFall(x, y, 1.15, 3, 'rain_red');
         this.lighting.flash(x, y, 680, 0xff3a5c, 3.6, 820);
-        this.qiFx.shake(0.018, 260);
+        this.qiFx.shake(0.022, 300);
         this.juiceHitStop(110);
+        // Struck in and shivering: a squash on the frame it bites, springing
+        // back out. Only the height moves — a blade does not get wider.
+        blade.setScale(BLOOD_SWORD_SCALE, BLOOD_SWORD_SCALE * 0.94);
+        this.tweens.add({
+          targets: blade,
+          scaleY: BLOOD_SWORD_SCALE,
+          duration: 220,
+          ease: 'Back.easeOut',
+        });
         this.tweens.add({
           targets: blade,
           alpha: 0,
-          scaleY: art * (BLOOD_SWORD_LONG + 0.12),
-          duration: 300,
+          delay: 260,
+          duration: 420,
           ease: 'Quad.easeIn',
           onComplete: () => blade.destroy(),
         });
