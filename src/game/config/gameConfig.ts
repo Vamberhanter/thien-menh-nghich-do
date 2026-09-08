@@ -43,10 +43,18 @@ export function createGameConfig(parent: HTMLElement): Phaser.Types.Core.GameCon
 
     backgroundColor: '#0d1220',
 
-    pixelArt: true,
-
     render: {
+      /*
+       * Nearest-neighbour filtering, spelled out rather than taken from
+       * `pixelArt`.
+       *
+       * `pixelArt: true` looks like it means "keep the textures crisp", and it
+       * does — by setting `antialias`, `antialiasGL` and `roundPixels` all at
+       * once, the last of which is not wanted here and was quietly overriding
+       * the line below that says so. These three are what it did, minus that.
+       */
       antialias: false,
+      antialiasGL: false,
       // Whole-pixel snapping only helps when a world unit *is* a whole number of
       // device pixels; at 1.5 it fights the half and the scenery shimmers.
       roundPixels: Number.isInteger(RENDER_SCALE),
@@ -81,6 +89,26 @@ export function createGameConfig(parent: HTMLElement): Phaser.Types.Core.GameCon
       arcade: {
         gravity: { x: 0, y: 0 },
         debug: false,
+        /*
+         * Step physics with the frame, not on a fixed 60Hz tick.
+         *
+         * Arcade defaults to a fixed step at 60, and a 144Hz display renders
+         * 144 frames over those 60 steps — so a walking character's position
+         * changes on some frames and not others. Measured on one: 47% of
+         * rendered frames had the sprite at exactly the pixel it was on the
+         * frame before, moving in visible pairs of 2px jumps rather than
+         * gliding. That is the stutter, and it gets worse the better the
+         * player's monitor is.
+         *
+         * The thing a fixed step buys is a simulation that behaves the same
+         * whatever the frame rate. This one has no simulation to protect:
+         * bodies carry a velocity and stop at walls, nothing stacks, bounces or
+         * rests. The tunnelling a variable step risks needs a body to cross a
+         * wall inside one step — at 151px/s and a 22px box that would take a
+         * frame longer than a seventh of a second, and Phaser's own loop clamps
+         * the delta well before that.
+         */
+        fixedStep: false,
       },
     },
 

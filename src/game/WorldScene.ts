@@ -740,7 +740,15 @@ export class WorldScene extends Phaser.Scene {
      */
     this.cameras.main.setZoom(RENDER_SCALE);
     this.cameras.main.setRoundPixels(Number.isInteger(RENDER_SCALE));
-    this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
+    this.cameras.main.startFollow(
+      this.player.sprite,
+      // The same answer as `setRoundPixels` above, which this argument was
+      // overwriting with `true`: at a half-step zoom the camera snapping its
+      // scroll to whole pixels makes a smooth follow arrive in 1px jerks.
+      Number.isInteger(RENDER_SCALE),
+      0.12,
+      0.12,
+    );
     GameBus.emit(GameEvent.ZoneChanged, { id: this.zone.id, name: this.zone.name });
     peekSession()?.followZone(this.zone.id);
     this.hosting = this.net ? this.net.hosting : !peekSession() || Boolean(peekSession()?.isHost);
@@ -1510,7 +1518,15 @@ export class WorldScene extends Phaser.Scene {
     this.lighting.light(this.player.sprite);
     this.syncCombatKit();
     this.hookColliders();
-    this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
+    this.cameras.main.startFollow(
+      this.player.sprite,
+      // The same answer as `setRoundPixels` above, which this argument was
+      // overwriting with `true`: at a half-step zoom the camera snapping its
+      // scroll to whole pixels makes a smooth follow arrive in 1px jerks.
+      Number.isInteger(RENDER_SCALE),
+      0.12,
+      0.12,
+    );
     GameBus.emit(GameEvent.CharacterChanged, this.player.profile);
     this.emitProgress();
   }
