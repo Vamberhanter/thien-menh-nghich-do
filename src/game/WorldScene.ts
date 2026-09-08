@@ -63,6 +63,7 @@ import {
   THANH_PHONG_TRAM,
   LAC_ANH_KIEM_QUANG,
   VAN_KIEM_QUY_TONG,
+  WAN_KIEM_SHOW_MS,
   HUYET_KIEM_SAT,
   TAM_THU_HONG,
   TINH_MANG_TRAM,
@@ -73,6 +74,7 @@ import type { PlayerHandle, PlayerId } from './entities/playerHandle';
 import type { Vector2Like } from './types';
 import { Multiplayer } from './systems/Multiplayer';
 import { setAimTargets, type AimTarget } from './systems/autoAim';
+import { GroundScars } from './systems/GroundScars';
 import { isInputGated, isSystemMenuOpen, isUiTyping, loadSavedJoin, peekSession } from '../net/bind';
 import { newPlayerId } from '../net/supabase';
 import type { WorldSession } from '../net/WorldSession';
@@ -272,8 +274,8 @@ const SWORD_RAIN_RANGE = 320;
 const SWORD_RAIN_RADIUS = 96;
 /** Where the show is centred — far enough out that the rain does not fall on her. */
 const SWORD_RAIN_FOCUS = 260;
-/** How long the eight stages take end to end. */
-const SWORD_RAIN_SHOW = 1900;
+/** How long the eight stages take end to end — the effect module owns it. */
+const SWORD_RAIN_SHOW = WAN_KIEM_SHOW_MS;
 
 /**
  * The camera leaning in for an ultimate.
@@ -466,6 +468,7 @@ export class WorldScene extends Phaser.Scene {
   private starFx!: MikuEffects;
   private qiFx!: WukongEffects;
   private wanKiemFx!: WanKiemQuyTongEffect;
+  private scars!: GroundScars;
   private bossFx!: BossEffects;
   private lighting!: WorldLights;
   private props!: Phaser.Physics.Arcade.StaticGroup;
@@ -559,6 +562,7 @@ export class WorldScene extends Phaser.Scene {
     this.starFx = new MikuEffects(this);
     this.qiFx = new WukongEffects(this);
     this.wanKiemFx = new WanKiemQuyTongEffect(this);
+    this.scars = new GroundScars(this);
     this.bossFx = new BossEffects(this);
     this.lighting = new WorldLights(this);
     this.avatarId = peekSession()?.profile.id ?? newPlayerId();
@@ -1366,6 +1370,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private clearZone(): void {
+    // Last zone's craters are not this zone's ground.
+    this.scars.clear();
     for (const pack of this.packs) pack.mob.destroy();
     this.packs = [];
     this.boss?.destroy();
@@ -4114,6 +4120,7 @@ export class WorldScene extends Phaser.Scene {
     // On the frame the giant sword lands, not at the end of the show — the
     // class is asked when that is rather than the number being repeated here.
     this.time.delayedCall(this.wanKiemFx.impactDelay(), () => {
+      this.scars.mark(focus.x, focus.y, { scale: 1.25, ember: 0x8fd0ff });
       this.lighting.flash(focus.x, focus.y, 620, 0xbfe4ff, 3.2, 720);
       this.qiFx.shake(0.014, 260);
       this.juiceHitStop(90);
@@ -4212,6 +4219,7 @@ export class WorldScene extends Phaser.Scene {
       ease: 'Quad.easeIn',
       onComplete: () => {
         this.bloodGround(x, y);
+        this.scars.mark(x, y, { scale: 1.15, ember: 0xff4a6a });
         this.lighting.flash(x, y, 680, 0xff3a5c, 3.6, 820);
         this.qiFx.shake(0.022, 300);
         this.juiceHitStop(110);
