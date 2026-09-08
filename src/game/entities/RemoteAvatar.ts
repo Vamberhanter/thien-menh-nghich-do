@@ -25,7 +25,7 @@ import {
   clipScaleOf as kiemTienClipScale,
   createKiemTienAnimations,
 } from '../animations/kiemtienAnimations';
-import type { CharacterState, Direction } from '../types';
+import type { CharacterState, Direction, Vector2Like } from '../types';
 import {
   BANG_PHACH_TRAM,
   BANG_TINH_TRAN,
@@ -94,6 +94,16 @@ export class RemoteAvatar {
   private sprite: Phaser.GameObjects.Sprite;
   private readonly label: Phaser.GameObjects.Text;
   private facing: Direction = 'down';
+  /**
+   * Where the swing is *aimed*, which is a finer thing than which way the
+   * replica faces.
+   *
+   * Kiếm Tiên and Tôn Ngộ Không have all eight swings drawn, and the local
+   * player picks between them off this vector. It has been in every pose packet
+   * as `ax`/`ay` since the beginning and the replica threw it away, so their
+   * diagonal cuts played as one of four on everybody else's screen.
+   */
+  private aim: Vector2Like = { x: 0, y: 1 };
   private state: CharacterState = 'idle';
   private atk = 0;
   private skillName = '';
@@ -113,6 +123,7 @@ export class RemoteAvatar {
     this.id = pose.id;
     this.name = name;
     this.character = pose.character;
+    this.aim = { x: pose.ax, y: pose.ay };
     this.startX = pose.x;
     this.startY = pose.y;
     this.destX = pose.x;
@@ -177,12 +188,16 @@ export class RemoteAvatar {
     if (action.kind === 'skill' && action.skill) {
       this.skillName = action.skill.name;
       this.facing = action.skill.direction;
+      // The action is published on the frame of the cast; the pose is up to a
+      // packet behind it, so this is the fresher heading of the two.
+      if (action.skill.aim) this.aim = action.skill.aim;
       this.state = 'skill';
       this.playClip(this.clipFor('skill'), true);
       return;
     }
     if (action.kind === 'attack' && action.attack) {
       this.facing = action.attack.direction;
+      if (action.attack.aim) this.aim = action.attack.aim;
       this.state = 'attack';
       if ('step' in action.attack) {
         this.atk = (action.attack as { step: number }).step;
@@ -215,6 +230,8 @@ export class RemoteAvatar {
 
   private applyVisual(pose: NetPose): void {
     this.facing = pose.facing;
+    // Zero would be a peer with no heading at all; keep the last real one.
+    if (pose.ax !== 0 || pose.ay !== 0) this.aim = { x: pose.ax, y: pose.ay };
     if (pose.atk !== undefined) this.atk = pose.atk;
     const changed = pose.state !== this.state;
     this.state = pose.state;
@@ -229,10 +246,10 @@ export class RemoteAvatar {
       return mikuClip(state, this.facing, this.atk, this.skillName);
     }
     if (this.character === 'wukong') {
-      return wukongClip(state, this.facing, this.atk, this.skillName);
+      return wukongClip(state, this.facing, this.atk, this.skillName, this.aim);
     }
     if (this.character === 'kiemtien') {
-      return kiemTienClip(state, this.facing, this.skillName);
+      return kiemTienClip(state, this.facing, this.skillName, this.aim);
     }
     return nhuYenClip(state, this.facing, this.atk, this.skillName);
   }
@@ -439,6 +456,7 @@ function kiemTienClip(
   state: CharacterState,
   facing: Direction,
   skillName: string,
+  aim: Vector2Like,
 ): { key: string; flip: boolean } {
   switch (state) {
     case 'walk':
@@ -447,7 +465,7 @@ function kiemTienClip(
     case 'dash':
       return KiemTienClip.fly(facing);
     case 'attack':
-      return KiemTienClip.attack(facing);
+      return KiemTienClip.attack(facing, aim);
     case 'skill':
       return skillName === HUYET_KIEM_SAT.name
         ? KiemTienClip.skill4(facing)
@@ -470,6 +488,7 @@ function wukongClip(
   facing: Direction,
   atk: number,
   skillName: string,
+  aim: Vector2Like,
 ): { key: string; flip: boolean } {
   switch (state) {
     case 'walk':
@@ -479,15 +498,15 @@ function wukongClip(
     case 'dash':
       return WukongClip.dash(facing);
     case 'attack':
-      return WukongClip.attack(facing, atk);
+      return WukongClip.attack(facing, atk, aim);
     case 'skill':
       return skillName === MA_NGUYET_TRAM.name
-        ? WukongClip.dragon(facing)
+        ? WukongClip.dragon(facing, aim)
         : skillName === HANG_MA_CHAN_LOI.name
-          ? WukongClip.lance(facing)
+          ? WukongClip.lance(facing, aim)
           : skillName === PHAN_THIEN_MA_DIEM.name
             ? WukongClip.wrath(facing)
-            : WukongClip.nova(facing);
+            : WukongClip.nova(facing, aim);
     case 'hurt':
       return WukongClip.hurt();
     case 'dead':
