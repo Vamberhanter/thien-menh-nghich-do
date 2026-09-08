@@ -13,11 +13,13 @@ const SETS = {
   nhuyen: ['public/assets/characters/nhuyen/atlas'],
   huyetlang: ['public/assets/characters/huyetlang/atlas'],
   wukong: ['public/assets/characters/wukong/atlas'],
+  kiemtien: ['public/assets/characters/kiemtien/atlas'],
   characters: [
     'public/assets/characters/nhuyen/atlas',
     'public/assets/characters/huyetlang/atlas',
     'public/assets/characters/miku/atlas',
     'public/assets/characters/wukong/atlas',
+    'public/assets/characters/kiemtien/atlas',
   ],
   boss: ['public/assets/boss/boss1/atlas'],
   environment: ['public/assets/environment/manaseed'],
@@ -25,6 +27,17 @@ const SETS = {
   items: ['public/assets/items'],
   weapons: ['public/assets/weapons'],
   resources: ['public/assets/resources'],
+  /*
+   * Vạn Kiếm Quy Tông's eight effect frames.
+   *
+   * Loose images rather than an atlas, and the only set here whose files are
+   * also committed to git — which is not enough on its own. In production
+   * `gameAssetUrl` points every asset at Storage, and unlike an atlas a plain
+   * `load.image` miss has no local retry (see `onAtlasMiss`, which only handles
+   * atlases). Left out of this table they would 404 on the deployed site while
+   * working perfectly in dev.
+   */
+  vfx: ['public/assets/vfx/wan-kiem-quy-tong'],
 };
 
 function loadEnv() {

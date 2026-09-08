@@ -45,6 +45,8 @@
     "check:atlas": "node tools/check-atlas.mjs public/assets/characters/nhuyen/atlas/nhuyen.json && node tools/check-atlas.mjs public/assets/characters/huyetlang/atlas/huyetlang.json && node tools/check-atlas.mjs public/assets/boss/boss1/atlas/boss1.json && node tools/check-atlas.mjs public/assets/characters/wukong/atlas/wukong.json",
     "preview:atlas": "node tools/preview-atlas.mjs public/assets/characters/huyetlang/atlas/huyetlang.json .tmp/huyetlang-atlas.png",
     "upload:characters": "node tools/upload-game-assets.mjs characters",
+    "upload:kiemtien": "node tools/upload-game-assets.mjs kiemtien",
+    "upload:vfx": "node tools/upload-game-assets.mjs vfx",
     "upload:boss": "node tools/upload-game-assets.mjs boss",
     "upload:assets": "node tools/upload-game-assets.mjs"
   },
