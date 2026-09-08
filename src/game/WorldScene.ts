@@ -278,13 +278,21 @@ const SWORD_RAIN_STEP = 55;
 const SWORD_RAIN_FRAMES = 5;
 
 /**
- * Huyết Kiếm Sát closes rather than opens: the strikes start wide at
- * `BLOOD_RANGE` and walk in to `BLOOD_FOCUS`, where the pillar comes up. Four
- * beats at 70ms — fewer and slower than the other ultimate's five at 55, which
- * is what makes it read as the heavier of the two.
+ * Huyết Kiếm Sát is a volley that gathers: the strikes start wide and close by
+ * `BLOOD_NEAR` and walk out, drawing together as they go, onto `BLOOD_FOCUS` at
+ * the far end — which is where the blade comes down. Four beats at 70ms — fewer
+ * and slower than the other ultimate's five at 55, which is what makes it read
+ * as the heavier of the two.
+ *
+ * The focus sits out past arm's reach on purpose. The technique's whole shape
+ * is a gathering, and a climax landing on top of her has nothing to gather
+ * towards; put at the end of the run it is the thing the volley was walking to.
+ * `BLOOD_RANGE` reaches a little past it so the damage lane covers the blade
+ * rather than stopping at it.
  */
-const BLOOD_RANGE = 300;
-const BLOOD_FOCUS = 170;
+const BLOOD_NEAR = 130;
+const BLOOD_FOCUS = 340;
+const BLOOD_RANGE = 380;
 const BLOOD_RADIUS = 110;
 const BLOOD_SPREAD = 96;
 const BLOOD_BEATS = 4;
@@ -4053,19 +4061,18 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
-   * Huyết Kiếm Sát — the heavier ultimate, and the one with no sheet of its own.
+   * Huyết Kiếm Sát — the heavier of the two ultimates.
    *
-   * Vạn Kiếm has a second sheet of landings to draw on; this has four poses and
-   * nothing else, so its motion is built from the magma effects rather than
-   * from her art. That is not a downgrade dressed up: the technique is red
-   * where everything else of hers is blue, and those effects are the game's
-   * existing red.
+   * Her main sheet gives it four poses and nothing else, so the volley is Vạn
+   * Kiếm's landings dyed to her blood palette, and the climax is the one thing
+   * drawn for this technique alone: `bloodsword_0`.
    *
-   * Shaped as the opposite of the other ultimate so the two do not read as one
-   * move in two colours. Vạn Kiếm fans *outward* and ends far away; this one
-   * closes *inward* — strikes landing wide and walking in to a point ahead of
-   * her — and finishes with a pillar there, heavier and slower, with more of a
-   * shake behind it.
+   * Shaped against the other ultimate so the two do not read as one move in two
+   * colours. Vạn Kiếm scatters — five strikes thrown wide and left where they
+   * fall. This one gathers: four landings that draw together as they walk out,
+   * and everything they were converging on arrives at once as the blade, far
+   * enough out to be its own event rather than something happening on top of
+   * her. Heavier, slower, with more of a shake behind it.
    */
   private castBloodSlaughter(payload: SkillPayload): void {
     const { aim } = payload;
@@ -4081,10 +4088,11 @@ export class WorldScene extends Phaser.Scene {
     };
 
     for (let i = 0; i < BLOOD_BEATS; i++) {
-      // 1 → 0: wide and far on the first beat, on the focus by the last.
-      const closing = 1 - i / BLOOD_BEATS;
-      const along = BLOOD_FOCUS + (BLOOD_RANGE - BLOOD_FOCUS) * closing;
-      const spread = BLOOD_SPREAD * closing;
+      // Out along the lane, and in towards its middle: the last pair straddles
+      // the focus close enough to read as one strike without landing as two
+      // copies of the same sprite on the same pixel.
+      const along = BLOOD_NEAR + (BLOOD_FOCUS - BLOOD_NEAR) * (i / (BLOOD_BEATS - 1));
+      const spread = BLOOD_SPREAD * (1 - i / BLOOD_BEATS);
       for (const lean of [-1, 1]) {
         const x = payload.x + aim.x * along + side.x * spread * lean;
         const y = payload.y + aim.y * along + side.y * spread * lean;
