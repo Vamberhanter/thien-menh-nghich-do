@@ -77,6 +77,28 @@ const FLY_RISE_MS = 140;
 const FLY_FALL_MS = 120;
 const FLY_SPEED = 1.7;
 
+/**
+ * The two ultimates lift her off the ground while they play.
+ *
+ * Her sheet asks for it: skill3 draws her hanging inside the summoning circle
+ * with the blades fanned around her, and skill4 is a held moment of the same
+ * kind. Both were being drawn standing in the grass.
+ *
+ * A little under the flight, because it is not the flight — she is suspended by
+ * the technique, not riding the blade — and it borrows the flight's ramps
+ * because it is the same motion at a different height. Nothing else is needed:
+ * the lift eases towards whatever `flyLiftTowards` is told to aim at, so being
+ * staggered or killed mid-cast settles her out of the air on its own.
+ */
+const HOVER_LIFT = 28;
+
+/**
+ * Which casts do it. The two ultimates, not the two cycling techniques: Thanh
+ * Phong Trảm and Lạc Ảnh Kiếm Quang are drawn with her feet planted and swinging
+ * from mid-air would fight the art.
+ */
+const HOVERING_CASTS: ReadonlySet<number> = new Set([KiemTienSlot.Rain, KiemTienSlot.Blood]);
+
 /*
  * Where each technique is resolved *from* — the reach itself lives in
  * WorldScene, measured off the art. The cut and the lance leave the blade a
@@ -143,6 +165,8 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
   private readonly shadow = new GroundShadow(this.scene, { lift: FLY_LIFT });
   /** How far off the ground she is *drawn*. See FLY_LIFT. */
   private flyLift = 0;
+  /** Held up by the technique rather than by the blade. See HOVER_LIFT. */
+  private hovering = false;
   private castHoldUntil = 0;
   private bufferedAttack = false;
   private pending: PendingImpact | null = null;
@@ -468,6 +492,9 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
     this.emitComboState();
     this.setVelocity(0, 0);
     this.playState('skill', clip, true);
+    // After playState, which clears it: assigned rather than only set, so a
+    // light technique cast straight out of an ultimate puts her back down.
+    this.hovering = HOVERING_CASTS.has(slot);
     this.castHoldUntil = this.scene.time.now + refDuration(clip) + (skill.recovery ?? 0);
     emitStats(this.stats);
 
@@ -522,7 +549,9 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
    * the air over FLY_FALL_MS while whatever caused it plays.
    */
   private flyLiftTowards(delta: number): void {
-    const target = this.flying ? FLY_LIFT : 0;
+    // Flight first: stepping onto the blade out of a cast should take her all
+    // the way up rather than stopping at the hover.
+    const target = this.flying ? FLY_LIFT : this.hovering ? HOVER_LIFT : 0;
     if (this.flyLift === target) return;
     const step = (FLY_LIFT * delta) / (target > this.flyLift ? FLY_RISE_MS : FLY_FALL_MS);
     this.flyLift =
@@ -606,6 +635,9 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
     // down over FLY_FALL_MS while that action plays, so she settles rather than
     // being snapped to the floor.
     if (next !== 'dash') this.flying = false;
+    // And the same for the hover: only a cast holds her up, so a stagger or a
+    // death drops her. Set by `cast` after this runs, for the casts that hover.
+    if (next !== 'skill') this.hovering = false;
 
     this.setFlipX(clip.flip);
     // Two scales in one: the atlas is baked 1.6x the world, and each sheet was
