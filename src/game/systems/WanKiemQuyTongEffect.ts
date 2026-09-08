@@ -27,8 +27,10 @@ import { gameAssetUrl } from '../../net/assets';
  *   08 final burst    a blade inside two rings   — the shockwave
  *
  * The rain reuses 05 for every sword rather than asking for a sheet of them:
- * one drawing spun, scaled and faded differently per instance reads as many
- * swords, and it costs one texture.
+ * one drawing stretched, scaled, mirrored and faded differently per instance
+ * reads as many swords, and it costs one texture. Each one drops a small copy
+ * of 07 where it lands, which is what keeps the ground busy for as long as the
+ * rain lasts.
  *
  * Damage is not this class's business. The scene resolves the hit; this only
  * draws. That keeps the timing of the two independent, which matters because
@@ -99,7 +101,7 @@ const STAGE = {
   convergence: { at: 0.1, for: 0.18 },
   charge: { at: 0.24, for: 0.14 },
   explosion: { at: 0.34, for: 0.16 },
-  rain: { at: 0.42, for: 0.4 },
+  rain: { at: 0.38, for: 0.54 },
   giantSword: { at: 0.62, for: 0.19 },
   giantImpact: { at: 0.8, for: 0.1 },
   finalBurst: { at: 0.86, for: 0.14 },
@@ -130,22 +132,53 @@ const RAIN_DROP = 420;
 /**
  * The rain, in numbers.
  *
- * `MAX_SWORDS` is the ceiling on live instances and the size the pool settles
- * at; the spawn rate is worked back from it so the pool is the budget rather
- * than a hope. At intensity 1 that is 26 in the air at once, inside the 20–40
- * the effect was asked for, and it never allocates a 27th.
+ * `MAX_SWORDS` is how many are ever *made*, and the spawn rate is worked back
+ * from how long one is in the air, so the pool is the budget rather than a hope.
+ * At intensity 1 the interval floor of 18ms puts about 23 in the air at once,
+ * inside the 20–40 the effect was asked for; a 41st is never allocated however
+ * hard it rains.
  */
 const MAX_SWORDS = 40;
 const SWORDS_AT_ONE = 26;
-const RAIN_FALL_MIN = 380;
-const RAIN_FALL_MAX = 720;
-const RAIN_SPREAD = 210;
+const RAIN_FALL_MIN = 300;
+const RAIN_FALL_MAX = 520;
+/**
+ * Half the width of the curtain.
+ *
+ * With the show centred 260px ahead of her, 175 leaves the near edge 85px clear
+ * of where she stands. At 210 against a 210 focus the two exactly met and a
+ * blade came down on her head every cast.
+ */
+const RAIN_SPREAD = 175;
 const RAIN_DEPTH_SPREAD = 90;
 /** Rain swords run from two-thirds her height to a little over one — many, not huge. */
 const RAIN_SCALE_MIN = 0.16;
 const RAIN_SCALE_MAX = 0.36;
-const RAIN_TILT = 0.34;
-const RAIN_SPIN = 0.5;
+
+/**
+ * What keeps the rain from reading as a slideshow of one drawing.
+ *
+ * The swords come straight down, so the variety a tilt used to give has to come
+ * from somewhere else. Two things do it, and both are things a falling sword
+ * actually does rather than decoration:
+ *
+ *   * **Stretch.** Drawn `RAIN_STRETCH` times its height while it is moving and
+ *     squeezed back to true as it arrives. That is the motion blur of something
+ *     falling fast, and it is what makes the landing land — the shape settles on
+ *     the frame it stops.
+ *   * **A splash.** Every sword puts a small burst where it hits, out of the
+ *     impact frame. Without it the blades vanish into the grass and the ground
+ *     never answers; with it something is going off somewhere the whole time the
+ *     rain lasts, which is what makes it feel continuous rather than dry.
+ *
+ * Beyond those, each one differs in where it falls, how big it is, how fast, how
+ * bright, and which way round it is drawn.
+ */
+const RAIN_STRETCH = 1.7;
+const MAX_SPLASHES = 24;
+const SPLASH_FROM = 0.5;
+const SPLASH_TO = 1.15;
+const SPLASH_MS = 220;
 
 const DEFAULT_DURATION = 2600;
 
@@ -153,7 +186,10 @@ const DEFAULT_DURATION = 2600;
 const DEPTH_LIFT = 260;
 
 export class WanKiemQuyTongEffect {
-  private readonly pool: Phaser.GameObjects.Image[] = [];
+  /** Spares to hand back out, per texture: the swords and their splashes. */
+  private readonly pool = new Map<string, Phaser.GameObjects.Image[]>();
+  /** How many of each have ever been made — the allocation cap, not a live count. */
+  private readonly made = new Map<string, number>();
   private readonly live = new Set<Phaser.GameObjects.Image>();
   private readonly stageSprites = new Set<Phaser.GameObjects.Image>();
   private readonly timers = new Set<Phaser.Time.TimerEvent>();
@@ -265,8 +301,9 @@ export class WanKiemQuyTongEffect {
   /** Everything gone, pool included. For a scene teardown. */
   destroy(): void {
     this.stop();
-    for (const sword of this.pool) sword.destroy();
-    this.pool.length = 0;
+    for (const bucket of this.pool.values()) for (const spare of bucket) spare.destroy();
+    this.pool.clear();
+    this.made.clear();
   }
 
   /**
@@ -349,34 +386,47 @@ export class WanKiemQuyTongEffect {
     });
   }
 
-  /** One rain sword, randomised on every axis it has, returned to the pool when it lands. */
+  /**
+   * One rain sword: straight down, and something left behind where it lands.
+   *
+   * Vertical, with no tilt and no spin. A sword falling point-first at speed
+   * does not turn, and the earlier version's drift made a divine rain look like
+   * blown litter. The variety comes from everything else — where, how big, how
+   * fast, how bright, which way round — plus the stretch and the splash.
+   */
   private dropSword(x: number, y: number): void {
     const rnd = Phaser.Math.RND;
     const landX = x + rnd.realInRange(-RAIN_SPREAD, RAIN_SPREAD) * this.intensity;
     const landY = y + rnd.realInRange(-RAIN_DEPTH_SPREAD, RAIN_DEPTH_SPREAD);
-    const sword = this.acquire();
+    const sword = this.acquire(WanKiemTexture.SwordRain, MAX_SWORDS);
     if (!sword) return;
 
     const scale = rnd.realInRange(RAIN_SCALE_MIN, RAIN_SCALE_MAX) * this.intensity;
-    const tilt = rnd.realInRange(-RAIN_TILT, RAIN_TILT);
     const fall = rnd.realInRange(RAIN_FALL_MIN, RAIN_FALL_MAX);
 
     sword
-      .setPosition(landX, landY - RAIN_DROP * rnd.realInRange(0.75, 1.25))
-      .setScale(scale)
-      .setRotation(tilt)
+      .setPosition(landX, landY - RAIN_DROP * rnd.realInRange(0.8, 1.3))
+      .setRotation(0)
+      // The blade's sweep trail is drawn to one side, so half of them mirrored
+      // is a second silhouette for free.
+      .setFlipX(rnd.frac() < 0.5)
+      .setScale(scale, scale * RAIN_STRETCH)
       .setAlpha(0)
       .setDepth(landY + DEPTH_LIFT)
       .setVisible(true);
 
-    this.scene.tweens.add({ targets: sword, alpha: rnd.realInRange(0.55, 1), duration: fall * 0.25 });
-    // Turning as it falls, so a hundred copies of one drawing do not fall in
-    // lockstep. Small — a sword that cartwheels reads as debris, not a blade.
     this.scene.tweens.add({
       targets: sword,
-      rotation: tilt + rnd.realInRange(-RAIN_SPIN, RAIN_SPIN),
+      alpha: rnd.realInRange(0.6, 1),
+      duration: fall * 0.2,
+    });
+    // Back to true by the time it arrives: the stretch is speed, and losing it
+    // is the sword stopping.
+    this.scene.tweens.add({
+      targets: sword,
+      scaleY: scale,
       duration: fall,
-      ease: 'Sine.easeInOut',
+      ease: 'Quad.easeIn',
     });
     this.scene.tweens.add({
       targets: sword,
@@ -384,15 +434,44 @@ export class WanKiemQuyTongEffect {
       duration: fall,
       ease: 'Quad.easeIn',
       onComplete: () => {
+        this.splash(landX, landY, scale);
         this.scene.tweens.add({
           targets: sword,
           alpha: 0,
-          scaleY: scale * 1.25,
-          duration: 160,
+          scaleY: scale * 0.7,
+          duration: 130,
           ease: 'Quad.easeIn',
           onComplete: () => this.release(sword),
         });
       },
+    });
+  }
+
+  /**
+   * The small burst one rain sword leaves where it lands.
+   *
+   * The impact frame at a fraction of its size, sized off the sword that made
+   * it so a big one hits harder than a small one. Capped separately from the
+   * swords and pooled the same way: at the rate the rain lands, this is the
+   * busiest thing on screen.
+   */
+  private splash(x: number, y: number, scale: number): void {
+    const burst = this.acquire(WanKiemTexture.GiantImpact, MAX_SPLASHES);
+    if (!burst) return;
+    burst
+      .setPosition(x, y)
+      .setRotation(0)
+      .setScale(scale * SPLASH_FROM)
+      .setAlpha(0.9)
+      .setDepth(y + DEPTH_LIFT - 1)
+      .setVisible(true);
+    this.scene.tweens.add({
+      targets: burst,
+      scale: scale * SPLASH_TO,
+      alpha: 0,
+      duration: SPLASH_MS,
+      ease: 'Quad.easeOut',
+      onComplete: () => this.release(burst),
     });
   }
 
@@ -434,24 +513,37 @@ export class WanKiemQuyTongEffect {
       .setDepth(y + DEPTH_LIFT);
   }
 
-  /** A sword off the pool, or a new one while the pool is still filling. */
-  private acquire(): Phaser.GameObjects.Image | null {
-    const spare = this.pool.pop();
+  /**
+   * A spare of this texture, or a new one while the pool is still filling.
+   *
+   * `cap` bounds how many are ever *made*, not how many are out: once the pool
+   * has filled it hands the same objects round for the rest of the session.
+   * Returning null when the cap is reached drops a sword rather than growing —
+   * at the rate this rains, one runaway would be hundreds.
+   */
+  private acquire(key: string, cap: number): Phaser.GameObjects.Image | null {
+    const spare = this.pool.get(key)?.pop();
     if (spare) {
       this.live.add(spare);
       return spare;
     }
-    if (this.live.size >= MAX_SWORDS) return null;
-    const origin = ORIGIN[WanKiemTexture.SwordRain];
-    const sword = this.scene.add.image(0, 0, WanKiemTexture.SwordRain).setOrigin(origin.x, origin.y);
-    this.live.add(sword);
-    return sword;
+    const made = this.made.get(key) ?? 0;
+    if (made >= cap) return null;
+    const origin = ORIGIN[key] ?? { x: 0.5, y: 0.95 };
+    const image = this.scene.add.image(0, 0, key).setOrigin(origin.x, origin.y);
+    this.made.set(key, made + 1);
+    this.live.add(image);
+    return image;
   }
 
-  private release(sword: Phaser.GameObjects.Image): void {
-    this.live.delete(sword);
-    sword.setVisible(false).setAlpha(0);
-    this.pool.push(sword);
+  /** Back to its own bucket — the texture it carries says which. */
+  private release(image: Phaser.GameObjects.Image): void {
+    this.live.delete(image);
+    image.setVisible(false).setAlpha(0).setFlipX(false);
+    const key = image.texture.key;
+    const bucket = this.pool.get(key);
+    if (bucket) bucket.push(image);
+    else this.pool.set(key, [image]);
   }
 
   /** A one-shot timer that `stop` can cancel. */

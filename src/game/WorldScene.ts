@@ -270,7 +270,7 @@ const SWORD_RAY_RADIUS = 44;
 const SWORD_RAIN_RANGE = 320;
 const SWORD_RAIN_RADIUS = 96;
 /** Where the show is centred — far enough out that the rain does not fall on her. */
-const SWORD_RAIN_FOCUS = 210;
+const SWORD_RAIN_FOCUS = 260;
 /** How long the eight stages take end to end. */
 const SWORD_RAIN_SHOW = 1900;
 /** How many `rain_hit_*` frames the extras sheet gave us. */
