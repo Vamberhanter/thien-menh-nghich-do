@@ -93,11 +93,57 @@ const FLY_SPEED = 1.7;
 const HOVER_LIFT = 28;
 
 /**
- * Which casts do it. The two ultimates, not the two cycling techniques: Thanh
- * Phong Trảm and Lạc Ảnh Kiếm Quang are drawn with her feet planted and swinging
- * from mid-air would fight the art.
+ * Down before up.
+ *
+ * Anything about to leave the ground presses into it first. Without the dip the
+ * lift reads as a string pulling her up; with it, as her pushing off. Five
+ * pixels for ninety milliseconds is barely visible on a still frame and does
+ * the whole job in motion.
+ *
+ * It is expressed as a *negative* lift rather than as its own animation: the
+ * drawn offset already eases towards whatever it is aimed at, so aiming it
+ * below the floor for a moment is the entire implementation.
  */
-const HOVERING_CASTS: ReadonlySet<number> = new Set([KiemTienSlot.Rain, KiemTienSlot.Blood]);
+const HOVER_DIP = 5;
+const HOVER_DIP_MS = 90;
+
+/**
+ * And the breath while she holds it.
+ *
+ * Her two ultimates are one drawn frame each, held for the best part of a
+ * second by their recovery. Everything else on screen moves during that —
+ * swords fall, the ground goes off — and she was a still picture in the middle
+ * of it, which the eye catches even when it cannot say why. Three pixels over
+ * 1.6s is a float rather than a bounce; the lift ramp is twenty times faster
+ * than the bob, so it tracks it rather than damping it.
+ *
+ * Only the height breathes, not her scale: the collision box is derived from
+ * the drawn scale and is only recomputed when the displayed frame changes,
+ * which on a one-frame clip is never.
+ */
+const HOVER_BOB = 3;
+const HOVER_BOB_MS = 1600;
+
+/**
+ * Qi coming off her while the pose is held: copies of the frame she is on,
+ * drifting up and fading. Not a movement trail — she is not moving — which is
+ * why they rise straight rather than lagging behind her.
+ */
+const GHOST_COUNT = 5;
+const GHOST_SPACING_MS = 130;
+const GHOST_RISE = 26;
+const GHOST_MS = 420;
+const GHOST_ALPHA = 0.34;
+
+/**
+ * Which casts hover, and what colour their ghosts are. The two ultimates, not
+ * the two cycling techniques: Thanh Phong Trảm and Lạc Ảnh Kiếm Quang are drawn
+ * with her feet planted and swinging from mid-air would fight the art.
+ */
+const HOVER_GHOST: ReadonlyMap<number, number> = new Map([
+  [KiemTienSlot.Rain, 0x9fd4ff],
+  [KiemTienSlot.Blood, 0xff6a86],
+]);
 
 /*
  * Where each technique is resolved *from* — the reach itself lives in
@@ -167,6 +213,8 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
   private flyLift = 0;
   /** Held up by the technique rather than by the blade. See HOVER_LIFT. */
   private hovering = false;
+  /** When the hover began — the dip and the breath are both measured off it. */
+  private hoverStart = 0;
   private castHoldUntil = 0;
   private bufferedAttack = false;
   private pending: PendingImpact | null = null;
@@ -241,7 +289,7 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
     if (this.combat.update(time, delta)) emitStats(this.stats);
     if (this.combo.update(time)) this.emitComboState();
 
-    this.flyLiftTowards(delta);
+    this.flyLiftTowards(time, delta);
     this.syncShadow();
 
     if (this.currentState === 'skill' && time >= this.castHoldUntil && !this.anims.isPlaying) {
@@ -494,7 +542,12 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
     this.playState('skill', clip, true);
     // After playState, which clears it: assigned rather than only set, so a
     // light technique cast straight out of an ultimate puts her back down.
-    this.hovering = HOVERING_CASTS.has(slot);
+    const ghost = HOVER_GHOST.get(slot);
+    this.hovering = ghost !== undefined;
+    if (ghost !== undefined) {
+      this.hoverStart = this.scene.time.now;
+      this.hoverGhosts(ghost);
+    }
     this.castHoldUntil = this.scene.time.now + refDuration(clip) + (skill.recovery ?? 0);
     emitStats(this.stats);
 
@@ -548,10 +601,10 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
    * pressing the button again all just clear `flying`, and she settles out of
    * the air over FLY_FALL_MS while whatever caused it plays.
    */
-  private flyLiftTowards(delta: number): void {
+  private flyLiftTowards(time: number, delta: number): void {
     // Flight first: stepping onto the blade out of a cast should take her all
     // the way up rather than stopping at the hover.
-    const target = this.flying ? FLY_LIFT : this.hovering ? HOVER_LIFT : 0;
+    const target = this.flying ? FLY_LIFT : this.hovering ? this.hoverHeight(time) : 0;
     if (this.flyLift === target) return;
     const step = (FLY_LIFT * delta) / (target > this.flyLift ? FLY_RISE_MS : FLY_FALL_MS);
     this.flyLift =
@@ -560,12 +613,60 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
         : Math.max(target, this.flyLift - step);
   }
 
+  /**
+   * Where the hover is aiming right now: below the floor for the first beat,
+   * then breathing around HOVER_LIFT.
+   */
+  private hoverHeight(time: number): number {
+    const since = time - this.hoverStart;
+    if (since < HOVER_DIP_MS) return -HOVER_DIP;
+    const phase = ((since - HOVER_DIP_MS) / HOVER_BOB_MS) * Math.PI * 2;
+    return HOVER_LIFT + Math.sin(phase) * HOVER_BOB;
+  }
+
+  /**
+   * The ghosts she sheds through a held technique.
+   *
+   * Snapshots of whatever frame is up, tinted to the technique, rising and
+   * fading. They start after the dip so the first one leaves as she does, and
+   * each checks the hover is still on — being knocked out of the cast should
+   * stop the qi coming off her, not leave it pouring out of a staggering body.
+   *
+   * Local only, like the hover itself: a remote Kiếm Tiên plays the clips
+   * without either.
+   */
+  private hoverGhosts(tint: number): void {
+    for (let i = 0; i < GHOST_COUNT; i++) {
+      this.scene.time.delayedCall(HOVER_DIP_MS + i * GHOST_SPACING_MS, () => {
+        if (!this.active || !this.hovering) return;
+        const ghost = this.scene.add
+          .sprite(this.x, this.y, this.texture.key, this.frame.name)
+          .setOrigin(this.originX, this.originY)
+          .setFlipX(this.flipX)
+          .setScale(this.scaleX, this.scaleY)
+          .setDepth(this.depth - 1)
+          .setAlpha(GHOST_ALPHA)
+          .setTint(tint);
+        this.scene.tweens.add({
+          targets: ghost,
+          y: ghost.y - GHOST_RISE,
+          alpha: 0,
+          duration: GHOST_MS,
+          ease: 'Sine.easeOut',
+          onComplete: () => ghost.destroy(),
+        });
+      });
+    }
+  }
+
   private syncShadow(): void {
     if (this.isDead) {
       this.shadow.hide();
       return;
     }
-    this.shadow.sync(this.x, this.y, this.flyLift);
+    // Clamped, because the dip aims the lift below the floor and a shadow does
+    // not grow when its owner crouches into the ground.
+    this.shadow.sync(this.x, this.y, Math.max(0, this.flyLift));
   }
 
   /** Takes the shadow with her, since it is a scene object rather than a child. */
