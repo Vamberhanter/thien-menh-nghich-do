@@ -3,6 +3,7 @@ import type { HuyetLang } from '../entities/HuyetLang';
 import type { Vector2Like } from '../types';
 import { isGameplayGated } from '../../net/bind';
 import { consumePad, padMove } from '../touchPad';
+import { autoAim } from './autoAim';
 
 /**
  * Keyboard bindings for Huyết Lang.
@@ -70,16 +71,22 @@ export class HuyetLangController {
     // and pressing a direction and a skill together used to fire the skill the
     // way the character was already looking.
     const steer = this.readSteer();
+    // Only the techniques take the assisted heading; `steer` stays raw for the
+    // dash, which is a decision about where to go rather than about what to
+    // hit. Deferred rather than computed here, because at most one of the
+    // branches below runs and the scan is wasted on every frame that fires
+    // nothing — which is nearly all of them.
+    const aimed = () => autoAim(this.player, steer);
     if (anyJustDown(this.keys.ultimate) || consumePad('skill3')) {
-      this.player.castUltimate(steer);
+      this.player.castUltimate(aimed());
     } else if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
       this.player.dash(steer);
     } else if (anyJustDown(this.keys.roar) || consumePad('skill1')) {
-      this.player.castRoar(steer);
+      this.player.castRoar(aimed());
     } else if (anyJustDown(this.keys.magmaSlash) || consumePad('skill0')) {
-      this.player.castMagmaSlash(steer);
+      this.player.castMagmaSlash(aimed());
     } else if (anyJustDown(this.keys.attack) || consumePad('attack')) {
-      this.player.attack(steer);
+      this.player.attack(aimed());
     }
 
     if (this.player.isBusy) {

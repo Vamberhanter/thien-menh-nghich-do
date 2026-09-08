@@ -72,6 +72,7 @@ import { PLAYER_FACTORIES, PLAYER_TEXTURES } from './entities/playerHandle';
 import type { PlayerHandle, PlayerId } from './entities/playerHandle';
 import type { Vector2Like } from './types';
 import { Multiplayer } from './systems/Multiplayer';
+import { setAimTargets, type AimTarget } from './systems/autoAim';
 import { isInputGated, isSystemMenuOpen, isUiTyping, loadSavedJoin, peekSession } from '../net/bind';
 import { newPlayerId } from '../net/supabase';
 import type { WorldSession } from '../net/WorldSession';
@@ -603,6 +604,9 @@ export class WorldScene extends Phaser.Scene {
     window.addEventListener('pagehide', this.flushProgress);
     window.addEventListener('visibilitychange', this.onHidden);
     this.emitRpgPanels();
+    // Auto-aim asks the scene what is hostile rather than the other way round:
+    // a controller has no route to the mob table and should not grow one.
+    setAimTargets(() => this.aimTargets());
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.teardown, this);
     this.events.once(Phaser.Scenes.Events.DESTROY, this.teardown, this);
   }
@@ -4591,7 +4595,23 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Everything a technique may point itself at: the mobs and the boss.
+   *
+   * Not other players. Nothing in this world lets one player hit another, and a
+   * kit that snapped onto a stranger every time you swung near them would be a
+   * different game — one somebody would have to decide to build.
+   */
+  private *aimTargets(): Generator<AimTarget> {
+    for (const pack of this.packs) yield pack.mob;
+    if (this.boss) yield this.boss;
+  }
+
   private teardown(): void {
+    // Before anything else: the generator above closes over this scene, and a
+    // torn-down one still handing out mobs would have the next scene's players
+    // aiming at ghosts.
+    setAimTargets(null);
     GameBus.off(GameEvent.Attack, this.onAttack, this);
     GameBus.off(GameEvent.Skill, this.onSkill, this);
     GameBus.off(GameEvent.Dash, this.onDash, this);

@@ -3,6 +3,7 @@ import type { KiemTien } from '../entities/KiemTien';
 import type { Vector2Like } from '../types';
 import { isGameplayGated } from '../../net/bind';
 import { consumePad, padMove } from '../touchPad';
+import { autoAim } from './autoAim';
 
 /**
  * Keyboard bindings for Kiếm Tiên.
@@ -89,18 +90,24 @@ export class KiemTienController {
     // already looking. The order below is the priority when two land in the
     // same frame: the flight first, since it is the escape.
     const steer = this.readSteer();
+    // Only the techniques take the assisted heading; `steer` stays raw for the
+    // dash, which is a decision about where to go rather than about what to
+    // hit. Deferred rather than computed here, because at most one of the
+    // branches below runs and the scan is wasted on every frame that fires
+    // nothing — which is nearly all of them.
+    const aimed = () => autoAim(this.player, steer);
     if (anyJustDown(this.keys.ride) || consumePad('skill2')) {
       this.player.dash(steer);
     } else if (anyJustDown(this.keys.blood)) {
-      this.player.castBlood(steer);
+      this.player.castBlood(aimed());
     } else if (anyJustDown(this.keys.rain)) {
-      this.player.castRain(steer);
+      this.player.castRain(aimed());
     } else if (anyJustDown(this.keys.lance) || consumePad('skill1')) {
-      this.player.castLance(steer);
+      this.player.castLance(aimed());
     } else if (anyJustDown(this.keys.cut) || consumePad('skill0')) {
-      this.player.castCut(steer);
+      this.player.castCut(aimed());
     } else if (anyJustDown(this.keys.attack) || consumePad('attack')) {
-      this.player.attack(steer);
+      this.player.attack(aimed());
     }
 
     if (this.player.isBusy) {

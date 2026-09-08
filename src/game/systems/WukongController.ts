@@ -3,6 +3,7 @@ import type { Wukong } from '../entities/Wukong';
 import type { Vector2Like } from '../types';
 import { isGameplayGated } from '../../net/bind';
 import { consumePad, padMove } from '../touchPad';
+import { autoAim } from './autoAim';
 
 /**
  * Keyboard bindings for Tôn Ngộ Không.
@@ -94,18 +95,24 @@ export class WukongController {
     // way he was already looking. Order below sets the priority when two land
     // together: dash first, since it is the escape.
     const steer = this.readSteer();
+    // Only the techniques take the assisted heading; `steer` stays raw for the
+    // dash, which is a decision about where to go rather than about what to
+    // hit. Deferred rather than computed here, because at most one of the
+    // branches below runs and the scan is wasted on every frame that fires
+    // nothing — which is nearly all of them.
+    const aimed = () => autoAim(this.player, steer);
     if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
       this.player.dash(steer);
     } else if (anyJustDown(this.keys.dragon)) {
-      this.player.castDragon(steer);
+      this.player.castDragon(aimed());
     } else if (anyJustDown(this.keys.wrath)) {
-      this.player.castWrath(steer);
+      this.player.castWrath(aimed());
     } else if (anyJustDown(this.keys.lance) || consumePad('skill1')) {
-      this.player.castLance(steer);
+      this.player.castLance(aimed());
     } else if (anyJustDown(this.keys.nova) || consumePad('skill0')) {
-      this.player.castNova(steer);
+      this.player.castNova(aimed());
     } else if (anyJustDown(this.keys.attack) || consumePad('attack')) {
-      this.player.attack(steer);
+      this.player.attack(aimed());
     }
 
     if (this.player.isBusy) {
