@@ -180,6 +180,37 @@ const SPLASH_FROM = 0.5;
 const SPLASH_TO = 1.15;
 const SPLASH_MS = 220;
 
+/**
+ * The beat the giant sword hangs at the top before it drops.
+ *
+ * Even timing is the enemy of weight. Something enormous does not begin falling
+ * the moment it appears — it arrives, it is *seen*, and then it comes down. A
+ * quarter of the descent window spent hanging costs nothing and is the
+ * difference between a sword falling and a sword being dropped.
+ */
+const GIANT_HANG = 0.28;
+
+/**
+ * What the impact leaves on the ground.
+ *
+ * Two things, and neither is a new drawing. The ring is the final-burst frame
+ * squashed flat and thrown outward — its two energy rings, seen from above,
+ * are a shockwave running along the floor. The scar is the impact frame
+ * squashed flatter still and left to fade slowly: the mark, which is the part
+ * that makes the blow have happened rather than merely have been shown.
+ *
+ * Before this, an ultimate landed, flashed, and the world forgot it inside half
+ * a second.
+ */
+const RING_FLATTEN = 0.2;
+const RING_FROM = 0.45;
+const RING_TO = 1.9;
+const RING_MS = 420;
+const SCAR_FLATTEN = 0.11;
+const SCAR_SCALE = 1.15;
+const SCAR_ALPHA = 0.5;
+const SCAR_MS = 2400;
+
 const DEFAULT_DURATION = 2600;
 
 /** Above the ground plane, the way every other effect in the scene is depthed. */
@@ -212,6 +243,22 @@ export class WanKiemQuyTongEffect {
   /** Total length in ms. Every stage is a fraction of it, so they all stretch together. */
   setDuration(value: number): void {
     this.duration = Phaser.Math.Clamp(value, 600, 12000);
+  }
+
+  /**
+   * When the charge begins and how long it has to run before the burst takes
+   * it, in ms after `play`.
+   *
+   * The scene hangs its gathering light and its camera push on this. Same
+   * reason as `impactDelay`: this is the only place that knows the shape of the
+   * technique, and `setDuration` moves all of it at once.
+   */
+  chargeDelay(): number {
+    return STAGE.charge.at * this.duration;
+  }
+
+  chargeSpan(): number {
+    return (STAGE.explosion.at + STAGE.explosion.for * 0.4 - STAGE.charge.at) * this.duration;
   }
 
   /**
@@ -483,13 +530,19 @@ export class WanKiemQuyTongEffect {
         .setAlpha(0);
       this.stageSprites.add(sprite);
 
-      this.scene.tweens.add({ targets: sprite, alpha: 1, duration: window.length * 0.25 });
+      const hang = window.length * GIANT_HANG;
+      const drop = window.length - hang;
+
+      this.scene.tweens.add({ targets: sprite, alpha: 1, duration: hang * 0.7 });
       this.scene.tweens.add({
         targets: sprite,
         y,
-        duration: window.length,
+        delay: hang,
+        duration: drop,
         ease: 'Quad.easeIn',
         onComplete: () => {
+          this.ring(x, y);
+          this.scar(x, y);
           this.scene.tweens.add({
             targets: sprite,
             alpha: 0,
@@ -502,6 +555,63 @@ export class WanKiemQuyTongEffect {
           });
         },
       });
+    });
+  }
+
+  /**
+   * The shockwave running out along the floor.
+   *
+   * The final-burst frame squashed flat: its two energy rings, seen from above
+   * rather than side on, are exactly this. Behind everything else at the point,
+   * because it is on the ground and the blade is standing in it.
+   */
+  private ring(x: number, y: number): void {
+    const size = GIANT_SCALE * this.intensity;
+    const ring = this.image(WanKiemTexture.FinalBurst, x, y)
+      .setScale(size * RING_FROM, size * RING_FROM * RING_FLATTEN)
+      .setAlpha(0.85)
+      .setDepth(y + DEPTH_LIFT - 3);
+    this.stageSprites.add(ring);
+    this.scene.tweens.add({
+      targets: ring,
+      scaleX: size * RING_TO,
+      scaleY: size * RING_TO * RING_FLATTEN,
+      alpha: 0,
+      duration: RING_MS,
+      ease: 'Quad.easeOut',
+      onComplete: () => {
+        this.stageSprites.delete(ring);
+        ring.destroy();
+      },
+    });
+  }
+
+  /**
+   * The mark left where it went in.
+   *
+   * Fades over more than two seconds, which is far longer than anything else
+   * here and is the whole point: every other part of the technique is gone
+   * within half a second of landing, and a blow the world forgets that fast did
+   * not land at all. It sits under the ring and stays after it.
+   */
+  private scar(x: number, y: number): void {
+    const size = GIANT_SCALE * this.intensity * SCAR_SCALE;
+    const mark = this.image(WanKiemTexture.GiantImpact, x, y)
+      .setScale(size, size * SCAR_FLATTEN)
+      .setAlpha(0)
+      .setDepth(y + DEPTH_LIFT - 4);
+    this.stageSprites.add(mark);
+    this.scene.tweens.add({ targets: mark, alpha: SCAR_ALPHA, duration: 90 });
+    this.scene.tweens.add({
+      targets: mark,
+      alpha: 0,
+      delay: 90,
+      duration: SCAR_MS,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        this.stageSprites.delete(mark);
+        mark.destroy();
+      },
     });
   }
 

@@ -273,6 +273,19 @@ const SWORD_RAIN_RADIUS = 96;
 const SWORD_RAIN_FOCUS = 260;
 /** How long the eight stages take end to end. */
 const SWORD_RAIN_SHOW = 1900;
+
+/**
+ * The camera leaning in for an ultimate.
+ *
+ * Three percent, and only for the two ultimates. A push-in is the strongest
+ * cinematic lever there is and also the most dangerous one here: zoom changes
+ * how much of the fight is on screen, which in a room with other players and a
+ * pack of mobs is information the player is entitled to. Small enough to be
+ * felt rather than seen, and it is back before the technique ends.
+ */
+const PUSH_ZOOM = 1.03;
+const PUSH_IN_MS = 420;
+const PUSH_OUT_MS = 260;
 /** How many `rain_hit_*` frames the extras sheet gave us. */
 const SWORD_RAIN_FRAMES = 5;
 
@@ -311,6 +324,18 @@ const BLOOD_SWORD_DROP = 520;
 const BLOOD_SWORD_FALL = 170;
 /** Fades in over the first stretch of the fall, so the splash is not seen flying. */
 const BLOOD_SWORD_FADE = 80;
+/**
+ * What Huyết Kiếm Sát leaves on the ground, the same two things Vạn Kiếm's
+ * impact leaves: a wave running out along the floor and a mark that outlasts
+ * everything else by two seconds. Off her own red frames rather than the blue
+ * vfx sheet — see `swordFall` on why those are dyed and not tinted.
+ */
+const BLOOD_RING_FLATTEN = 0.22;
+const BLOOD_RING_TO = 3.4;
+const BLOOD_RING_MS = 420;
+const BLOOD_SCAR_FLATTEN = 0.14;
+const BLOOD_SCAR_ALPHA = 0.45;
+const BLOOD_SCAR_MS = 2400;
 /** The bloom is drawn beside the ray, so it wears the ray clip's own scale. */
 const SWORD_BLOOM_SCALE = clipScaleOf(KiemTienClip.skill2('right'));
 /**
@@ -4029,6 +4054,36 @@ export class WorldScene extends Phaser.Scene {
    * following the two seconds of effect: a technique whose hit trickled in over
    * that long would be impossible to read in a fight.
    */
+  /**
+   * The camera leaning in and back out again.
+   *
+   * Tweened on the camera's own zoom off RENDER_SCALE rather than off whatever
+   * it is currently at: two ultimates in quick succession must not compound
+   * into a telescope, and a cast interrupted halfway must still come back to
+   * exactly the scale everything else is drawn at.
+   */
+  private pushIn(hold: number): void {
+    const camera = this.cameras.main;
+    this.tweens.killTweensOf(camera);
+    // Self-heals: if a previous return was ever killed mid-flight — a scene
+    // torn down under it, say — the next ultimate starts from true rather than
+    // pushing in from wherever it was stranded.
+    camera.setZoom(RENDER_SCALE);
+    this.tweens.add({
+      targets: camera,
+      zoom: RENDER_SCALE * PUSH_ZOOM,
+      duration: PUSH_IN_MS,
+      ease: 'Sine.easeInOut',
+    });
+    this.tweens.add({
+      targets: camera,
+      zoom: RENDER_SCALE,
+      delay: hold,
+      duration: PUSH_OUT_MS,
+      ease: 'Sine.easeOut',
+    });
+  }
+
   private castSwordRain(payload: SkillPayload): void {
     const { aim } = payload;
     const from = { x: payload.x, y: payload.y };
@@ -4044,6 +4099,13 @@ export class WorldScene extends Phaser.Scene {
     this.wanKiemFx.setIntensity(1);
     this.wanKiemFx.setDuration(SWORD_RAIN_SHOW);
     this.wanKiemFx.play(focus.x, focus.y);
+
+    // Light gathering over the charge and released by the burst, and the camera
+    // leaning in over the same beats. Both hang off the effect's own clock.
+    this.time.delayedCall(this.wanKiemFx.chargeDelay(), () =>
+      this.lighting.swell(focus.x, focus.y, 520, 0x8fd0ff, 2.4, this.wanKiemFx.chargeSpan()),
+    );
+    this.pushIn(this.wanKiemFx.impactDelay());
 
     // On the frame the giant sword lands, not at the end of the show — the
     // class is asked when that is rather than the number being repeated here.
@@ -4100,7 +4162,12 @@ export class WorldScene extends Phaser.Scene {
 
     // Everything arrives at once on the point they have been closing on: one
     // enormous blade coming down on it.
-    this.time.delayedCall(BLOOD_BEATS * BLOOD_STEP, () => this.bloodSword(focus.x, focus.y));
+    const lands = BLOOD_BEATS * BLOOD_STEP;
+    this.time.delayedCall(lands, () => this.bloodSword(focus.x, focus.y));
+    // Red gathering on the point the volley is walking to, released by the
+    // blade, and the camera leaning in over the same span.
+    this.lighting.swell(focus.x, focus.y, 460, 0xff4a6a, 2.2, lands + BLOOD_SWORD_FALL);
+    this.pushIn(lands + BLOOD_SWORD_FALL);
 
     this.sweepQi(payload, from, to, BLOOD_RADIUS, 16, 0xff4a6a);
   }
@@ -4140,6 +4207,7 @@ export class WorldScene extends Phaser.Scene {
       // Gathering speed the whole way down, so it lands rather than arrives.
       ease: 'Quad.easeIn',
       onComplete: () => {
+        this.bloodGround(x, y);
         this.lighting.flash(x, y, 680, 0xff3a5c, 3.6, 820);
         this.qiFx.shake(0.022, 300);
         this.juiceHitStop(110);
@@ -4161,6 +4229,47 @@ export class WorldScene extends Phaser.Scene {
           onComplete: () => blade.destroy(),
         });
       },
+    });
+  }
+
+  /**
+   * The wave and the mark Huyết Kiếm Sát leaves where the blade goes in.
+   *
+   * Both are red impact frames squashed flat — seen from above rather than side
+   * on, which is what a shockwave on the floor and a scar in it look like. The
+   * wave is gone in under half a second; the mark takes two and a half, which
+   * is the point of it. Everything else about the technique is finished within
+   * a breath of landing, and a blow the world forgets that fast did not land.
+   */
+  private bloodGround(x: number, y: number): void {
+    const ring = this.add
+      .sprite(x, y, KIEMTIEN_TEXTURE, 'rain_red_2')
+      .setDepth(y + 246)
+      .setScale(0.5, 0.5 * BLOOD_RING_FLATTEN)
+      .setAlpha(0.85);
+    this.tweens.add({
+      targets: ring,
+      scaleX: BLOOD_RING_TO,
+      scaleY: BLOOD_RING_TO * BLOOD_RING_FLATTEN,
+      alpha: 0,
+      duration: BLOOD_RING_MS,
+      ease: 'Quad.easeOut',
+      onComplete: () => ring.destroy(),
+    });
+
+    const scar = this.add
+      .sprite(x, y, KIEMTIEN_TEXTURE, 'rain_red_4')
+      .setDepth(y + 245)
+      .setScale(2.2, 2.2 * BLOOD_SCAR_FLATTEN)
+      .setAlpha(0);
+    this.tweens.add({ targets: scar, alpha: BLOOD_SCAR_ALPHA, duration: 90 });
+    this.tweens.add({
+      targets: scar,
+      alpha: 0,
+      delay: 90,
+      duration: BLOOD_SCAR_MS,
+      ease: 'Quad.easeIn',
+      onComplete: () => scar.destroy(),
     });
   }
 

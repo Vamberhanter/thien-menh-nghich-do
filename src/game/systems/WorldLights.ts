@@ -103,6 +103,40 @@ export class WorldLights {
   }
 
   /**
+   * Light gathering, rather than light going off.
+   *
+   * `flash` is an explosion — up in 90ms and down over everything after. A
+   * charge is the opposite curve: it builds for as long as the technique is
+   * winding up and is gone the instant the thing it was feeding lets go. That
+   * is what makes the burst read as earned rather than as arriving from
+   * nowhere, and it is why this is its own method: a flag on `flash` would have
+   * callers picking between two opposite shapes by boolean.
+   */
+  swell(
+    x: number,
+    y: number,
+    radius: number,
+    colour: number,
+    intensity = 2,
+    duration = 600,
+  ): void {
+    const light = this.scene.lights.addLight(x, y, radius, colour, 0);
+    const release = Math.min(140, duration * 0.25);
+    const build = duration - release;
+    // easeIn, so most of the brightness arrives in the last moments before it
+    // goes — a charge that rose evenly would peak too early to be a build-up.
+    this.scene.tweens.add({ targets: light, intensity, duration: build, ease: 'Quad.easeIn' });
+    this.scene.tweens.add({
+      targets: light,
+      intensity: 0,
+      delay: build,
+      duration: release,
+      ease: 'Quad.easeOut',
+    });
+    this.retire(light, duration);
+  }
+
+  /**
    * A light that rides a projectile.
    *
    * A crescent or a bolt is not an event, it is a thing crossing the map, and a
