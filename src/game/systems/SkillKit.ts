@@ -19,6 +19,7 @@ import {
   TAM_THU_HONG,
   TINH_KHONG_TRAN,
   TINH_MANG_TRAM,
+  VAN_KIEM_QUY_TONG,
 } from './CombatSystem';
 
 /** Keyboard / pad binding labels for the character panel. */
@@ -29,6 +30,20 @@ export interface KitBinding {
   slots: readonly string[];
   /** Tree skill id for ultimate slot (U). */
   ultimate: string;
+  /**
+   * The ultimate's own definition, when it has one.
+   *
+   * Slots and tails are built from the kit's real definitions; the ultimate was
+   * built from `ULTIMATE_BASE` for every character, so anything the tree does
+   * not override — `recovery` above all — came from that placeholder and the
+   * written definition was dead code. It cost Vạn Kiếm Quy Tông its hold: 400ms
+   * against a technique that runs 1900, so she dropped out of the air with the
+   * sword rain still falling.
+   *
+   * Optional because only hers has been checked against its art. The other four
+   * still take the placeholder, which is what they have always taken.
+   */
+  ultimateBase?: SkillDefinition;
   /** Base kit defs aligned with `slots` (before tree scaling). */
   bases: readonly SkillDefinition[];
   /**
@@ -66,6 +81,7 @@ export const KIT_BINDINGS: Readonly<Record<SkillClass, KitBinding>> = {
   kiemtien: {
     slots: ['thanh-phong-tram', 'lac-anh-kiem-quang'],
     ultimate: 'van-kiem-quy-tong',
+    ultimateBase: VAN_KIEM_QUY_TONG,
     bases: [THANH_PHONG_TRAM, LAC_ANH_KIEM_QUANG],
     tail: ['huyet-kiem-sat', 'ngu-kiem-hanh'],
     tailBases: [HUYET_KIEM_SAT, NGU_KIEM_HANH],
@@ -159,15 +175,16 @@ export function buildCombatKit(
   );
   const ultNode = SKILL_CATALOG[bind.ultimate];
   const ultRank = ranks[bind.ultimate] ?? 0;
+  const ultBase = bind.ultimateBase ?? ULTIMATE_BASE;
   const ultimate = scaleDef(
     {
-      ...ULTIMATE_BASE,
-      name: ultNode?.name ?? ULTIMATE_BASE.name,
-      damageMultiplier: ultNode?.effect.damageMultiplier ?? ULTIMATE_BASE.damageMultiplier,
-      spiritCost: ultNode?.effect.spiritualCost ?? ULTIMATE_BASE.spiritCost,
+      ...ultBase,
+      name: ultNode?.name ?? ultBase.name,
+      damageMultiplier: ultNode?.effect.damageMultiplier ?? ultBase.damageMultiplier,
+      spiritCost: ultNode?.effect.spiritualCost ?? ultBase.spiritCost,
       cooldown: ultNode?.effect.cooldownSeconds
         ? Math.round(ultNode.effect.cooldownSeconds * 1000)
-        : ULTIMATE_BASE.cooldown,
+        : ultBase.cooldown,
       frost: classId === 'nhuyen' ? 3 : undefined,
     },
     bind.ultimate,

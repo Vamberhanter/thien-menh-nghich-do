@@ -200,13 +200,41 @@ export const LAC_ANH_KIEM_QUANG: SkillDefinition = {
   recovery: 260,
 };
 
+/**
+ * One frame at 8fps, from `kiemtienAnimations` — the whole of what her sheet
+ * draws for this technique.
+ */
+const VAN_KIEM_POSE_MS = 125;
+
+/**
+ * How long Vạn Kiếm Quy Tông takes end to end, and the reason it lives here
+ * rather than with the effect that plays it.
+ *
+ * The hold below is worked back from it, so the two cannot drift apart — and
+ * this file is unit-tested in node, where importing anything that pulls in
+ * Phaser dies on `window`. The kit table is Phaser-free and stays that way;
+ * `WanKiemQuyTongEffect` reads the number from here.
+ */
+export const WAN_KIEM_SHOW_MS = 1900;
+
 export const VAN_KIEM_QUY_TONG: SkillDefinition = {
   name: 'Vạn Kiếm Quy Tông',
   damageMultiplier: 3.1,
   cooldown: 13000,
   spiritCost: 17,
-  // One drawn frame; the pose is held by the recovery rather than by the clip.
-  recovery: 900,
+  /*
+   * One drawn frame, so the recovery is what holds the pose — and it has to
+   * hold it for the whole technique, not part of it.
+   *
+   * At 900 the hold ran out at 1025ms against a show of 1900, and she settled
+   * back onto the grass with the sword rain still coming down and the giant
+   * blade not yet thrown. Worked back from the show instead, so the two cannot
+   * drift apart the next time either is tuned.
+   *
+   * It is a long lock — near two seconds — and that is the trade an ultimate on
+   * a thirteen second cooldown makes.
+   */
+  recovery: WAN_KIEM_SHOW_MS - VAN_KIEM_POSE_MS,
 };
 
 export const HUYET_KIEM_SAT: SkillDefinition = {

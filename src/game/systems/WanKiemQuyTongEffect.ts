@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { gameAssetUrl } from '../../net/assets';
+import { WAN_KIEM_SHOW_MS } from './CombatSystem';
 
 /**
  * Vạn Kiếm Quy Tông, played as one continuous ultimate from the eight VFX
@@ -211,7 +212,15 @@ const SCAR_SCALE = 1.15;
 const SCAR_ALPHA = 0.5;
 const SCAR_MS = 2400;
 
-const DEFAULT_DURATION = 2600;
+/**
+ * How long the eight stages take end to end.
+ *
+ * Declared next to the skill rather than here, because the technique's *hold*
+ * is worked back from it — her pose is one drawn frame kept up by the skill's
+ * recovery, and when that ran out before the show did she dropped out of the
+ * air with swords still falling.
+ */
+const DEFAULT_DURATION = WAN_KIEM_SHOW_MS;
 
 /** Above the ground plane, the way every other effect in the scene is depthed. */
 const DEPTH_LIFT = 260;
