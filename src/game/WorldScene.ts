@@ -42,6 +42,7 @@ import { NhuYenEffects } from './systems/NhuYenEffects';
 import { HuyetLangEffects } from './systems/HuyetLangEffects';
 import { MikuEffects } from './systems/MikuEffects';
 import { WukongEffects } from './systems/WukongEffects';
+import { WanKiemQuyTongEffect } from './systems/WanKiemQuyTongEffect';
 import { WorldLights } from './systems/WorldLights';
 import { WukongClip, castScaleOf } from './animations/wukongAnimations';
 import {
@@ -262,18 +263,16 @@ const SWORD_RAY_RANGE_VERTICAL = 260;
 const SWORD_RAY_RADIUS = 44;
 
 /**
- * Vạn Kiếm Quy Tông's volley, read off the pose it is drawn in: the blades fan
+ * Vạn Kiếm Quy Tông's reach, read off the pose it is drawn in: the blades fan
  * out about 320px and a good way to either side, so the lane is short and wide
- * where the ray's is long and narrow. Five beats of two, 55ms apart, is a
- * little over a quarter of a second of landings before the last one — long
- * enough to read as a volley, short enough to still feel like one blow.
+ * where the ray's is long and narrow.
  */
 const SWORD_RAIN_RANGE = 320;
-const SWORD_RAIN_NEAR = 70;
 const SWORD_RAIN_RADIUS = 96;
-const SWORD_RAIN_SPREAD = 78;
-const SWORD_RAIN_VOLLEY = 5;
-const SWORD_RAIN_STEP = 55;
+/** Where the show is centred — far enough out that the rain does not fall on her. */
+const SWORD_RAIN_FOCUS = 210;
+/** How long the eight stages take end to end. */
+const SWORD_RAIN_SHOW = 1900;
 /** How many `rain_hit_*` frames the extras sheet gave us. */
 const SWORD_RAIN_FRAMES = 5;
 
@@ -440,6 +439,7 @@ export class WorldScene extends Phaser.Scene {
   private magmaFx!: HuyetLangEffects;
   private starFx!: MikuEffects;
   private qiFx!: WukongEffects;
+  private wanKiemFx!: WanKiemQuyTongEffect;
   private bossFx!: BossEffects;
   private lighting!: WorldLights;
   private props!: Phaser.Physics.Arcade.StaticGroup;
@@ -532,6 +532,7 @@ export class WorldScene extends Phaser.Scene {
     this.magmaFx = new HuyetLangEffects(this);
     this.starFx = new MikuEffects(this);
     this.qiFx = new WukongEffects(this);
+    this.wanKiemFx = new WanKiemQuyTongEffect(this);
     this.bossFx = new BossEffects(this);
     this.lighting = new WorldLights(this);
     this.avatarId = peekSession()?.profile.id ?? newPlayerId();
@@ -4014,47 +4015,42 @@ export class WorldScene extends Phaser.Scene {
    * alone it was a still picture for a second — no weight, nothing moving, and
    * no moment where the technique actually happens.
    *
-   * The rest of it is on the `.1` sheet, in the five cells with nobody in them:
-   * what the swords do where they land. So the pose stays hers and the landings
-   * become a volley — a line of impacts marching out along the aim, each one a
-   * beat after the last, paired off either side of the line so it reads as a
-   * fan rather than a queue, and the last and largest arriving on its own with
-   * the light and the shake behind it.
+   * The technique itself is `kiemtien-skill3.3.png`, eight effect frames drawn
+   * for it, run as one continuous show by {@link WanKiemQuyTongEffect}: the
+   * blade summoned, gathering, charged, bursting, then a rain of swords with
+   * the giant one falling through it onto the point. That class draws; this
+   * decides where and resolves the damage.
    *
-   * The damage still resolves once, on the frame the pose commits, because a
-   * technique whose hit trickled in over half a second would be impossible to
-   * read in a fight.
+   * The centre is out at `SWORD_RAIN_FOCUS` rather than on her, because the
+   * rain falls in a wide ring around wherever it is put and centring it on her
+   * would bury her in her own effect.
+   *
+   * The damage still resolves once, on the frame the pose commits, rather than
+   * following the two seconds of effect: a technique whose hit trickled in over
+   * that long would be impossible to read in a fight.
    */
   private castSwordRain(payload: SkillPayload): void {
     const { aim } = payload;
-    // perpendicular to the aim, for throwing pairs off the centre line
-    const side = { x: -aim.y, y: aim.x };
     const from = { x: payload.x, y: payload.y };
     const to = {
       x: payload.x + aim.x * SWORD_RAIN_RANGE,
       y: payload.y + aim.y * SWORD_RAIN_RANGE,
     };
+    const focus = {
+      x: payload.x + aim.x * SWORD_RAIN_FOCUS,
+      y: payload.y + aim.y * SWORD_RAIN_FOCUS,
+    };
 
-    for (let i = 0; i < SWORD_RAIN_VOLLEY; i++) {
-      const t = (i + 1) / SWORD_RAIN_VOLLEY;
-      const along = SWORD_RAIN_NEAR + (SWORD_RAIN_RANGE - SWORD_RAIN_NEAR) * t;
-      // Two per beat, opening wider as they go out — the fan the pose promises.
-      const spread = SWORD_RAIN_SPREAD * t;
-      for (const lean of [-1, 1]) {
-        const x = payload.x + aim.x * along + side.x * spread * lean;
-        const y = payload.y + aim.y * along + side.y * spread * lean;
-        this.time.delayedCall(i * SWORD_RAIN_STEP, () =>
-          this.swordFall(x, y, 0.55 + 0.12 * i, i % SWORD_RAIN_FRAMES),
-        );
-      }
-    }
+    this.wanKiemFx.setIntensity(1);
+    this.wanKiemFx.setDuration(SWORD_RAIN_SHOW);
+    this.wanKiemFx.play(focus.x, focus.y);
 
-    // The one that lands last, alone, in the middle of the lane's end.
-    this.time.delayedCall(SWORD_RAIN_VOLLEY * SWORD_RAIN_STEP, () => {
-      this.swordFall(to.x, to.y, 1.35, SWORD_RAIN_FRAMES - 1);
-      this.lighting.flash(to.x, to.y, 620, 0xbfe4ff, 3.2, 720);
-      this.qiFx.shake(0.012, 240);
-      this.juiceHitStop(80);
+    // On the frame the giant sword lands, not at the end of the show — the
+    // class is asked when that is rather than the number being repeated here.
+    this.time.delayedCall(this.wanKiemFx.impactDelay(), () => {
+      this.lighting.flash(focus.x, focus.y, 620, 0xbfe4ff, 3.2, 720);
+      this.qiFx.shake(0.014, 260);
+      this.juiceHitStop(90);
     });
 
     this.sweepQi(payload, from, to, SWORD_RAIN_RADIUS, 12, 0x9fd4ff);

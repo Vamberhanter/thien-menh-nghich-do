@@ -53,6 +53,7 @@ import {
   paintEnvironment,
   FARM_TEXTURES,
 } from '../env';
+import { WAN_KIEM_TEXTURES } from '../systems/WanKiemQuyTongEffect';
 
 const ATLASES = [
   {
@@ -132,6 +133,11 @@ export class BootScene extends Phaser.Scene {
     }
     for (const farm of FARM_TEXTURES) {
       this.load.image(farm.key, farm.url);
+    }
+    // Vạn Kiếm Quy Tông's eight effect frames. Loose images rather than part of
+    // her atlas — see the note at the top of WanKiemQuyTongEffect.
+    for (const vfx of WAN_KIEM_TEXTURES) {
+      this.load.image(vfx.key, vfx.url);
     }
 
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, this.onAtlasMiss, this);
