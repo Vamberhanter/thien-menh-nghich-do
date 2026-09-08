@@ -76,6 +76,7 @@ import { Multiplayer } from './systems/Multiplayer';
 import { setAimTargets, type AimTarget } from './systems/autoAim';
 import { GroundScars } from './systems/GroundScars';
 import { FrameStats } from './systems/FrameStats';
+import { CombatNumbers } from './systems/CombatNumbers';
 import { isInputGated, isSystemMenuOpen, isUiTyping, loadSavedJoin, peekSession } from '../net/bind';
 import { newPlayerId } from '../net/supabase';
 import type { WorldSession } from '../net/WorldSession';
@@ -480,6 +481,7 @@ export class WorldScene extends Phaser.Scene {
   private hitStopUntil = 0;
   private scars!: GroundScars;
   private frameStats!: FrameStats;
+  private numbers!: CombatNumbers;
   private bossFx!: BossEffects;
   private lighting!: WorldLights;
   private props!: Phaser.Physics.Arcade.StaticGroup;
@@ -576,6 +578,7 @@ export class WorldScene extends Phaser.Scene {
     this.wanKiemFx = new WanKiemQuyTongEffect(this);
     this.scars = new GroundScars(this);
     this.frameStats = new FrameStats(this);
+    this.numbers = new CombatNumbers(this);
     this.bossFx = new BossEffects(this);
     this.lighting = new WorldLights(this);
     this.avatarId = peekSession()?.profile.id ?? newPlayerId();
@@ -4672,8 +4675,25 @@ export class WorldScene extends Phaser.Scene {
     critical: boolean,
     label?: string,
   ): void {
+    const spelt = label ?? (critical ? `-${damage}!` : `-${damage}`);
+    /*
+     * Damage goes through the bitmap font; banners do not.
+     *
+     * A `Text` costs 0.93ms to build — a canvas, a font measure and a texture
+     * upload — against a 6.9ms frame. One is survivable, and a sweep that hits
+     * four mobs makes four in the same frame and drops it. Numbers are the path
+     * that bursts, and thirteen glyphs spell all of them.
+     *
+     * A banner is a level-up title or a kill notice in Vietnamese, which those
+     * thirteen glyphs cannot spell. They arrive one at a time seconds apart, so
+     * they keep the general-purpose thing that can draw them.
+     */
+    if (!label && this.numbers.ready) {
+      this.numbers.show(x, y, spelt, tint, critical);
+      return;
+    }
     const text = this.add
-      .text(x, y, label ?? (critical ? `-${damage}!` : `-${damage}`), {
+      .text(x, y, spelt, {
         fontFamily: 'monospace',
         fontSize: critical ? '18px' : '14px',
         color: `#${tint.toString(16).padStart(6, '0')}`,
@@ -4704,6 +4724,7 @@ export class WorldScene extends Phaser.Scene {
 
   private teardown(): void {
     this.frameStats?.destroy();
+    this.numbers?.destroy();
     // Before anything else: the generator above closes over this scene, and a
     // torn-down one still handing out mobs would have the next scene's players
     // aiming at ghosts.
