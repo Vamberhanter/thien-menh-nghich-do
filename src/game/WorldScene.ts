@@ -348,6 +348,9 @@ const SWORD_BLOOM_SCALE = clipScaleOf(KiemTienClip.skill2('right'));
  * 10000 and stays above him.
  */
 const FLY_DEPTH_BAND = 4000;
+
+/** How far time is slowed for the beat after a blow lands. */
+const HIT_STOP_SCALE = 0.35;
 const FX_LIFT = 34;
 const STONE_HP = 160;
 const BOLT_LIFT = 52;
@@ -468,6 +471,12 @@ export class WorldScene extends Phaser.Scene {
   private starFx!: MikuEffects;
   private qiFx!: WukongEffects;
   private wanKiemFx!: WanKiemQuyTongEffect;
+  /** Last cooldown row handed to the HUD, so an unchanged one is not resent. */
+  private readonly cooldownEcho: number[] = [];
+  /** Last context prompt handed to the HUD, for the same reason. */
+  private lootPromptEcho: string | null | undefined;
+  /** Unscaled clock time the current hit-stop runs to. See `juiceHitStop`. */
+  private hitStopUntil = 0;
   private scars!: GroundScars;
   private bossFx!: BossEffects;
   private lighting!: WorldLights;
@@ -616,6 +625,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
+    this.tickHitStop(time);
     pollGamepad({ gated: isInputGated() });
     this.player.update(time, delta);
     this.net.tick(time, delta, this.player);
@@ -1965,10 +1975,28 @@ export class WorldScene extends Phaser.Scene {
     );
   }
 
+  /**
+   * The context prompt, only when the text changes.
+   *
+   * Every branch below used to emit on every frame — including the last one,
+   * which says there is nothing to interact with and therefore fires
+   * everywhere in the world at all times. Same cost as the cooldowns: a React
+   * render per frame, forever.
+   *
+   * The scans stay per frame. They are a handful of distance checks over the
+   * piles, plots and resources in one zone, and the prompt has to appear on the
+   * frame the player walks into range.
+   */
+  private setLootPrompt(label: string | null): void {
+    if (this.lootPromptEcho === label) return;
+    this.lootPromptEcho = label;
+    GameBus.emit(GameEvent.LootPrompt, { label });
+  }
+
   private tickLootPrompt(): void {
     const near = this.nearestLoot();
     if (near) {
-      GameBus.emit(GameEvent.LootPrompt, { label: `F · nhặt (${near.pile.items.length})` });
+      this.setLootPrompt(`F · nhặt (${near.pile.items.length})`);
       return;
     }
     const farmPlot = this.nearestFarmPlot();
@@ -1983,44 +2011,37 @@ export class WorldScene extends Phaser.Scene {
             : status === 'growing'
               ? `F · đang lớn ${Math.round(plotGrowth(plot!, Date.now()) * 100)}%`
               : `F · gieo ${SEED_CATALOG[this.selectedFarmSeed]?.name ?? 'hạt'}`;
-      GameBus.emit(GameEvent.LootPrompt, { label });
+      this.setLootPrompt(label);
       return;
     }
     const resource = this.nearestResource();
     if (resource) {
-      GameBus.emit(GameEvent.LootPrompt, {
-        label:
-          resource.resource.kind === 'plant'
+      this.setLootPrompt(resource.resource.kind === 'plant'
             ? `F · hái ${itemOf(resource.resource.def.kind)?.name ?? 'linh dược'}`
-            : `F · mở ${CHEST_REWARD[resource.resource.def.tier].label}`,
-      });
+            : `F · mở ${CHEST_REWARD[resource.resource.def.tier].label}`);
       return;
     }
     const npc = this.nearestNpc();
     if (npc) {
-      GameBus.emit(GameEvent.LootPrompt, {
-        label: `F · ${npc.role === 'merchant' ? 'giao dịch' : 'đối thoại'} ${npc.name}`,
-      });
+      this.setLootPrompt(`F · ${npc.role === 'merchant' ? 'giao dịch' : 'đối thoại'} ${npc.name}`);
       return;
     }
     if (this.nearStorage()) {
-      GameBus.emit(GameEvent.LootPrompt, { label: 'F · mở rương trữ đồ' });
+      this.setLootPrompt('F · mở rương trữ đồ');
       return;
     }
     if (this.nearShrine()) {
-      GameBus.emit(GameEvent.LootPrompt, {
-        label: this.isBoundHere() ? 'Đã khóa điểm hồi sinh' : 'F · đặt điểm hồi sinh',
-      });
+      this.setLootPrompt(this.isBoundHere() ? 'Đã khóa điểm hồi sinh' : 'F · đặt điểm hồi sinh');
       return;
     }
     if (this.nearWaypoint()) {
       if (!this.warps.has(this.zone.id)) this.discoverWarp(this.zone.id);
-      GameBus.emit(GameEvent.LootPrompt, { label: 'F / T · mở dịch chuyển' });
+      this.setLootPrompt('F / T · mở dịch chuyển');
       if (this.warpOpen) this.emitWarpState();
       return;
     }
     if (this.warpOpen && !this.nearWaypoint()) this.closeWarp();
-    GameBus.emit(GameEvent.LootPrompt, { label: null });
+    this.setLootPrompt(null);
   }
 
   private nearestLoot(): { pile: LootPile; distance: number } | null {
@@ -3092,11 +3113,35 @@ export class WorldScene extends Phaser.Scene {
     if (this.playerCollider) this.playerCollider.active = !airborne;
   }
 
+  /**
+   * Cooldown ratios to the HUD, but only when one of them has moved.
+   *
+   * This ran every frame and handed React a brand-new array every time, so the
+   * whole HUD and the touch pad re-rendered sixty times a second for the entire
+   * session — including while standing still with nothing on cooldown, which is
+   * most of it. React's work lands on the same thread as the game loop, so what
+   * the player felt was the game hitching.
+   *
+   * Quantised to a hundredth before comparing. A cooldown bar is a hundred-odd
+   * pixels wide, so a hundredth is a pixel: below that there is nothing to
+   * show, and above it nothing is lost. Idle now emits nothing at all, and a
+   * thirteen-second cooldown emits about a hundred times instead of eight
+   * hundred.
+   */
   private emitCooldowns(): void {
     const combat = this.player.combat;
-    GameBus.emit(GameEvent.Cooldowns, {
-      skills: combat.skills.map((_, i) => combat.skillCooldownRatio(i)),
-    });
+    const count = combat.skills.length;
+    let changed = this.cooldownEcho.length !== count;
+    for (let i = 0; i < count; i++) {
+      const ratio = Math.round(combat.skillCooldownRatio(i) * 100) / 100;
+      if (this.cooldownEcho[i] !== ratio) changed = true;
+      this.cooldownEcho[i] = ratio;
+    }
+    if (!changed) return;
+    this.cooldownEcho.length = count;
+    // A fresh array on the way out: React holds this as state, and handing it
+    // the one we compare against would make the next comparison meaningless.
+    GameBus.emit(GameEvent.Cooldowns, { skills: [...this.cooldownEcho] });
   }
 
   private tickMinimap(delta: number): void {
@@ -3574,12 +3619,30 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * The beat of slow time on a landed blow.
+   *
+   * It used to schedule its own release on the very clock it had just slowed,
+   * so every hit-stop ran `1 / HIT_STOP_SCALE` times longer than the number it
+   * was given — 110ms of intent came out as 314. And two hits close together
+   * fought: the first one's release fired while the second was still meant to
+   * be holding, or arrived late and cut it short.
+   *
+   * Both go away by holding a deadline on the unscaled clock instead. `time.now`
+   * is the raw loop time — `timeScale` only scales how fast *events* accumulate
+   * towards their delay, not the clock itself — so a deadline in it is immune to
+   * the slowdown it is about to cause. Overlapping hits extend it rather than
+   * arguing over it.
+   */
   private juiceHitStop(ms: number): void {
     if (!this.player?.alive) return;
-    this.time.timeScale = 0.35;
-    this.time.delayedCall(ms, () => {
-      this.time.timeScale = 1;
-    });
+    this.hitStopUntil = Math.max(this.hitStopUntil, this.time.now + ms);
+  }
+
+  /** Applies whatever `juiceHitStop` has asked for, and takes it off again. */
+  private tickHitStop(time: number): void {
+    const scale = time < this.hitStopUntil ? HIT_STOP_SCALE : 1;
+    if (this.time.timeScale !== scale) this.time.timeScale = scale;
   }
 
   private castQiSlash(payload: SkillPayload): void {
