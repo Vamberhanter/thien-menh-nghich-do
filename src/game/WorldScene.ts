@@ -75,6 +75,7 @@ import type { Vector2Like } from './types';
 import { Multiplayer } from './systems/Multiplayer';
 import { setAimTargets, type AimTarget } from './systems/autoAim';
 import { GroundScars } from './systems/GroundScars';
+import { FrameStats } from './systems/FrameStats';
 import { isInputGated, isSystemMenuOpen, isUiTyping, loadSavedJoin, peekSession } from '../net/bind';
 import { newPlayerId } from '../net/supabase';
 import type { WorldSession } from '../net/WorldSession';
@@ -478,6 +479,7 @@ export class WorldScene extends Phaser.Scene {
   /** Unscaled clock time the current hit-stop runs to. See `juiceHitStop`. */
   private hitStopUntil = 0;
   private scars!: GroundScars;
+  private frameStats!: FrameStats;
   private bossFx!: BossEffects;
   private lighting!: WorldLights;
   private props!: Phaser.Physics.Arcade.StaticGroup;
@@ -523,6 +525,7 @@ export class WorldScene extends Phaser.Scene {
     pick: Phaser.Input.Keyboard.Key;
     warp: Phaser.Input.Keyboard.Key;
     envArt: Phaser.Input.Keyboard.Key;
+    stats: Phaser.Input.Keyboard.Key;
     hurt?: Phaser.Input.Keyboard.Key;
     respawn?: Phaser.Input.Keyboard.Key;
     boss?: Phaser.Input.Keyboard.Key;
@@ -572,6 +575,7 @@ export class WorldScene extends Phaser.Scene {
     this.qiFx = new WukongEffects(this);
     this.wanKiemFx = new WanKiemQuyTongEffect(this);
     this.scars = new GroundScars(this);
+    this.frameStats = new FrameStats(this);
     this.bossFx = new BossEffects(this);
     this.lighting = new WorldLights(this);
     this.avatarId = peekSession()?.profile.id ?? newPlayerId();
@@ -652,6 +656,8 @@ export class WorldScene extends Phaser.Scene {
       this.saveTimer = 0;
       void this.persist();
     }
+    // Last, so its reading of the frame covers everything above it.
+    this.frameStats.tick(time, delta);
   }
 
   /* --------------------------------------------------------------- zone */
@@ -2148,6 +2154,7 @@ export class WorldScene extends Phaser.Scene {
       pick: keyboard.addKey(K.F, false),
       warp: keyboard.addKey(K.T, false),
       envArt: keyboard.addKey(K.G, false),
+      stats: keyboard.addKey(K.F3, false),
     };
     if (import.meta.env.DEV) {
       this.keys.hurt = keyboard.addKey(K.H, false);
@@ -2163,6 +2170,7 @@ export class WorldScene extends Phaser.Scene {
     if (Phaser.Input.Keyboard.JustDown(this.keys.bag) || consumePad('bag')) {
       GameBus.emit(GameEvent.InventoryToggle);
     }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.stats)) this.frameStats.toggle();
     if (Phaser.Input.Keyboard.JustDown(this.keys.pick) || consumePad('pick')) this.pickLoot();
     if (Phaser.Input.Keyboard.JustDown(this.keys.warp) || consumePad('warp')) this.toggleWarp();
     if (Phaser.Input.Keyboard.JustDown(this.keys.envArt) || consumePad('envArt')) this.swapEnvArt();
@@ -4695,6 +4703,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private teardown(): void {
+    this.frameStats?.destroy();
     // Before anything else: the generator above closes over this scene, and a
     // torn-down one still handing out mobs would have the next scene's players
     // aiming at ghosts.
