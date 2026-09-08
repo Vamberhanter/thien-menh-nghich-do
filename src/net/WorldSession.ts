@@ -112,6 +112,9 @@ export class WorldSession {
       character: state.character,
       hp: state.hp,
       atk: state.state === 'attack' ? state.atk : undefined,
+      // Rounded like the position, and left off entirely while she is on the
+      // ground: this rides in every pose packet and standing is the common case.
+      lift: state.lift ? Math.round(state.lift) : undefined,
       zone: state.zone,
     };
 

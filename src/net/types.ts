@@ -55,6 +55,18 @@ export interface NetPose {
   hp: number;
   /** 0-based combo step, only meaningful while `state === 'attack'`. */
   atk?: number;
+  /**
+   * How far off the ground the sprite is *drawn*, in world px.
+   *
+   * Only the two kits that leave the ground send it, and only while they are
+   * off it — Cân Đẩu Vân, Ngự Kiếm Hành, and Kiếm Tiên's two ultimates, which
+   * hold her in the air while they play. Absent means standing, which is what
+   * every other character and every older client sends.
+   *
+   * It can be negative: Kiếm Tiên presses into the ground for a moment before
+   * she rises, and that dip is as much a part of the movement as the lift.
+   */
+  lift?: number;
   zone?: string;
 }
 
@@ -151,6 +163,8 @@ export interface PlayerNetState {
   state: CharacterState;
   hp: number;
   atk?: number;
+  /** Drawn height off the ground — see `NetPose.lift`. */
+  lift?: number;
   zone?: string;
 }
 

@@ -177,6 +177,10 @@ export function createWukong(
         state: sprite.characterState,
         hp: sprite.stats.hp,
         atk,
+        // The one kit fact that was invisible to everyone else: on another
+        // player's screen this character walked on the ground through every
+        // flight and every held ultimate.
+        lift: sprite.airHeight,
         zone: currentZone(),
       };
     },
@@ -209,6 +213,10 @@ export function createKiemTien(
         state: sprite.characterState,
         hp: sprite.stats.hp,
         atk,
+        // The one kit fact that was invisible to everyone else: on another
+        // player's screen this character walked on the ground through every
+        // flight and every held ultimate.
+        lift: sprite.airHeight,
         zone: currentZone(),
       };
     },

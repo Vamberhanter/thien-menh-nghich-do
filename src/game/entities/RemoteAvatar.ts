@@ -38,9 +38,40 @@ import {
   PHAN_THIEN_MA_DIEM,
   VAN_KIEM_QUY_TONG,
 } from '../systems/CombatSystem';
+import { GroundShadow } from '../systems/GroundShadow';
 import type { NetAction, NetPose } from '../../net/types';
 
 const LABEL_LIFT = 92;
+
+/**
+ * How high the replica is allowed to be drawn, as a guard on a number that
+ * arrived over the wire. Wukong's cloud is the tallest thing any kit does at
+ * 44px, and the dip Kiếm Tiên takes before she rises is the deepest at -5.
+ */
+const LIFT_MAX = 60;
+const LIFT_MIN = -12;
+
+/**
+ * Above the ground plane a flying character is not in the depth ordering at
+ * all — the same band the local player uses, for the same reason.
+ */
+const FLY_DEPTH_BAND = 4000;
+
+/**
+ * Each kit's shadow, copied from the entity that owns it.
+ *
+ * A replica needs one or the height it is now being told about cannot be seen:
+ * in this view nothing distinguishes higher up from further north, and the gap
+ * between a sprite and its own shadow *is* the height. The local characters
+ * have had these all along; their replicas had nothing on the floor at all.
+ */
+const SHADOW: Record<PlayerId, { size?: { w: number; h: number }; lift: number }> = {
+  nhuyen: { size: { w: 38, h: 15 }, lift: 0 },
+  huyetlang: { size: { w: 46, h: 18 }, lift: 0 },
+  miku: { size: { w: 38, h: 15 }, lift: 0 },
+  wukong: { lift: 44 },
+  kiemtien: { lift: 34 },
+};
 
 const LABEL_COLOR: Record<PlayerId, string> = {
   nhuyen: '#9fe8ff',
@@ -72,6 +103,11 @@ export class RemoteAvatar {
   private destY: number;
   private lerpT = 1;
   private playedKey = '';
+  private shadow: GroundShadow;
+  /** Drawn height, eased between poses the way x and y are. */
+  private lift = 0;
+  private startLift = 0;
+  private destLift = 0;
 
   constructor(private readonly scene: Phaser.Scene, pose: NetPose, name: string) {
     this.id = pose.id;
@@ -81,6 +117,9 @@ export class RemoteAvatar {
     this.startY = pose.y;
     this.destX = pose.x;
     this.destY = pose.y;
+    this.lift = Phaser.Math.Clamp(pose.lift ?? 0, LIFT_MIN, LIFT_MAX);
+    this.startLift = this.lift;
+    this.destLift = this.lift;
 
     createNhuYenAnimations(scene);
     createHuyetLangAnimations(scene);
@@ -89,6 +128,7 @@ export class RemoteAvatar {
     createKiemTienAnimations(scene);
 
     this.sprite = this.makeSprite(pose.character, pose.x, pose.y);
+    this.shadow = makeShadow(scene, pose.character);
     this.label = scene.add
       .text(pose.x, pose.y - LABEL_LIFT, name, {
         fontFamily: 'monospace',
@@ -123,6 +163,8 @@ export class RemoteAvatar {
     this.startY = this.displayY();
     this.destX = pose.x;
     this.destY = pose.y;
+    this.startLift = this.lift;
+    this.destLift = Phaser.Math.Clamp(pose.lift ?? 0, LIFT_MIN, LIFT_MAX);
     this.lerpT = 0;
 
     if (pose.character !== this.character) {
@@ -159,12 +201,14 @@ export class RemoteAvatar {
     this.lerpT = Math.min(1, this.lerpT + delta / 90);
     const x = Phaser.Math.Linear(this.startX, this.destX, this.lerpT);
     const y = Phaser.Math.Linear(this.startY, this.destY, this.lerpT);
+    this.lift = Phaser.Math.Linear(this.startLift, this.destLift, this.lerpT);
     this.setFoot(x, y);
   }
 
   destroy(): void {
     this.sprite.destroy();
     this.label.destroy();
+    this.shadow.destroy();
   }
 
   /* -------------------------------------------------------------- internals */
@@ -223,9 +267,11 @@ export class RemoteAvatar {
   private rebuild(character: PlayerId): void {
     const { x, y } = { x: this.displayX(), y: this.displayY() };
     this.sprite.destroy();
+    this.shadow.destroy();
     this.character = character;
     this.playedKey = '';
     this.sprite = this.makeSprite(character, x, y);
+    this.shadow = makeShadow(this.scene, character);
     this.label.setColor(LABEL_COLOR[character] ?? '#c8d6ff');
   }
 
@@ -240,9 +286,36 @@ export class RemoteAvatar {
 
   private setFoot(x: number, y: number): void {
     this.sprite.setPosition(x, y);
-    this.sprite.setDepth(y);
-    this.label.setPosition(x, y - LABEL_LIFT);
-    this.label.setDepth(y + 1);
+    // Above everything when off the ground, in the ordinary ordering when not.
+    this.sprite.setDepth(y + (this.lift > 0 ? FLY_DEPTH_BAND : 0));
+    this.label.setPosition(x, y - LABEL_LIFT - Math.max(0, this.lift));
+    this.label.setDepth(y + (this.lift > 0 ? FLY_DEPTH_BAND : 0) + 1);
+    // Clamped at the floor: a shadow does not grow when its owner crouches.
+    this.shadow.sync(x, y, Math.max(0, this.lift));
+    this.applyLift();
+  }
+
+  /**
+   * Draws the replica `lift` px higher without moving it.
+   *
+   * Into the origin, not into `y`, exactly as the local characters do it: `y`
+   * is the tile the player is over, and moving it would take their name plate,
+   * their shadow and their place in the depth order into the air with them.
+   * Re-applied every frame because each atlas frame carries its own baked pivot
+   * that Phaser puts back as the animation runs.
+   */
+  private applyLift(): void {
+    const frame = this.sprite.frame;
+    const baseX = frame.customPivot ? frame.pivotX : 0.5;
+    const baseY = frame.customPivot ? frame.pivotY : 0.5;
+    if (this.lift === 0) {
+      this.sprite.setOrigin(baseX, baseY);
+      return;
+    }
+    // Against the drawn size rather than the texture size, because the scale in
+    // force is never 1 for the kits that fly — see the local applyFlyLift.
+    const height = this.sprite.height * this.sprite.scaleY;
+    this.sprite.setOrigin(baseX, baseY + (height ? this.lift / height : 0));
   }
 
   private displayX(): number {
@@ -252,6 +325,11 @@ export class RemoteAvatar {
   private displayY(): number {
     return this.sprite.y;
   }
+}
+
+function makeShadow(scene: Phaser.Scene, character: PlayerId): GroundShadow {
+  const spec = SHADOW[character] ?? SHADOW.nhuyen;
+  return new GroundShadow(scene, spec);
 }
 
 function isOneShot(state: CharacterState): boolean {
