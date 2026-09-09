@@ -10,18 +10,18 @@ import {
 } from './GemSystem';
 
 const GEM_ITEM_ICONS: Readonly<Record<string, string>> = {
-  'hong-ngoc-1': gameAssetUrl('items/gems/hong-ngoc-1.png'),
-  'hong-ngoc-2': gameAssetUrl('items/gems/hong-ngoc-2.png'),
-  'hong-ngoc-3': gameAssetUrl('items/gems/hong-ngoc-3.png'),
-  'lam-ngoc-1': gameAssetUrl('items/gems/lam-ngoc-1.png'),
-  'lam-ngoc-2': gameAssetUrl('items/gems/lam-ngoc-2.png'),
-  'lam-ngoc-3': gameAssetUrl('items/gems/lam-ngoc-3.png'),
-  'luc-ngoc-1': gameAssetUrl('items/gems/luc-ngoc-1.png'),
-  'luc-ngoc-2': gameAssetUrl('items/gems/luc-ngoc-2.png'),
-  'luc-ngoc-3': gameAssetUrl('items/gems/luc-ngoc-3.png'),
-  'hoang-ngoc-1': gameAssetUrl('items/gems/hoang-ngoc-1.png'),
-  'hoang-ngoc-2': gameAssetUrl('items/gems/hoang-ngoc-2.png'),
-  'hoang-ngoc-3': gameAssetUrl('items/gems/hoang-ngoc-3.png'),
+  'hong-ngoc-1': gameAssetUrl('assets/items/gems/hong-ngoc-1.png'),
+  'hong-ngoc-2': gameAssetUrl('assets/items/gems/hong-ngoc-2.png'),
+  'hong-ngoc-3': gameAssetUrl('assets/items/gems/hong-ngoc-3.png'),
+  'lam-ngoc-1': gameAssetUrl('assets/items/gems/lam-ngoc-1.png'),
+  'lam-ngoc-2': gameAssetUrl('assets/items/gems/lam-ngoc-2.png'),
+  'lam-ngoc-3': gameAssetUrl('assets/items/gems/lam-ngoc-3.png'),
+  'luc-ngoc-1': gameAssetUrl('assets/items/gems/luc-ngoc-1.png'),
+  'luc-ngoc-2': gameAssetUrl('assets/items/gems/luc-ngoc-2.png'),
+  'luc-ngoc-3': gameAssetUrl('assets/items/gems/luc-ngoc-3.png'),
+  'hoang-ngoc-1': gameAssetUrl('assets/items/gems/hoang-ngoc-1.png'),
+  'hoang-ngoc-2': gameAssetUrl('assets/items/gems/hoang-ngoc-2.png'),
+  'hoang-ngoc-3': gameAssetUrl('assets/items/gems/hoang-ngoc-3.png'),
 };
 
 export type EquipSlot = 'weapon' | 'armor' | 'accessory' | 'relic';
@@ -76,7 +76,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     buyValue: 90,
     sellValue: 35,
     socketCount: 1,
-    icon: gameAssetUrl('weapons/iron-sword.png'),
+    icon: gameAssetUrl('assets/weapons/iron-sword.png'),
   },
   'bronze-sword': {
     id: 'bronze-sword',
@@ -89,7 +89,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     buyValue: 180,
     sellValue: 70,
     socketCount: 1,
-    icon: gameAssetUrl('weapons/bronze-sword.png'),
+    icon: gameAssetUrl('assets/weapons/bronze-sword.png'),
   },
   'jade-sword': {
     id: 'jade-sword',
@@ -102,7 +102,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     buyValue: 360,
     sellValue: 140,
     socketCount: 2,
-    icon: gameAssetUrl('weapons/jade-sword.png'),
+    icon: gameAssetUrl('assets/weapons/jade-sword.png'),
   },
   'gale-sword': {
     id: 'gale-sword',
@@ -113,7 +113,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     requiredLevel: 5,
     sellValue: 180,
     socketCount: 1,
-    icon: gameAssetUrl('weapons/gale-sword.png'),
+    icon: gameAssetUrl('assets/weapons/gale-sword.png'),
   },
   'frost-sword': {
     id: 'frost-sword',
@@ -124,7 +124,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     requiredLevel: 6,
     sellValue: 220,
     socketCount: 1,
-    icon: gameAssetUrl('weapons/frost-sword.png'),
+    icon: gameAssetUrl('assets/weapons/frost-sword.png'),
   },
   'thunder-sword': {
     id: 'thunder-sword',
@@ -135,7 +135,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     requiredLevel: 6,
     sellValue: 270,
     socketCount: 1,
-    icon: gameAssetUrl('weapons/thunder-sword.png'),
+    icon: gameAssetUrl('assets/weapons/thunder-sword.png'),
   },
   'venom-sword': {
     id: 'venom-sword',
@@ -146,7 +146,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     requiredLevel: 7,
     sellValue: 320,
     socketCount: 1,
-    icon: gameAssetUrl('weapons/venom-sword.png'),
+    icon: gameAssetUrl('assets/weapons/venom-sword.png'),
   },
   'flame-sword': {
     id: 'flame-sword',
@@ -157,7 +157,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     requiredLevel: 7,
     sellValue: 380,
     socketCount: 2,
-    icon: gameAssetUrl('weapons/flame-sword.png'),
+    icon: gameAssetUrl('assets/weapons/flame-sword.png'),
   },
   'blood-sword': {
     id: 'blood-sword',
@@ -168,7 +168,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     requiredLevel: 8,
     sellValue: 450,
     socketCount: 2,
-    icon: gameAssetUrl('weapons/blood-sword.png'),
+    icon: gameAssetUrl('assets/weapons/blood-sword.png'),
   },
   'demon-sword': {
     id: 'demon-sword',
@@ -180,7 +180,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     requiredLevel: 9,
     sellValue: 500,
     socketCount: 2,
-    icon: gameAssetUrl('weapons/demon-sword.png'),
+    icon: gameAssetUrl('assets/weapons/demon-sword.png'),
   },
   'outer-robe': {
     id: 'outer-robe',
@@ -189,7 +189,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     slot: 'armor',
     bonuses: { maxHp: 16, defense: 2 },
     socketCount: 1,
-    icon: gameAssetUrl('items/equipment/outer-robe.png'),
+    icon: gameAssetUrl('assets/items/equipment/outer-robe.png'),
   },
   'jade-pendant': {
     id: 'jade-pendant',
@@ -197,7 +197,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'equip',
     slot: 'accessory',
     bonuses: { maxSpiritualPower: 6 },
-    icon: gameAssetUrl('items/equipment/jade-pendant.png'),
+    icon: gameAssetUrl('assets/items/equipment/jade-pendant.png'),
   },
   'frost-talisman': {
     id: 'frost-talisman',
@@ -207,7 +207,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     bonuses: { attack: 2, maxSpiritualPower: 4 },
     rarity: 'epic',
     socketCount: 2,
-    icon: gameAssetUrl('items/equipment/frost-talisman.png'),
+    icon: gameAssetUrl('assets/items/equipment/frost-talisman.png'),
   },
   'spirit-stone': {
     id: 'spirit-stone',
@@ -217,7 +217,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     sellValue: 5,
     buyValue: 12,
     maxStack: 20,
-    icon: gameAssetUrl('items/consumables/spirit-stone.png'),
+    icon: gameAssetUrl('assets/items/consumables/spirit-stone.png'),
   },
   'yeu-huyet': {
     id: 'yeu-huyet',
@@ -227,7 +227,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     maxStack: 30,
     sellValue: 8,
     buyValue: 28,
-    icon: gameAssetUrl('items/materials/yeu-huyet.png'),
+    icon: gameAssetUrl('assets/items/materials/yeu-huyet.png'),
   },
   'linh-cot-ha': {
     id: 'linh-cot-ha',
@@ -237,7 +237,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     maxStack: 20,
     sellValue: 14,
     buyValue: 48,
-    icon: gameAssetUrl('items/materials/linh-cot-ha.png'),
+    icon: gameAssetUrl('assets/items/materials/linh-cot-ha.png'),
   },
   'linh-cot-trung': {
     id: 'linh-cot-trung',
@@ -247,7 +247,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     maxStack: 20,
     sellValue: 28,
     buyValue: 95,
-    icon: gameAssetUrl('items/materials/linh-cot-trung.png'),
+    icon: gameAssetUrl('assets/items/materials/linh-cot-trung.png'),
   },
   'yeu-dan': {
     id: 'yeu-dan',
@@ -257,7 +257,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     maxStack: 10,
     sellValue: 40,
     buyValue: 140,
-    icon: gameAssetUrl('items/materials/yeu-dan.png'),
+    icon: gameAssetUrl('assets/items/materials/yeu-dan.png'),
   },
   'truc-co-dan': {
     id: 'truc-co-dan',
@@ -267,7 +267,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     maxStack: 5,
     sellValue: 120,
     buyValue: 320,
-    icon: gameAssetUrl('items/materials/truc-co-dan.png'),
+    icon: gameAssetUrl('assets/items/materials/truc-co-dan.png'),
   },
   'ket-dan-dan': {
     id: 'ket-dan-dan',
@@ -277,7 +277,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     maxStack: 5,
     sellValue: 280,
     buyValue: 780,
-    icon: gameAssetUrl('items/materials/ket-dan-dan.png'),
+    icon: gameAssetUrl('assets/items/materials/ket-dan-dan.png'),
   },
   'huyet-ma-tinh': {
     id: 'huyet-ma-tinh',
@@ -286,7 +286,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     rarity: 'epic',
     maxStack: 5,
     sellValue: 90,
-    icon: gameAssetUrl('items/materials/huyet-ma-tinh.png'),
+    icon: gameAssetUrl('assets/items/materials/huyet-ma-tinh.png'),
   },
   'wood-stone': {
     id: 'wood-stone',
@@ -294,7 +294,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'consumable',
     cultivationXp: 18,
     sellValue: 15,
-    icon: gameAssetUrl('resources/stones/stone-wood.png'),
+    icon: gameAssetUrl('assets/resources/stones/stone-wood.webp'),
   },
   'water-stone': {
     id: 'water-stone',
@@ -302,7 +302,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'consumable',
     cultivationXp: 28,
     sellValue: 24,
-    icon: gameAssetUrl('resources/stones/stone-water.png'),
+    icon: gameAssetUrl('assets/resources/stones/stone-water.webp'),
   },
   'fire-stone': {
     id: 'fire-stone',
@@ -310,7 +310,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'consumable',
     cultivationXp: 42,
     sellValue: 38,
-    icon: gameAssetUrl('resources/stones/stone-fire.png'),
+    icon: gameAssetUrl('assets/resources/stones/stone-fire.webp'),
   },
   'earth-stone': {
     id: 'earth-stone',
@@ -318,7 +318,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'consumable',
     cultivationXp: 58,
     sellValue: 55,
-    icon: gameAssetUrl('resources/stones/stone-earth.png'),
+    icon: gameAssetUrl('assets/resources/stones/stone-earth.webp'),
   },
   'void-stone': {
     id: 'void-stone',
@@ -326,7 +326,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     kind: 'consumable',
     cultivationXp: 85,
     sellValue: 80,
-    icon: gameAssetUrl('resources/stones/stone-void.png'),
+    icon: gameAssetUrl('assets/resources/stones/stone-void.webp'),
   },
   'spirit-herb': {
     id: 'spirit-herb',
@@ -336,7 +336,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     sellValue: 10,
     buyValue: 24,
     maxStack: 20,
-    icon: gameAssetUrl('items/consumables/spirit-herb.png'),
+    icon: gameAssetUrl('assets/items/consumables/spirit-herb.png'),
   },
   'blood-berry': {
     id: 'blood-berry',
@@ -346,7 +346,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     sellValue: 16,
     buyValue: 38,
     maxStack: 20,
-    icon: gameAssetUrl('items/consumables/blood-berry.png'),
+    icon: gameAssetUrl('assets/items/consumables/blood-berry.png'),
   },
   'earth-fruit': {
     id: 'earth-fruit',
@@ -357,7 +357,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     sellValue: 24,
     buyValue: 58,
     maxStack: 20,
-    icon: gameAssetUrl('items/consumables/earth-fruit.png'),
+    icon: gameAssetUrl('assets/items/consumables/earth-fruit.png'),
   },
   'essence-root': {
     id: 'essence-root',
@@ -367,7 +367,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     sellValue: 45,
     buyValue: 110,
     maxStack: 20,
-    icon: gameAssetUrl('items/consumables/essence-root.png'),
+    icon: gameAssetUrl('assets/items/consumables/essence-root.png'),
   },
   'spirit-herb-seed': {
     id: 'spirit-herb-seed',
@@ -377,7 +377,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     maxStack: 20,
     buyValue: 8,
     sellValue: 2,
-    icon: gameAssetUrl('items/farm/spirit-herb-seed.png'),
+    icon: gameAssetUrl('assets/items/farm/spirit-herb-seed.png'),
   },
   'blood-berry-seed': {
     id: 'blood-berry-seed',
@@ -387,7 +387,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     maxStack: 20,
     buyValue: 14,
     sellValue: 4,
-    icon: gameAssetUrl('items/farm/blood-berry-seed.png'),
+    icon: gameAssetUrl('assets/items/farm/blood-berry-seed.png'),
   },
   'earth-fruit-seed': {
     id: 'earth-fruit-seed',
@@ -397,7 +397,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     maxStack: 20,
     buyValue: 24,
     sellValue: 7,
-    icon: gameAssetUrl('items/farm/earth-fruit-seed.png'),
+    icon: gameAssetUrl('assets/items/farm/earth-fruit-seed.png'),
   },
   'essence-root-seed': {
     id: 'essence-root-seed',
@@ -407,7 +407,7 @@ export const ITEM_CATALOG: Record<string, ItemDef> = {
     maxStack: 20,
     buyValue: 50,
     sellValue: 14,
-    icon: gameAssetUrl('items/farm/essence-root-seed.png'),
+    icon: gameAssetUrl('assets/items/farm/essence-root-seed.png'),
   },
   ...Object.fromEntries(
     Object.values(GEM_CATALOG).map((gem) => [

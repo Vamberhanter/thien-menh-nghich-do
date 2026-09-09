@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import type { HuyetLang } from '../entities/HuyetLang';
-import type { Vector2Like } from '../types';
 import { isGameplayGated } from '../../net/bind';
-import { consumePad, padMove } from '../touchPad';
+import { KIT_INPUT, kitBindings, type Binding } from '../input/bindings';
+import { InputMap } from '../input/InputMap';
 import { autoAim } from './autoAim';
 
 /**
@@ -15,41 +15,24 @@ import { autoAim } from './autoAim';
  *   Space              Liệt Ảnh Bộ
  */
 export class HuyetLangController {
-  private readonly keys: {
-    up: Phaser.Input.Keyboard.Key[];
-    down: Phaser.Input.Keyboard.Key[];
-    left: Phaser.Input.Keyboard.Key[];
-    right: Phaser.Input.Keyboard.Key[];
-    attack: Phaser.Input.Keyboard.Key[];
-    magmaSlash: Phaser.Input.Keyboard.Key[];
-    roar: Phaser.Input.Keyboard.Key[];
-    dash: Phaser.Input.Keyboard.Key[];
-    ultimate: Phaser.Input.Keyboard.Key[];
-  };
+  private readonly input: InputMap;
+  /** Slot *i* is the i-th name in the kit’s skill list — see `bindings.ts`. */
+  private readonly slots: readonly Binding[];
+  private readonly attackKey: Binding;
 
   private enabled = true;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     private readonly player: HuyetLang,
   ) {
     const keyboard = scene.input.keyboard;
     if (!keyboard) throw new Error('HuyetLangController requires a keyboard plugin');
 
-    const addKeys = (...codes: number[]) => codes.map((code) => keyboard.addKey(code, false));
-    const K = Phaser.Input.Keyboard.KeyCodes;
-
-    this.keys = {
-      up: addKeys(K.W, K.UP),
-      down: addKeys(K.S, K.DOWN),
-      left: addKeys(K.A, K.LEFT),
-      right: addKeys(K.D, K.RIGHT),
-      attack: addKeys(K.J),
-      magmaSlash: addKeys(K.K),
-      roar: addKeys(K.L),
-      dash: addKeys(K.SPACE),
-      ultimate: addKeys(K.U),
-    };
+    const kit = KIT_INPUT['huyetlang'];
+    this.input = new InputMap(keyboard, kitBindings('huyetlang'));
+    this.slots = kit.slots;
+    this.attackKey = kit.attack;
   }
 
   setEnabled(enabled: boolean): void {
@@ -70,22 +53,22 @@ export class HuyetLangController {
     // has not run yet this frame, so the facing on the sprite is one frame old,
     // and pressing a direction and a skill together used to fire the skill the
     // way the character was already looking.
-    const steer = this.readSteer();
+    const steer = this.input.axis();
     // Only the techniques take the assisted heading; `steer` stays raw for the
     // dash, which is a decision about where to go rather than about what to
     // hit. Deferred rather than computed here, because at most one of the
     // branches below runs and the scan is wasted on every frame that fires
     // nothing — which is nearly all of them.
     const aimed = () => autoAim(this.player, steer);
-    if (anyJustDown(this.keys.ultimate) || consumePad('skill3')) {
+    if (this.input.pressed(this.slots[3])) {
       this.player.castUltimate(aimed());
-    } else if (anyJustDown(this.keys.dash) || consumePad('skill2')) {
+    } else if (this.input.pressed(this.slots[2])) {
       this.player.dash(steer);
-    } else if (anyJustDown(this.keys.roar) || consumePad('skill1')) {
+    } else if (this.input.pressed(this.slots[1])) {
       this.player.castRoar(aimed());
-    } else if (anyJustDown(this.keys.magmaSlash) || consumePad('skill0')) {
+    } else if (this.input.pressed(this.slots[0])) {
       this.player.castMagmaSlash(aimed());
-    } else if (anyJustDown(this.keys.attack) || consumePad('attack')) {
+    } else if (this.input.pressed(this.attackKey)) {
       this.player.attack(aimed());
     }
 
@@ -94,36 +77,11 @@ export class HuyetLangController {
       return;
     }
 
-    this.player.move(this.readSteer());
-  }
-
-  private readSteer(): Vector2Like {
-    const keys = this.readAxis();
-    if (keys.x !== 0 || keys.y !== 0) return keys;
-    const pad = padMove();
-    return { x: pad.x, y: pad.y };
-  }
-
-  private readAxis(): Vector2Like {
-    let x = 0;
-    let y = 0;
-    if (anyDown(this.keys.left)) x -= 1;
-    if (anyDown(this.keys.right)) x += 1;
-    if (anyDown(this.keys.up)) y -= 1;
-    if (anyDown(this.keys.down)) y += 1;
-    return { x, y };
+    this.player.move(this.input.axis());
   }
 
   destroy(): void {
-    const keyboard = this.scene.input.keyboard;
-    if (!keyboard) return;
-    for (const group of Object.values(this.keys)) {
-      for (const key of group) keyboard.removeKey(key, true);
-    }
+    this.input.destroy();
   }
 }
 
-const anyDown = (keys: Phaser.Input.Keyboard.Key[]) => keys.some((key) => key.isDown);
-
-const anyJustDown = (keys: Phaser.Input.Keyboard.Key[]) =>
-  keys.some((key) => Phaser.Input.Keyboard.JustDown(key));

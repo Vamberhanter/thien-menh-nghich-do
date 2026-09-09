@@ -59,14 +59,14 @@ export const WanKiemTexture = {
 } as const;
 
 export const WAN_KIEM_TEXTURES = [
-  { key: WanKiemTexture.Summon, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/01_summon.png') },
-  { key: WanKiemTexture.Convergence, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/02_convergence.png') },
-  { key: WanKiemTexture.Charge, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/03_charge.png') },
-  { key: WanKiemTexture.Explosion, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/04_explosion.png') },
-  { key: WanKiemTexture.SwordRain, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/05_sword_rain.png') },
-  { key: WanKiemTexture.GiantSword, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/06_giant_sword.png') },
-  { key: WanKiemTexture.GiantImpact, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/07_giant_impact.png') },
-  { key: WanKiemTexture.FinalBurst, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/08_final_burst.png') },
+  { key: WanKiemTexture.Summon, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/01_summon.webp') },
+  { key: WanKiemTexture.Convergence, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/02_convergence.webp') },
+  { key: WanKiemTexture.Charge, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/03_charge.webp') },
+  { key: WanKiemTexture.Explosion, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/04_explosion.webp') },
+  { key: WanKiemTexture.SwordRain, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/05_sword_rain.webp') },
+  { key: WanKiemTexture.GiantSword, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/06_giant_sword.webp') },
+  { key: WanKiemTexture.GiantImpact, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/07_giant_impact.webp') },
+  { key: WanKiemTexture.FinalBurst, url: gameAssetUrl('assets/vfx/wan-kiem-quy-tong/08_final_burst.webp') },
 ] as const;
 
 /**

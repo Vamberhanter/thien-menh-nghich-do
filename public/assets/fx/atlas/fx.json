@@ -1,0 +1,521 @@
+{
+  "textures": [
+    {
+      "image": "fx-ground.webp",
+      "format": "RGBA8888",
+      "size": {
+        "w": 772,
+        "h": 1057
+      },
+      "scale": 1,
+      "frames": [
+        {
+          "filename": "ground_break_0",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 53,
+            "y": 191,
+            "w": 245,
+            "h": 65
+          },
+          "frame": {
+            "x": 457,
+            "y": 913,
+            "w": 245,
+            "h": 65
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_1",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 85,
+            "y": 150,
+            "w": 246,
+            "h": 106
+          },
+          "frame": {
+            "x": 263,
+            "y": 772,
+            "w": 246,
+            "h": 106
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_2",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 57,
+            "y": 114,
+            "w": 247,
+            "h": 142
+          },
+          "frame": {
+            "x": 244,
+            "y": 621,
+            "w": 247,
+            "h": 142
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_3",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 41,
+            "y": 42,
+            "w": 245,
+            "h": 214
+          },
+          "frame": {
+            "x": 270,
+            "y": 1,
+            "w": 245,
+            "h": 214
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_4",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 48,
+            "y": 42,
+            "w": 254,
+            "h": 214
+          },
+          "frame": {
+            "x": 516,
+            "y": 1,
+            "w": 254,
+            "h": 214
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_5",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 52,
+            "y": 101,
+            "w": 221,
+            "h": 155
+          },
+          "frame": {
+            "x": 208,
+            "y": 464,
+            "w": 221,
+            "h": 155
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_6",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 50,
+            "y": 101,
+            "w": 243,
+            "h": 155
+          },
+          "frame": {
+            "x": 430,
+            "y": 464,
+            "w": 243,
+            "h": 155
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_7",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 50,
+            "y": 106,
+            "w": 242,
+            "h": 150
+          },
+          "frame": {
+            "x": 1,
+            "y": 621,
+            "w": 242,
+            "h": 150
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_8",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 25,
+            "y": 47,
+            "w": 277,
+            "h": 209
+          },
+          "frame": {
+            "x": 1,
+            "y": 254,
+            "w": 277,
+            "h": 209
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_9",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 35,
+            "y": 4,
+            "w": 268,
+            "h": 252
+          },
+          "frame": {
+            "x": 1,
+            "y": 1,
+            "w": 268,
+            "h": 252
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_10",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 50,
+            "y": 71,
+            "w": 228,
+            "h": 185
+          },
+          "frame": {
+            "x": 279,
+            "y": 254,
+            "w": 228,
+            "h": 185
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_11",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 49,
+            "y": 71,
+            "w": 232,
+            "h": 185
+          },
+          "frame": {
+            "x": 508,
+            "y": 254,
+            "w": 232,
+            "h": 185
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_12",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 63,
+            "y": 100,
+            "w": 206,
+            "h": 156
+          },
+          "frame": {
+            "x": 1,
+            "y": 464,
+            "w": 206,
+            "h": 156
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_13",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 51,
+            "y": 116,
+            "w": 227,
+            "h": 140
+          },
+          "frame": {
+            "x": 492,
+            "y": 621,
+            "w": 227,
+            "h": 140
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_14",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 42,
+            "y": 116,
+            "w": 261,
+            "h": 140
+          },
+          "frame": {
+            "x": 1,
+            "y": 772,
+            "w": 261,
+            "h": 140
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_15",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 42,
+            "y": 172,
+            "w": 257,
+            "h": 84
+          },
+          "frame": {
+            "x": 510,
+            "y": 772,
+            "w": 257,
+            "h": 84
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_16",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 55,
+            "y": 180,
+            "w": 255,
+            "h": 76
+          },
+          "frame": {
+            "x": 201,
+            "y": 913,
+            "w": 255,
+            "h": 76
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_17",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 63,
+            "y": 194,
+            "w": 249,
+            "h": 62
+          },
+          "frame": {
+            "x": 1,
+            "y": 994,
+            "w": 249,
+            "h": 62
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_18",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 71,
+            "y": 203,
+            "w": 223,
+            "h": 53
+          },
+          "frame": {
+            "x": 251,
+            "y": 994,
+            "w": 223,
+            "h": 53
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        },
+        {
+          "filename": "ground_break_19",
+          "rotated": false,
+          "trimmed": true,
+          "sourceSize": {
+            "w": 334,
+            "h": 258
+          },
+          "spriteSourceSize": {
+            "x": 45,
+            "y": 176,
+            "w": 199,
+            "h": 80
+          },
+          "frame": {
+            "x": 1,
+            "y": 913,
+            "w": 199,
+            "h": 80
+          },
+          "anchor": {
+            "x": 0.5,
+            "y": 0.9844961240310077
+          }
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "app": "thien-menh-nghich-do/tools/build-fx-atlas.mjs",
+    "version": "1.0",
+    "source": "source-art/gameplay/phahoai.png",
+    "note": "shared gameplay effects; every frame carries a normalised ground anchor"
+  }
+}

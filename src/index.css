@@ -19,31 +19,49 @@ body {
   overflow: hidden;
 }
 
+/*
+ * Full-bleed always, on a phone tab or a desktop window: the game fills the
+ * viewport edge to edge, no exception. It used to earn a centred 1280x720 box
+ * back past a width breakpoint — measured on an ordinary desktop window, that
+ * box left plain dark margin either side (the page's own background) the
+ * width breakpoint was supposed to have already grown past. The web direction
+ * is mobile-first outright, not "mobile, with a desktop exception clawed back
+ * by a media query" — so there is no exception left to write. Phaser's own
+ * FIT mode still keeps the 16:9 game undistorted inside whatever box this is,
+ * which is the one place letterboxing can still legitimately show up: a
+ * monitor wider than 16:9 (a 21:9 ultrawide) still pillarboxes right and
+ * left, and there is no honest way to fill that without either stretching
+ * the pixel art or showing more world than the game was designed to reveal.
+ *
+ * `line-height:0`'s old job (killing the inline-image gap under the canvas)
+ * is moot once the canvas is positioned rather than laid out inline, so it
+ * is not carried over.
+ */
+#root,
 .app {
-  display: grid;
-  place-items: center;
+  width: 100%;
   height: 100%;
 }
 
 .stage {
-  position: relative;
-  line-height: 0;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
 }
 
-/*
- * The canvas draws at device resolution (RENDER_SCALE) and is then shown at the
- * logical 1280x720, so the box has to be stated: without a size on the parent
- * Phaser's FIT mode has nothing to fit to and leaves the canvas at its full
- * backing-store size, which overflows the page.
- */
 .game-canvas {
-  width: 1280px;
-  max-width: 100%;
-  aspect-ratio: 16 / 9;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .game-canvas canvas {
   display: block;
+  max-width: 100%;
+  max-height: 100%;
   /*
    * Deliberately NOT `pixelated`. That was right when the backing store was
    * 1280x720 and the browser had to blow it up — nearest-neighbour at least
@@ -805,6 +823,13 @@ body {
 
 /* ----------------------------------------------------------- mobile pad */
 
+/*
+ * Sizing-wise this now only repeats the full-bleed base further up — there is
+ * no longer a desktop box for it to out-rank. What it still does on its own:
+ * the touch-only behaviour (`touch-action`, `overscroll-behavior`) that was
+ * never the base's job, and it stays rather than being folded into the base
+ * because `.hud__hint`/`.hud__skills--keys` etc. below share its selector.
+ */
 html.is-touch,
 html.is-touch body,
 html.is-touch .app {
@@ -1430,4 +1455,467 @@ html.is-touch .warp {
   .quest-tracker {
     display: none;
   }
+}
+
+/*
+ * Conversation box.
+ *
+ * Bottom-centred and 720px wide at most: it has to sit under the action rather
+ * than over it, because the world keeps running while somebody talks — the
+ * character is only stopped from *walking*, not from being hit. The palette is
+ * the HUD's own (#0a0e18 ground, gold rule) so it reads as part of the game
+ * frame and not as a browser dialog.
+ */
+.dialogue {
+  position: absolute;
+  bottom: 92px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, calc(100% - 32px));
+  z-index: 40;
+  pointer-events: none;
+}
+
+.dialogue__panel {
+  position: relative;
+  padding: 12px 14px 14px;
+  background: rgba(10, 14, 24, 0.94);
+  border: 1px solid #6b5a2a;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+}
+
+.dialogue__speaker {
+  margin-bottom: 6px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #e8c48a;
+  text-transform: uppercase;
+}
+
+.dialogue__text {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #e9f3ff;
+}
+
+.dialogue__choices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dialogue__choice {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: #e9f3ff;
+  text-align: left;
+  background: rgba(24, 30, 46, 0.9);
+  border: 1px solid #2c3448;
+  cursor: pointer;
+}
+
+.dialogue__choice:hover,
+.dialogue__choice:focus-visible {
+  color: #ffe9a8;
+  background: rgba(38, 46, 68, 0.95);
+  border-color: #6b5a2a;
+}
+
+/* The number is the keyboard shortcut, so it is drawn like a key. */
+.dialogue__choice em {
+  flex: 0 0 auto;
+  min-width: 16px;
+  font-size: 11px;
+  font-style: normal;
+  color: #9fb4d0;
+  text-align: center;
+  border: 1px solid #3a4460;
+}
+
+.dialogue__next {
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: #ffe9a8;
+  background: rgba(24, 30, 46, 0.9);
+  border: 1px solid #6b5a2a;
+  cursor: pointer;
+}
+
+.dialogue__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 10px;
+  color: #9fb4d0;
+  background: transparent;
+  border: 1px solid #2c3448;
+  cursor: pointer;
+}
+
+/* -------------------------------------------------------------- map editor */
+
+.map-editor {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  width: min(640px, 94vw);
+  max-height: 82vh;
+  overflow-y: auto;
+  padding: 10px;
+  background: rgba(12, 16, 28, 0.96);
+  border: 2px solid #6fd8ff;
+  box-shadow: inset 0 0 0 2px #10131f, 0 0 0 2px #05070d;
+  pointer-events: auto;
+  line-height: 1.3;
+  z-index: 30;
+  font-size: 12px;
+  color: #e9f3ff;
+}
+
+.map-editor button {
+  font: inherit;
+  font-size: 11px;
+  color: #e9f3ff;
+  background: #141a2b;
+  border: 1px solid #39406a;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+
+.map-editor button.is-active,
+.map-editor button:hover {
+  border-color: #6fd8ff;
+  color: #9fe8ff;
+}
+
+.map-editor__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.map-editor__title {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: #6fd8ff;
+}
+
+.map-editor__title em {
+  font-style: normal;
+  color: #ffe066;
+}
+
+.map-editor__counts {
+  font-size: 10px;
+  color: #8fa0c4;
+  margin-left: auto;
+}
+
+.map-editor__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.map-editor__tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.map-editor__palette {
+  margin-bottom: 8px;
+}
+
+.map-editor__categories {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.map-editor__items {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.map-editor__hint {
+  margin: 6px 0 0;
+  font-size: 9px;
+  color: #7c8aab;
+}
+
+.map-editor__inspector {
+  padding: 8px;
+  background: #0a0e18;
+  border: 1px solid #39406a;
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.map-editor__inspector-title {
+  font-size: 11px;
+  color: #ffe066;
+}
+
+.map-editor__inspector label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: #c9d6ee;
+}
+
+.map-editor__inspector input,
+.map-editor__inspector select {
+  font: inherit;
+  font-size: 11px;
+  color: #e9f3ff;
+  background: #141a2b;
+  border: 1px solid #39406a;
+  padding: 4px 6px;
+  width: 140px;
+}
+
+.map-editor__delete {
+  justify-self: start;
+  color: #ff8a8a;
+}
+
+.map-editor__map-panel {
+  padding: 8px;
+  background: #0a0e18;
+  border: 1px solid #39406a;
+  display: grid;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.map-editor__map-section {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #262d4a;
+}
+
+.map-editor__map-section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.map-editor__map-section-title {
+  font-size: 11px;
+  color: #ffe066;
+}
+
+.map-editor__map-section label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: #c9d6ee;
+}
+
+.map-editor__map-section input {
+  font: inherit;
+  font-size: 11px;
+  color: #e9f3ff;
+  background: #141a2b;
+  border: 1px solid #39406a;
+  padding: 4px 6px;
+  width: 140px;
+}
+
+.map-editor__map-section button {
+  justify-self: start;
+}
+
+.map-editor__notice {
+  margin: 0;
+  font-size: 10px;
+  color: #8ee6a8;
+  background: #0e1f16;
+  border: 1px solid #2c5a3d;
+  padding: 6px 8px;
+}
+
+.map-editor__map-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.map-editor__map-list button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+
+.map-editor__map-list-name {
+  font-size: 11px;
+  color: #e9f3ff;
+}
+
+.map-editor__map-list-meta {
+  font-size: 9px;
+  color: #7c8aab;
+}
+
+.map-editor__map-list-manual {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #262d4a;
+}
+
+.map-editor__export {
+  border-top: 1px solid #39406a;
+  padding-top: 8px;
+}
+
+.map-editor__export-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 10px;
+  color: #8fa0c4;
+}
+
+.map-editor__export textarea {
+  width: 100%;
+  height: 220px;
+  font-family: 'Courier New', ui-monospace, monospace;
+  font-size: 10px;
+  color: #cfe8ff;
+  background: #05070d;
+  border: 1px solid #39406a;
+  padding: 8px;
+  resize: vertical;
+}
+
+.map-editor__prop-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 72px;
+  padding: 6px 4px;
+  text-align: center;
+  white-space: normal;
+  line-height: 1.15;
+}
+
+.map-editor__thumb {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  background: #05070d;
+  border: 1px solid #2c3448;
+  flex: none;
+}
+
+.map-editor__thumb--empty {
+  opacity: 0.4;
+}
+
+.map-editor__prop-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: #c9d6ee;
+}
+
+.map-editor__tabs--sub {
+  margin-bottom: 6px;
+}
+
+.map-editor__tabs--sub button {
+  font-size: 10px;
+  padding: 4px 8px;
+}
+
+.map-editor__browse-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.map-editor__browse-bar select,
+.map-editor__browse-bar input {
+  font: inherit;
+  font-size: 11px;
+  color: #e9f3ff;
+  background: #141a2b;
+  border: 1px solid #39406a;
+  padding: 5px 7px;
+}
+
+.map-editor__browse-bar select {
+  min-width: 160px;
+}
+
+.map-editor__browse-bar input {
+  flex: 1;
+}
+
+.map-editor__items--grid {
+  max-height: 320px;
+  overflow-y: auto;
+  align-content: flex-start;
+}
+
+.map-editor__danger {
+  color: #ff8a8a;
+  border-color: #7a3a3a;
+}
+
+.map-editor__danger:hover {
+  border-color: #ff8a8a;
+  color: #ffb3b3;
+}
+
+.map-editor__context-menu {
+  position: fixed;
+  z-index: 10000;
+  transform: translate(-50%, 12px);
+  font: inherit;
+  font-size: 12px;
+  color: #ffdede;
+  background: #3a1414;
+  border: 1px solid #c9524f;
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.map-editor__context-menu:hover {
+  background: #4d1a1a;
+  border-color: #ff8a8a;
 }

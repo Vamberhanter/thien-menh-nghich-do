@@ -379,10 +379,21 @@
   display: none;
 }
 
+/*
+ * The create/load step is one dedicated screen (`CharacterSelectScreen`,
+ * laying out its own three columns internally) rather than a second column
+ * beside the main menu — so `rod-col--create` takes the whole row here and
+ * `rod-col--menu` steps aside instead of sitting beside it half-hidden.
+ */
 .rod__body[data-view='create'] {
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.92fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
+.rod__body[data-view='create'] .rod-col--create {
+  grid-column: 1 / -1;
+}
+
+.rod__body[data-view='create'] .rod-col--menu,
 .rod__body[data-view='create'] .rod-col--join {
   display: none;
 }
@@ -578,7 +589,7 @@
 
 .rod-classes {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -693,6 +704,351 @@
     linear-gradient(180deg, var(--gold) 0 12px, transparent 12px) no-repeat left top / 1px 100%,
     linear-gradient(270deg, var(--gold) 0 12px, transparent 12px) no-repeat right bottom / 100% 1px,
     linear-gradient(0deg, var(--gold) 0 12px, transparent 12px) no-repeat right bottom / 1px 100%;
+}
+
+.rod-class--locked {
+  cursor: not-allowed;
+}
+
+.rod-class__art--locked {
+  background: radial-gradient(120% 100% at 50% 0%, #201c1a 0%, #0a0908 75%);
+}
+
+.rod-class__lock {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  transform: translate(-50%, -50%);
+  font-size: 20px;
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+
+.rod-class--locked .rod-class__name strong,
+.rod-class--locked .rod-class__name em {
+  color: #55503f;
+}
+
+.rod-class-wrap {
+  position: relative;
+}
+
+.rod-class__del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: #e8c4a6;
+  background: rgba(48, 10, 12, 0.88);
+  border: 1px solid rgba(160, 52, 48, 0.7);
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.rod-class__del:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(120, 22, 24, 0.95);
+  opacity: 1;
+}
+
+.rod-class__del:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------- character select screen */
+
+.rod-select {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 0.95fr);
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+}
+
+.rod-select__list,
+.rod-select__stage,
+.rod-select__info {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 9px;
+  overflow: hidden;
+}
+
+.rod-select__list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 5px 4px;
+}
+
+.rod-select__stage {
+  position: relative;
+  padding: 0;
+}
+
+.rod-stage__art {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-position: 50% 10%;
+  background-size: cover;
+  filter: saturate(0.95) brightness(0.78) contrast(1.04);
+}
+
+.rod-stage__shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(6, 5, 8, 0.55) 0%,
+    rgba(6, 5, 8, 0.06) 22%,
+    rgba(6, 5, 8, 0.1) 55%,
+    rgba(5, 4, 7, 0.92) 100%
+  );
+}
+
+.rod-stage__title {
+  position: relative;
+  z-index: 1;
+  margin: 16px 0 0 16px;
+  font-family: var(--font-gothic);
+  font-size: clamp(22px, 3.4vw, 34px);
+  letter-spacing: 0.06em;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8), 0 0 24px rgba(232, 196, 106, 0.35);
+}
+
+.rod-stage__tag {
+  position: relative;
+  z-index: 1;
+  margin: 4px 0 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.rod-stage__tag-dot {
+  color: var(--brass-500);
+}
+
+.rod-stage__bottom {
+  position: relative;
+  z-index: 1;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px 14px;
+}
+
+.rod-info__tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.rod-info__tabs button {
+  flex: 1;
+  padding: 7px 6px;
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ash-dim);
+  background: #0a090c;
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.28);
+  cursor: pointer;
+}
+
+.rod-info__tabs button.is-on {
+  color: var(--gold);
+  background: linear-gradient(180deg, rgba(50, 38, 12, 0.6), rgba(10, 9, 12, 0.9));
+  box-shadow: inset 0 0 0 1px rgba(232, 196, 106, 0.55);
+}
+
+.rod-info__scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 2px 5px 4px;
+}
+
+.rod-info__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rod-info__crest {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  background: linear-gradient(135deg, var(--brass-500), var(--gold));
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  box-shadow: 0 0 10px rgba(232, 196, 106, 0.4);
+}
+
+.rod-info__name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: var(--bone);
+}
+
+.rod-info__sub {
+  font-size: 10.5px;
+  color: var(--ash-dim);
+}
+
+.rod-info__blurb {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ash);
+}
+
+.rod-info__section-title {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #7d6b48;
+  border-bottom: 1px solid rgba(107, 83, 38, 0.35);
+  padding-bottom: 3px;
+}
+
+.rod-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rod-bar {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.rod-bar__label {
+  font-size: 10.5px;
+  color: var(--ash);
+}
+
+.rod-bar__track {
+  display: block;
+  height: 7px;
+  background: #0c0a0d;
+  border: 1px solid #040406;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.3);
+}
+
+.rod-bar__fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--brass-500), var(--gold));
+  box-shadow: 0 0 8px rgba(232, 196, 106, 0.45);
+}
+
+.rod-skill-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.rod-skill-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.rod-skill-badge__dot {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(232, 196, 106, 0.5), rgba(20, 18, 22, 0.9) 70%);
+  box-shadow: inset 0 0 0 1px rgba(232, 196, 106, 0.5), 0 0 10px rgba(232, 196, 106, 0.25);
+}
+
+.rod-skill-badge__label {
+  font-size: 8.5px;
+  line-height: 1.25;
+  color: var(--ash-dim);
+}
+
+.rod-skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rod-skill-row-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #0a090c;
+  box-shadow: inset 0 0 0 1px rgba(107, 83, 38, 0.28);
+}
+
+.rod-skill-row-item__tier {
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7d6b48;
+}
+
+.rod-skill-row-item__name {
+  font-size: 12px;
+  color: var(--bone);
+}
+
+@media (max-width: 1180px) {
+  .rod-select {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .rod-select__info {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 820px), (max-height: 520px) {
+  .rod-select {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .rod-select__info {
+    grid-column: auto;
+  }
+
+  .rod-select__stage {
+    min-height: 320px;
+  }
 }
 
 /* --------------------------------------------------------- fields & stats */
@@ -1802,10 +2158,6 @@
 @media (max-width: 1180px) {
   .rod__body {
     grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.7fr);
-  }
-
-  .rod__body[data-view='create'] {
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.9fr);
   }
 }
 

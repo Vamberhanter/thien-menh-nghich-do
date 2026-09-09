@@ -5,10 +5,24 @@ export type NpcRole = 'quest' | 'merchant' | 'gem' | 'alchemy';
 export interface NpcDefinition {
   id: string;
   name: string;
+  /**
+   * What this NPC is for.
+   *
+   * Still here after dialogue arrived, because it is the fallback: an NPC whose
+   * conversation has not been written yet opens the panel it always did, and
+   * the marker's colour is drawn from it. It is no longer the *only* thing that
+   * decides what talking to them does.
+   */
   role: NpcRole;
   zone: ZoneId;
   x: number;
   y: number;
+  /**
+   * Conversation to open, from `data/dialogue.ts`. Defaults to the NPC's own
+   * id, which is how all seven are keyed — spelled out only when one NPC
+   * should share another's tree or carry two.
+   */
+  dialogueId?: string;
 }
 
 export const NPCS: readonly NpcDefinition[] = [
@@ -23,4 +37,9 @@ export const NPCS: readonly NpcDefinition[] = [
 
 export function npcsInZone(zone: ZoneId): readonly NpcDefinition[] {
   return NPCS.filter((npc) => npc.zone === zone);
+}
+
+/** The tree an NPC opens — their own id unless they name another. */
+export function dialogueIdFor(npc: NpcDefinition): string {
+  return npc.dialogueId ?? npc.id;
 }

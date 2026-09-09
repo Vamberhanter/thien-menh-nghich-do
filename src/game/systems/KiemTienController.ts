@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import type { KiemTien } from '../entities/KiemTien';
-import type { Vector2Like } from '../types';
 import { isGameplayGated } from '../../net/bind';
-import { consumePad, padMove } from '../touchPad';
+import { KIT_INPUT, kitBindings, type Binding } from '../input/bindings';
+import { InputMap } from '../input/InputMap';
 import { autoAim } from './autoAim';
 
 /**
@@ -31,43 +31,24 @@ import { autoAim } from './autoAim';
  * which is worse than a technique that waits.
  */
 export class KiemTienController {
-  private readonly keys: {
-    up: Phaser.Input.Keyboard.Key[];
-    down: Phaser.Input.Keyboard.Key[];
-    left: Phaser.Input.Keyboard.Key[];
-    right: Phaser.Input.Keyboard.Key[];
-    attack: Phaser.Input.Keyboard.Key[];
-    cut: Phaser.Input.Keyboard.Key[];
-    lance: Phaser.Input.Keyboard.Key[];
-    rain: Phaser.Input.Keyboard.Key[];
-    blood: Phaser.Input.Keyboard.Key[];
-    ride: Phaser.Input.Keyboard.Key[];
-  };
+  private readonly input: InputMap;
+  /** Slot *i* is the i-th name in the kit’s skill list — see `bindings.ts`. */
+  private readonly slots: readonly Binding[];
+  private readonly attackKey: Binding;
 
   private enabled = true;
 
   constructor(
-    private readonly scene: Phaser.Scene,
+    scene: Phaser.Scene,
     private readonly player: KiemTien,
   ) {
     const keyboard = scene.input.keyboard;
     if (!keyboard) throw new Error('KiemTienController requires a keyboard plugin');
 
-    const addKeys = (...codes: number[]) => codes.map((code) => keyboard.addKey(code, false));
-    const K = Phaser.Input.Keyboard.KeyCodes;
-
-    this.keys = {
-      up: addKeys(K.W, K.UP),
-      down: addKeys(K.S, K.DOWN),
-      left: addKeys(K.A, K.LEFT),
-      right: addKeys(K.D, K.RIGHT),
-      attack: addKeys(K.J),
-      cut: addKeys(K.K),
-      lance: addKeys(K.L),
-      rain: addKeys(K.U),
-      blood: addKeys(K.O),
-      ride: addKeys(K.SPACE),
-    };
+    const kit = KIT_INPUT['kiemtien'];
+    this.input = new InputMap(keyboard, kitBindings('kiemtien'));
+    this.slots = kit.slots;
+    this.attackKey = kit.attack;
   }
 
   setEnabled(enabled: boolean): void {
@@ -89,24 +70,24 @@ export class KiemTienController {
     // direction and a technique together used to fire it the way she was
     // already looking. The order below is the priority when two land in the
     // same frame: the flight first, since it is the escape.
-    const steer = this.readSteer();
+    const steer = this.input.axis();
     // Only the techniques take the assisted heading; `steer` stays raw for the
     // dash, which is a decision about where to go rather than about what to
     // hit. Deferred rather than computed here, because at most one of the
     // branches below runs and the scan is wasted on every frame that fires
     // nothing — which is nearly all of them.
     const aimed = () => autoAim(this.player, steer);
-    if (anyJustDown(this.keys.ride) || consumePad('skill2')) {
+    if (this.input.pressed(this.slots[4])) {
       this.player.dash(steer);
-    } else if (anyJustDown(this.keys.blood)) {
+    } else if (this.input.pressed(this.slots[3])) {
       this.player.castBlood(aimed());
-    } else if (anyJustDown(this.keys.rain)) {
+    } else if (this.input.pressed(this.slots[2])) {
       this.player.castRain(aimed());
-    } else if (anyJustDown(this.keys.lance) || consumePad('skill1')) {
+    } else if (this.input.pressed(this.slots[1])) {
       this.player.castLance(aimed());
-    } else if (anyJustDown(this.keys.cut) || consumePad('skill0')) {
+    } else if (this.input.pressed(this.slots[0])) {
       this.player.castCut(aimed());
-    } else if (anyJustDown(this.keys.attack) || consumePad('attack')) {
+    } else if (this.input.pressed(this.attackKey)) {
       this.player.attack(aimed());
     }
 
@@ -115,40 +96,13 @@ export class KiemTienController {
       return;
     }
 
-    const keys = this.readKeys();
-    const usingKeys = keys.x !== 0 || keys.y !== 0;
-    const pad = padMove();
-    this.player.move(usingKeys ? keys : { x: pad.x, y: pad.y });
+    this.player.move(this.input.axis());
   }
 
   /** Heading an action should take, keyboard first then the touch stick. */
-  private readSteer(): Vector2Like {
-    const keys = this.readKeys();
-    if (keys.x !== 0 || keys.y !== 0) return keys;
-    const pad = padMove();
-    return { x: pad.x, y: pad.y };
-  }
-
-  private readKeys(): Vector2Like {
-    let x = 0;
-    let y = 0;
-    if (anyDown(this.keys.left)) x -= 1;
-    if (anyDown(this.keys.right)) x += 1;
-    if (anyDown(this.keys.up)) y -= 1;
-    if (anyDown(this.keys.down)) y += 1;
-    return { x, y };
-  }
 
   destroy(): void {
-    const keyboard = this.scene.input.keyboard;
-    if (!keyboard) return;
-    for (const group of Object.values(this.keys)) {
-      for (const key of group) keyboard.removeKey(key, true);
-    }
+    this.input.destroy();
   }
 }
 
-const anyDown = (keys: Phaser.Input.Keyboard.Key[]) => keys.some((key) => key.isDown);
-
-const anyJustDown = (keys: Phaser.Input.Keyboard.Key[]) =>
-  keys.some((key) => Phaser.Input.Keyboard.JustDown(key));

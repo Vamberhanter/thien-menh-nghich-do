@@ -12,7 +12,6 @@
     "inspect:nhuyen": "node tools/extract-nhuyen.mjs --report",
     "measure:nhuyen": "node tools/extract-nhuyen.mjs --measure",
     "dump:nhuyen": "node tools/extract-nhuyen.mjs --dump .tmp/nhuyen-frames",
-
     "gen:placeholder": "node tools/generate-lin-yuan-sprites.mjs",
     "env:manaseed": "node tools/build-manaseed-env.mjs",
     "env:monsters": "node tools/build-monsters.mjs",
@@ -48,7 +47,9 @@
     "upload:kiemtien": "node tools/upload-game-assets.mjs kiemtien",
     "upload:vfx": "node tools/upload-game-assets.mjs vfx",
     "upload:boss": "node tools/upload-game-assets.mjs boss",
-    "upload:assets": "node tools/upload-game-assets.mjs"
+    "upload:assets": "node tools/upload-game-assets.mjs",
+    "fx:build": "node tools/build-fx-atlas.mjs",
+    "env:nguhanhson": "node tools/build-nguhanhson.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.115.0",

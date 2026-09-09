@@ -16,12 +16,11 @@ import type { LobbyIdentity } from '../net/lobbyChat';
 import { createRoom, listRooms, subscribeRooms, type RoomInfo } from '../net/rooms';
 import type { NetCharacter } from '../net/types';
 import { AuthGate, type AuthMode } from './lobby/AuthGate';
-import { CharacterCreationPanel, type CreationMode } from './lobby/CharacterCreationPanel';
-import { classOf, writeGender, type Gender } from './lobby/classes';
+import { CharacterSelectScreen } from './lobby/CharacterSelectScreen';
+import { classOf, writeGender, type CreationMode, type Gender } from './lobby/classes';
 import { HeaderBar, type LobbyView } from './lobby/HeaderBar';
 import { JoinGamePanel } from './lobby/JoinGamePanel';
 import { MainMenuPanel } from './lobby/MainMenuPanel';
-import { StatsPanel } from './lobby/StatsPanel';
 import { useLobbyChat } from './lobby/useLobbyChat';
 
 /**
@@ -331,11 +330,6 @@ export function Lobby() {
     );
   }
 
-  const statSource =
-    creation === 'create' || !selectedAvatar
-      ? { character: newKit, level: 1, xp: 0 }
-      : { character: selectedAvatar.character, level: selectedAvatar.level, xp: selectedAvatar.xp };
-
   return (
     <div className="rod">
       <HeaderBar view={view} onView={setView} account={account.email} ping={chat.ping} />
@@ -345,9 +339,8 @@ export function Lobby() {
 
       <div className="rod__body" data-view={view}>
         <div className="rod-col rod-col--side rod-col--create">
-          <CharacterCreationPanel
+          <CharacterSelectScreen
             mode={creation}
-            focused={view === 'create'}
             pick={newKit}
             onPick={pickClass}
             gender={gender}
@@ -360,11 +353,6 @@ export function Lobby() {
             onAvatar={chooseAvatar}
             onDeleteAvatar={(row) => void removeAvatar(row)}
             busy={busy}
-          />
-          <StatsPanel
-            character={statSource.character}
-            level={statSource.level}
-            xp={statSource.xp}
           />
         </div>
 

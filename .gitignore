@@ -26,3 +26,6 @@ public/assets/resources/**/*.png
 
 # Large vendor packs (optional local staging; keep out of accidental commits of drafts only if needed)
 # Packs under source-art/packs are intentionally tracked or left to the developer.
+
+# Generated from source-art/gameplay by `npm run fx:build`.
+public/assets/fx/**/*.webp

@@ -1,37 +1,18 @@
 import Phaser from 'phaser';
 import { BootScene } from '../scenes/BootScene';
 import { WorldScene } from '../WorldScene';
+import { GAME_HEIGHT, GAME_WIDTH, PIXEL_SNAP, RENDER_SCALE } from './renderScale';
 
-/** The world the cameras show, in world units. Not the canvas size. */
-export const GAME_WIDTH = 1280;
-export const GAME_HEIGHT = 720;
-
-/**
- * How many device pixels the game draws for each world unit.
- *
- * The canvas used to be 1280x720 whatever the display, and the browser then
- * stretched it to fill: on a screen at devicePixelRatio 1.25 every pixel was
- * blown up by a quarter, on a 4K laptop by two or more. That is thrown-away
- * sharpness the art already has and paid for — measured on the character, the
- * display was asking for 144 pixels of him where the texture held 115.
- *
- * So the canvas is sized in device pixels and every camera is zoomed by the
- * same factor, which keeps the visible world identical while drawing more
- * pixels into it.
- *
- * Quantised to halves and capped at 2. The cap is cost: at 2 the renderer is
- * pushing four times the pixels. The quantising is `roundPixels` — the scenery
- * is pixel art and wants to land on whole pixels, and a ratio like 1.37 puts it
- * between them, which shows up as shimmer while the camera pans.
- */
-export const RENDER_SCALE = Math.min(
-  2,
-  Math.max(1, Math.round((globalThis.devicePixelRatio || 1) * 2) / 2),
-);
-
-/** Layout width in world units, for a scene that positions against the screen. */
-export const viewWidth = (scene: Phaser.Scene): number => scene.scale.width / RENDER_SCALE;
-export const viewHeight = (scene: Phaser.Scene): number => scene.scale.height / RENDER_SCALE;
+// Re-exported so every existing importer keeps working; the values live in a
+// leaf module because this one imports the scenes and the scenes import them.
+export {
+  GAME_WIDTH,
+  GAME_HEIGHT,
+  RENDER_SCALE,
+  PIXEL_SNAP,
+  viewWidth,
+  viewHeight,
+} from './renderScale';
 
 export function createGameConfig(parent: HTMLElement): Phaser.Types.Core.GameConfig {
   return {
@@ -57,7 +38,7 @@ export function createGameConfig(parent: HTMLElement): Phaser.Types.Core.GameCon
       antialiasGL: false,
       // Whole-pixel snapping only helps when a world unit *is* a whole number of
       // device pixels; at 1.5 it fights the half and the scenery shimmers.
-      roundPixels: Number.isInteger(RENDER_SCALE),
+      roundPixels: PIXEL_SNAP,
       /*
        * The lighting cap, and it has to live here: Phaser bakes it into the
        * `Light2D` fragment shader as a loop bound, so it cannot be raised at
@@ -80,8 +61,24 @@ export function createGameConfig(parent: HTMLElement): Phaser.Types.Core.GameCon
     },
 
     scale: {
-      mode: Phaser.Scale.FIT,
-      autoCenter: Phaser.Scale.CENTER_BOTH,
+      /*
+       * NONE, not FIT: the old FIT mode fit a fixed 1280x720 backing store
+       * inside the parent and letterboxed whatever didn't match its aspect
+       * ratio — measured at over 400 CSS px of dead margin, either side, on
+       * an ultrawide monitor, no matter how wide the window got.
+       *
+       * `RESIZE` mode looks like the fix and is not quite it: read against
+       * the engine source, it sets the canvas backing store to the parent's
+       * *CSS* pixel size with no `RENDER_SCALE` factored in at all, which
+       * would undo the crispness that constant exists for on every
+       * high-DPI screen. `NONE` does no automatic scaling of its own, which
+       * is what leaves `ResponsiveCanvas` free to size the backing store
+       * itself (container size times `RENDER_SCALE`) and `CameraManager`
+       * free to turn that into a camera zoom that shows more world on an
+       * odd-aspect screen instead of letterboxing it — see both modules'
+       * headers.
+       */
+      mode: Phaser.Scale.NONE,
     },
 
     physics: {

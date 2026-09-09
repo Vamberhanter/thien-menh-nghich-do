@@ -10,6 +10,12 @@ import { createAttributeState, type AttributeState } from '../game/systems/Attri
 import { createSkillState, type SkillTreeState } from '../game/systems/SkillSystem';
 import { createQuestState, type QuestState } from '../game/systems/QuestSystem';
 import { createFarmState, ensureFarmPlots, DEFAULT_FARM_PLOTS, type FarmState } from '../game/systems/Farming';
+import {
+  createWorldState,
+  mergeWorldState,
+  migrateWorldState,
+  type WorldState,
+} from '../game/systems/WorldFlags';
 
 export interface AvatarRecord {
   id: string;
@@ -31,6 +37,20 @@ export interface AvatarRecord {
   spawn?: { zone: ZoneId; x: number; y: number };
   /** Zone ids whose huyết mạch has been visited. */
   warps?: ZoneId[];
+  /**
+   * Facts about the world rather than the character — chests opened, bosses
+   * put down, one-shot triggers fired, zones seen. See `WorldFlags`.
+   *
+   * **Local only for now.** Every other field below maps to a named column on
+   * the `avatars` row, and there is no column for this one; adding it is a
+   * schema change and therefore the project owner's call, not a thing to do on
+   * the way past. So it rides in `localStorage` — which `writeLocal` already
+   * stores whole — and the row keeps ignoring it. `newer()` is where that
+   * would have quietly bitten: it picks one record wholesale by `updatedAt`,
+   * so a fresh remote row would have erased a world the device remembered.
+   * It now merges this field instead.
+   */
+  world?: WorldState;
   roomId?: string;
   userId?: string;
   updatedAt?: string;
@@ -55,6 +75,7 @@ export function defaultAvatar(partial: Partial<AvatarRecord> = {}): AvatarRecord
     x: 1200,
     y: 940,
     warps: [DEFAULT_ZONE],
+    world: createWorldState(),
     ...partial,
   };
 }
@@ -146,10 +167,24 @@ function saveKeepalive(row: Record<string, unknown>): PersistResult {
   }
 }
 
+/**
+ * The later of two saves — except for the world, which is merged.
+ *
+ * The character is a snapshot and the newest one wins: taking the higher level
+ * and the older bag would be worse than taking either whole. World facts are
+ * not a snapshot, they are a log of things that happened, and none of them
+ * un-happen. So a chest opened on this device stays opened even when the row
+ * from the server is newer and has never heard of it.
+ */
 function newer(a: AvatarRecord, b: AvatarRecord): AvatarRecord {
   const at = Date.parse(a.updatedAt ?? '') || 0;
   const bt = Date.parse(b.updatedAt ?? '') || 0;
-  return at >= bt ? a : b;
+  const winner = at >= bt ? a : b;
+  const world = mergeWorldState(
+    a.world ?? createWorldState(),
+    b.world ?? createWorldState(),
+  );
+  return { ...winner, world };
 }
 
 function readLocal(id: string): AvatarRecord | null {
@@ -164,8 +199,42 @@ function readLocal(id: string): AvatarRecord | null {
   }
 }
 
+/**
+ * Writes the local cache, never losing world state on the way.
+ *
+ * The merge is the whole point. `world` has no column on the remote row, so a
+ * record built from one — which is what `listMyAvatars` returns and therefore
+ * what the lobby hands to `pickAvatar` — always carries a *fresh* world. Before
+ * this, selecting a character in the lobby wrote that blank straight over the
+ * cache and erased every chest, flag and visit the device remembered. It was
+ * not the autosave and it was not the load; it was the click that starts the
+ * run, which is why it looked like the save had never worked at all.
+ *
+ * Merging here rather than at each caller makes the invariant hold by
+ * construction: nothing that writes the cache can drop these facts. The price
+ * is that world state cannot be *cleared* through this path — right for a log
+ * of things that happened, and `deleteAvatar` still removes the key outright.
+ */
 function writeLocal(record: AvatarRecord): void {
-  localStorage.setItem(LOCAL_KEY, JSON.stringify(record));
+  const cached = readRawLocal();
+  const world =
+    cached && cached.id === record.id
+      ? mergeWorldState(
+          migrateWorldState(cached.world),
+          record.world ?? createWorldState(),
+        )
+      : (record.world ?? createWorldState());
+  localStorage.setItem(LOCAL_KEY, JSON.stringify({ ...record, world }));
+}
+
+/** The cached record as stored, without normalising — `writeLocal`'s own read. */
+function readRawLocal(): (Record<string, unknown> & { id?: string }) | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 function normalize(raw: Record<string, unknown>, id: string): AvatarRecord {
@@ -218,6 +287,9 @@ function normalize(raw: Record<string, unknown>, id: string): AvatarRecord {
     y: Number(raw.y) || 940,
     spawn: readSpawn(raw.spawn),
     warps: readWarps(raw.warps, (raw.zone as ZoneId) || DEFAULT_ZONE),
+    // Absent on every save written before world state existed, which
+    // `migrateWorldState` reads as a fresh world rather than as a failure.
+    world: migrateWorldState(raw.world),
     roomId: typeof raw.roomId === 'string' ? raw.roomId : typeof raw.room_id === 'string' ? raw.room_id : undefined,
     userId: typeof raw.userId === 'string' ? raw.userId : typeof raw.user_id === 'string' ? raw.user_id : undefined,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : String(raw.updated_at ?? ''),

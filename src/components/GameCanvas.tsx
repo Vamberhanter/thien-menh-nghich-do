@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
 import { createGameConfig } from '../game/config/gameConfig';
+import { attachResponsiveCanvas } from '../game/config/ResponsiveCanvas';
 
 /** Owns the Phaser game instance and its lifecycle. */
 export function GameCanvas() {
@@ -14,7 +15,11 @@ export function GameCanvas() {
     if (import.meta.env.DEV) {
       (window as unknown as { __game?: Phaser.Game }).__game = game;
     }
+    // The game runs in scale mode `NONE` (see `gameConfig`) precisely so this
+    // can own resizing — see `ResponsiveCanvas`'s own header for why.
+    const detach = attachResponsiveCanvas(game, containerRef.current);
     return () => {
+      detach();
       game.destroy(true);
       gameRef.current = null;
     };

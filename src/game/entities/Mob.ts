@@ -262,7 +262,11 @@ export class Mob extends Phaser.Physics.Arcade.Sprite implements AiActor, Damage
     this.barLift = this.footLift + BAR_LIFT;
     const body = this.body as Phaser.Physics.Arcade.Body | null;
     body?.setSize(spec.body.width, spec.body.height);
-    body?.setOffset((art.width - spec.body.width) / 2, art.height - spec.body.height);
+    // Centred on the feet — `art.height` is the sprite's bottom row, which is
+    // where a mob stands, so half the box goes either side of it. Hung fully
+    // behind that row (the old `- spec.body.height`) it made a mob catch on
+    // scenery it was walking in front of; see the note on `Wukong.syncBody`.
+    body?.setOffset((art.width - spec.body.width) / 2, art.height - spec.body.height / 2);
 
     this.bar = scene.add.graphics().setDepth(20000);
     // Sized off the body rather than the art: a mob is a fraction of a

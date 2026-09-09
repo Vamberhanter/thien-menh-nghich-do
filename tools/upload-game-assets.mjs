@@ -22,6 +22,8 @@ const SETS = {
     'public/assets/characters/kiemtien/atlas',
   ],
   boss: ['public/assets/boss/boss1/atlas'],
+  // Shared world effects, owned by no kit.
+  fx: ['public/assets/fx/atlas'],
   environment: ['public/assets/environment/manaseed'],
   monsters: ['public/assets/monsters'],
   items: ['public/assets/items'],

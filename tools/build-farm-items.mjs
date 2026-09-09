@@ -28,21 +28,41 @@ const CROPS_SIZE = { width: 224, height: 128 };
 /** Column of the plain, ungraded harvest. */
 const HARVEST_COL = 8;
 
+/*
+ * Names carry the sub-folder the bag asks for. The loader spells every icon
+ * path out literally (see Inventory.ts), and those paths are grouped by what
+ * the item is — consumables, farm — so writing flat here left every one of
+ * them a 404 and the bag falling back to the item's initial.
+ */
+
 /** Crop rows carrying art; the even rows of the sheet are empty. */
 const CROPS = [
-  { row: 1, to: 'blood-berry.png' },
-  { row: 3, to: 'spirit-herb.png' },
-  { row: 5, to: 'essence-root.png' },
-  { row: 7, to: 'earth-fruit.png' },
+  { row: 1, to: 'consumables/blood-berry.png' },
+  { row: 3, to: 'consumables/spirit-herb.png' },
+  { row: 5, to: 'consumables/essence-root.png' },
+  { row: 7, to: 'consumables/earth-fruit.png' },
+];
+
+/**
+ * The seed packet, column 7 — a paper sachet with the crop pictured on it, one
+ * per row. The bag needs these: four seeds are catalogued as buyable materials
+ * and had no art at all, so they showed as a letter and dropped invisibly.
+ */
+const SEED_COL = 7;
+const SEEDS = [
+  { row: 1, to: 'farm/blood-berry-seed.png' },
+  { row: 3, to: 'farm/spirit-herb-seed.png' },
+  { row: 5, to: 'farm/essence-root-seed.png' },
+  { row: 7, to: 'farm/earth-fruit-seed.png' },
 ];
 
 /** Last planted stage before the seed packet and harvested produce. */
 const MATURE_COL = 5;
 const PLANTS = [
-  { row: 1, to: 'plant-blood-berry.png' },
-  { row: 3, to: 'plant-spirit-herb.png' },
-  { row: 5, to: 'plant-essence-root.png' },
-  { row: 7, to: 'plant-earth-fruit.png' },
+  { row: 1, to: 'farm/plant-blood-berry.png' },
+  { row: 3, to: 'farm/plant-spirit-herb.png' },
+  { row: 5, to: 'farm/plant-essence-root.png' },
+  { row: 7, to: 'farm/plant-earth-fruit.png' },
 ];
 
 /**
@@ -54,7 +74,7 @@ const PLANTS = [
 const FRAMES = [
   {
     from: join('Objects', 'chest.png'),
-    to: 'chest.png',
+    to: 'farm/chest.png',
     source: { width: 32, height: 32 },
     rect: { x: 0, y: 0, width: 32, height: 16 },
     expect: { width: 15, height: 13 },
@@ -140,6 +160,15 @@ if (!existsSync(CROPS_SHEET)) {
         continue;
       }
       write(join(OUT_DIR, plant.to), sprite);
+    }
+    for (const seed of SEEDS) {
+      const packet = cut(sheet, SEED_COL, seed.row);
+      if (opaqueCount(packet) === 0) {
+        console.error(`cell ${SEED_COL},${seed.row} is empty — the sheet layout moved`);
+        failed = true;
+        continue;
+      }
+      write(join(OUT_DIR, seed.to), packet);
     }
   }
 }

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { paint } from '../env/textures';
+import { createFxAnimations, FX_CLIP, FX_TEXTURE, fxDuration } from '../animations/fxAnimations';
 
 /**
  * The damage a heavy technique leaves in the ground.
@@ -72,6 +73,18 @@ const MAX_SCARS = 26;
 /** Under everything that stands on the ground, above the ground itself. */
 const DEPTH_BIAS = -6;
 
+/**
+ * How high above the decal the dust is allowed to climb, as a share of the
+ * scale asked for.
+ *
+ * The burst art is drawn face-on — a cloud standing up off the floor — while
+ * the decal is squashed to lie on it. Those are both right: the hole is flat
+ * and the dust above it is not, and squashing the dust would lay the cloud on
+ * its side. So the burst keeps its own proportions and only the decal is
+ * flattened.
+ */
+const BURST_RISE = 1;
+
 export interface ScarOptions {
   /** 1 is about 240px across. */
   scale?: number;
@@ -79,6 +92,17 @@ export interface ScarOptions {
   ember?: number;
   /** Overrides the default lifetime, in ms. */
   life?: number;
+}
+
+/** Extra knobs for the drawn burst, on top of the decal it leaves behind. */
+export interface ShatterOptions extends ScarOptions {
+  /**
+   * Size of the burst, if it should differ from the hole it leaves. A boss
+   * slam throws far more rubble than its crater is wide; a mob charge less.
+   */
+  burst?: number;
+  /** Skip the lasting decal — for a hit that shakes the ground without opening it. */
+  markGround?: boolean;
 }
 
 /** A tiny deterministic generator, so the baked shapes are the same every run. */
@@ -95,6 +119,10 @@ export class GroundScars {
 
   constructor(private readonly scene: Phaser.Scene) {
     for (let i = 0; i < SCAR_TEXTURE.length; i++) bake(scene, i);
+    // Here rather than in the boot scene: this class is the only thing that
+    // plays the clip, and baking its own decals and registering its own
+    // animation in one place is what stops one arriving without the other.
+    createFxAnimations(scene);
   }
 
   /**
@@ -146,6 +174,40 @@ export class GroundScars {
       ease: 'Quad.easeIn',
       onComplete: () => this.retire(ember),
     });
+  }
+
+  /**
+   * Break the ground *and show it breaking*.
+   *
+   * `mark` alone was always half the story: the decal is what the world keeps,
+   * but nothing drew the moment it happened, so a crater appeared out of an
+   * unrelated flash of light. This plays the drawn twenty frames of it —
+   * cracking, rubble thrown, dust boiling up and settling — and leaves the
+   * decal underneath, so what is left when the dust clears is the hole.
+   *
+   * The two are one call rather than two because every caller wants both, and
+   * a caller that remembered one and forgot the other is exactly the seam this
+   * is here to close.
+   */
+  shatter(x: number, y: number, options: ShatterOptions = {}): void {
+    const scale = options.scale ?? 1;
+
+    // Underneath first, so the rubble is thrown over its own hole rather than
+    // the hole being stamped on top of the dust.
+    if (options.markGround !== false) this.mark(x, y, options);
+
+    const burst = this.scene.add
+      .sprite(x, y, FX_TEXTURE, FX_CLIP.groundBreak.frame)
+      // Above the decal and above whatever is standing on the ground here: it
+      // is airborne rubble, and it hides the feet of what threw it.
+      .setDepth(y + 240)
+      .setScale((options.burst ?? scale), (options.burst ?? scale) * BURST_RISE);
+
+    burst.play(FX_CLIP.groundBreak.anim);
+    // Destroyed on a timer rather than on ANIMATION_COMPLETE: a tween or a
+    // scene teardown can eat the event, and a stranded burst holding its last
+    // frame is a pile of rubble that never clears.
+    this.scene.time.delayedCall(fxDuration('ground_break') + 40, () => burst.destroy());
   }
 
   /** Everything gone — a zone change should not carry last zone's craters over. */
@@ -242,7 +304,7 @@ function blotch(px: Px, random: () => number, colour: string): void {
 }
 
 /** Splits walking out of the centre, thinning as they go. */
-function cracks(px: Px, random: () => number, stamp: (x: number, y: number, w: number) => void): void {
+function cracks(_px: Px, random: () => number, stamp: (x: number, y: number, w: number) => void): void {
   const cx = ART_W / 2;
   const cy = ART_H / 2;
   for (let i = 0; i < CRACKS; i++) {

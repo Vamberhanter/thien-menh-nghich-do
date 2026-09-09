@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { viewHeight } from '../config/gameConfig';
+import { viewHeight } from '../config/renderScale';
 
 /**
  * An on-screen readout of where a frame's time goes. F3 to show it.

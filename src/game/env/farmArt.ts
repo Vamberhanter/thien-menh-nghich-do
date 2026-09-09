@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { gameAssetUrl } from '../../net/assets';
 import { magnify, paint } from './textures';
 
-/** Cute Fantasy farm props + Farm RPG growth stages staged by `npm run env:farm`. */
+/** Farm RPG props + growth stages, staged by `npm run env:farm`. */
 export const FarmTexture = {
   Soil: 'farm-soil',
   SoilWet: 'farm-soil-wet',
@@ -20,11 +20,15 @@ export const FarmTexture = {
   BedRim: 'farm-bed-rim',
 } as const;
 
-/** BootScene loads these; `paintFarmArt` magnifies them into `FarmTexture`. */
+/**
+ * BootScene loads these; `paintFarmArt` magnifies them into `FarmTexture`.
+ *
+ * Soil, wet soil and the path lane are absent by design. `paintFarmBlendGround`
+ * bakes all three in code so they sit next to `#243c2c` grass, and it runs
+ * *after* magnification, so a staged tile for any of them was fetched and then
+ * discarded — 404s for art the game would have thrown away.
+ */
 const FarmSource = {
-  Soil: 'farm-src-soil',
-  SoilWet: 'farm-src-soil-wet',
-  Path: 'farm-src-path',
   FenceH: 'farm-src-fence-h',
   FenceV: 'farm-src-fence-v',
   FencePost: 'farm-src-fence-post',
@@ -63,20 +67,54 @@ function farmGrowSource(kind: FarmCropKind, stage: number): string {
 }
 
 export const FARM_PROP_TEXTURES = [
-  { key: FarmSource.Soil, url: gameAssetUrl('environment/farm/soil.png') },
-  { key: FarmSource.SoilWet, url: gameAssetUrl('environment/farm/soil-wet.png') },
-  { key: FarmSource.Path, url: gameAssetUrl('environment/farm/path.png') },
-  { key: FarmSource.FenceH, url: gameAssetUrl('environment/farm/fence-h.png') },
-  { key: FarmSource.FenceV, url: gameAssetUrl('environment/farm/fence-v.png') },
-  { key: FarmSource.FencePost, url: gameAssetUrl('environment/farm/fence-post.png') },
-  { key: FarmSource.House, url: gameAssetUrl('environment/farm/house.png') },
-  { key: FarmSource.Chicken, url: gameAssetUrl('environment/farm/chicken.png') },
+  { key: FarmSource.FenceH, url: gameAssetUrl('assets/environment/farm/fence-h.png') },
+  { key: FarmSource.FenceV, url: gameAssetUrl('assets/environment/farm/fence-v.png') },
+  { key: FarmSource.FencePost, url: gameAssetUrl('assets/environment/farm/fence-post.png') },
+  { key: FarmSource.House, url: gameAssetUrl('assets/environment/farm/house.png') },
+  { key: FarmSource.Chicken, url: gameAssetUrl('assets/environment/farm/chicken.png') },
 ] as const;
+
+/**
+ * Spelled out rather than built from a template, because the build strips any
+ * image under `assets/` whose path does not appear literally in the bundle
+ * (see `stripSourceSheets` in vite.config.ts). Composed with a template these
+ * twenty were unreachable to that scan and dropped from `dist` every build.
+ */
+const GROW_URLS: Record<FarmCropKind, readonly string[]> = {
+  'blood-berry': [
+    gameAssetUrl('assets/items/farm/grow-blood-berry-0.png'),
+    gameAssetUrl('assets/items/farm/grow-blood-berry-1.png'),
+    gameAssetUrl('assets/items/farm/grow-blood-berry-2.png'),
+    gameAssetUrl('assets/items/farm/grow-blood-berry-3.png'),
+    gameAssetUrl('assets/items/farm/grow-blood-berry-4.png'),
+  ],
+  'spirit-herb': [
+    gameAssetUrl('assets/items/farm/grow-spirit-herb-0.png'),
+    gameAssetUrl('assets/items/farm/grow-spirit-herb-1.png'),
+    gameAssetUrl('assets/items/farm/grow-spirit-herb-2.png'),
+    gameAssetUrl('assets/items/farm/grow-spirit-herb-3.png'),
+    gameAssetUrl('assets/items/farm/grow-spirit-herb-4.png'),
+  ],
+  'earth-fruit': [
+    gameAssetUrl('assets/items/farm/grow-earth-fruit-0.png'),
+    gameAssetUrl('assets/items/farm/grow-earth-fruit-1.png'),
+    gameAssetUrl('assets/items/farm/grow-earth-fruit-2.png'),
+    gameAssetUrl('assets/items/farm/grow-earth-fruit-3.png'),
+    gameAssetUrl('assets/items/farm/grow-earth-fruit-4.png'),
+  ],
+  'essence-root': [
+    gameAssetUrl('assets/items/farm/grow-essence-root-0.png'),
+    gameAssetUrl('assets/items/farm/grow-essence-root-1.png'),
+    gameAssetUrl('assets/items/farm/grow-essence-root-2.png'),
+    gameAssetUrl('assets/items/farm/grow-essence-root-3.png'),
+    gameAssetUrl('assets/items/farm/grow-essence-root-4.png'),
+  ],
+};
 
 export const FARM_GROW_TEXTURES = CROP_KINDS.flatMap((kind) =>
   [0, 1, 2, 3, 4].map((stage) => ({
     key: farmGrowSource(kind, stage),
-    url: gameAssetUrl(`items/farm/grow-${kind}-${stage}.png`),
+    url: GROW_URLS[kind][stage],
   })),
 );
 
@@ -119,10 +157,9 @@ function takeSource(scene: Phaser.Scene, dest: string, src: string, scale: numbe
  * tiles do not blur into mush on the canvas.
  */
 export function paintFarmArt(scene: Phaser.Scene): void {
-  takeSource(scene, FarmTexture.Soil, FarmSource.Soil, PROP_SCALE);
-  takeSource(scene, FarmTexture.SoilWet, FarmSource.SoilWet, PROP_SCALE);
-  // Path / bed / rim are always code-baked so they share the map's green earth
-  // palette — Cute Fantasy path is too bright and reads as a pasted strip.
+  // Soil / wet soil / path / bed / rim are always code-baked so they share the
+  // map's green earth palette — the staged packs' dirt measures 238,157,81
+  // against this map's #3e3424 and reads as a pasted strip.
   takeSource(scene, FarmTexture.FenceH, FarmSource.FenceH, PROP_SCALE);
   takeSource(scene, FarmTexture.FenceV, FarmSource.FenceV, PROP_SCALE);
   takeSource(scene, FarmTexture.FencePost, FarmSource.FencePost, PROP_SCALE);

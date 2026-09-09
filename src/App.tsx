@@ -12,6 +12,7 @@ import { FarmUI } from './components/FarmUI';
 import { StorageUI } from './components/StorageUI';
 import { AlchemyUI } from './components/AlchemyUI';
 import { SideDock } from './components/SideDock';
+import { MapEditorPanel } from './components/MapEditorPanel';
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
         <FarmUI />
         <StorageUI />
         <AlchemyUI />
+        <MapEditorPanel />
         <Lobby />
       </div>
     </div>

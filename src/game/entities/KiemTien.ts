@@ -705,10 +705,14 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
    *
    * Arcade places a body at `x + scale * (offset - displayOrigin)`, and the
    * displayed origin comes from the frame's baked pivot. Cancelling the origin
-   * lands the box at (x - w/2, y - h) whatever size the frame is. Dividing the
-   * source box by the scale Arcade is about to multiply it by leaves the same
-   * BODY_WIDTH x BODY_HEIGHT standing on the ground rather than a box grown to
-   * match art that is baked 1.6x.
+   * lands the box at (x - w/2, y - h/2) whatever size the frame is. Dividing
+   * the source box by the scale Arcade is about to multiply it by leaves the
+   * same BODY_WIDTH x BODY_HEIGHT standing on the ground rather than a box
+   * grown to match art that is baked 1.6x.
+   *
+   * Centred on the feet rather than hung behind them — see the long note on
+   * `Wukong.syncBody`, which measures what the old placement did to a walk
+   * past a rock.
    */
   private syncBody(): void {
     const body = this.body as Phaser.Physics.Arcade.Body | null;
@@ -716,7 +720,10 @@ export class KiemTien extends Phaser.Physics.Arcade.Sprite {
     const sx = this.scaleX || 1;
     const sy = this.scaleY || 1;
     body.setSize(BODY_WIDTH / sx, BODY_HEIGHT / sy, false);
-    body.setOffset(this.displayOriginX - BODY_WIDTH / 2 / sx, this.displayOriginY - BODY_HEIGHT / sy);
+    body.setOffset(
+      this.displayOriginX - BODY_WIDTH / 2 / sx,
+      this.displayOriginY - BODY_HEIGHT / 2 / sy,
+    );
     // Arcade only notices a scale change on its next step. Deliberately NOT
     // `updateFromGameObject`, which also rewrites the body position from the
     // sprite's and throws away the frame of movement — see the note on
