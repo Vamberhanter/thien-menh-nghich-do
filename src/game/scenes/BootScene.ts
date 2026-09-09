@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { RENDER_SCALE, viewHeight, viewWidth } from '../config/gameConfig';
+import { RENDER_SCALE, viewHeight, viewWidth } from '../config/renderScale';
+import { loadNguHanhSonArt, registerNguHanhSonFrames } from '../env/nguHanhSonArt';
 import {
   NHU_YEN_ATLAS_LOCAL_PATH,
   NHU_YEN_ATLAS_LOCAL_URL,
@@ -54,6 +55,13 @@ import {
   FARM_TEXTURES,
 } from '../env';
 import { WAN_KIEM_TEXTURES } from '../systems/WanKiemQuyTongEffect';
+import {
+  FX_ATLAS_LOCAL_PATH,
+  FX_ATLAS_LOCAL_URL,
+  FX_ATLAS_PATH,
+  FX_ATLAS_URL,
+  FX_TEXTURE,
+} from '../animations/fxAnimations';
 
 const ATLASES = [
   {
@@ -100,6 +108,15 @@ const ATLASES = [
     localUrl: BOSS1_ATLAS_LOCAL_URL,
     localPath: BOSS1_ATLAS_LOCAL_PATH,
   },
+  // Shared world effects rather than a character: ground torn open, and
+  // whatever else of that kind gets drawn later.
+  {
+    key: FX_TEXTURE,
+    url: FX_ATLAS_URL,
+    path: FX_ATLAS_PATH,
+    localUrl: FX_ATLAS_LOCAL_URL,
+    localPath: FX_ATLAS_LOCAL_PATH,
+  },
 ] as const;
 
 /** Loads assets and bakes the environment art the world renders through. */
@@ -119,6 +136,7 @@ export class BootScene extends Phaser.Scene {
     // placeholder art for whichever ones have not been staged, so a miss here
     // costs a console 404 and nothing else.
     this.load.image(MANA_SEED_SOURCE, MANA_SEED_SOURCE_URL);
+    loadNguHanhSonArt(this);
     this.load.image(CHEST_SOURCE, CHEST_SOURCE_URL);
     for (const monster of MONSTER_TEXTURES) {
       this.load.image(monster.key, monster.url);
@@ -171,6 +189,12 @@ export class BootScene extends Phaser.Scene {
       if (!this.textures.exists(atlas.key)) continue;
       this.textures.get(atlas.key).setFilter(Phaser.Textures.FilterMode.NEAREST);
     }
+
+    // After the loader, before the world: the tilemap needs its tileset and
+    // the props need their frame table, and both are read the moment the zone
+    // builds.
+    const frames = registerNguHanhSonFrames(this);
+    if (import.meta.env.DEV && frames) console.info(`nguhanhson: ${frames} frame`);
 
     paintEnvironment(this);
 

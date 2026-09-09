@@ -83,6 +83,32 @@ export const HUYET_MA_COC: ZoneDef = {
     { kind: 'blood-serpent', x: 1920, y: 1640 },
   ],
   boss: { x: ARENA.x, y: ARENA.y },
+  /*
+   * Two rings around the court rather than one.
+   *
+   * The outer one is the warning, fired well before the boss can reach: it is
+   * the last place to turn back, so it has to land while turning back is still
+   * a choice. The inner one is the commitment, and it is where a boss fight
+   * will start when there is one to start — the trigger is here now so the
+   * path that fires it is written and tested rather than invented later.
+   *
+   * `region` shows in the prompt line and clears itself on the way out, so it
+   * reads as "where you are" instead of "something happened".
+   */
+  triggers: [
+    {
+      id: 'arena-approach',
+      shape: { kind: 'circle', x: ARENA.x, y: ARENA.y, radius: ARENA.radius + 220 },
+      event: 'notice',
+      data: { text: 'Khí huyết đặc lại — Huyết Ma đang ở gần' },
+    },
+    {
+      id: 'arena-mouth',
+      shape: { kind: 'circle', x: ARENA.x, y: ARENA.y, radius: ARENA.radius },
+      event: 'arena',
+      data: { text: 'Sàn Huyết Ma · không còn đường lui' },
+    },
+  ],
   portals: [
     {
       x: 160,

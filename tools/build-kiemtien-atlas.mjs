@@ -41,6 +41,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Surface } from './pixel.mjs';
 import { encodePNG } from './png.mjs';
+import { encodeWebP } from './image-io.mjs';
 import { decodePNG } from './png-decode.mjs';
 import { packFrames } from './atlas-pack.mjs';
 
@@ -87,7 +88,7 @@ const SHEETS = [
     rows: FOUR,
     cols: 8,
     labelWidth: 0,
-    texture: 'kiemtien-walk.png',
+    texture: 'kiemtien-walk.webp',
   },
   {
     file: 'kiemtien-attack.png',
@@ -95,7 +96,7 @@ const SHEETS = [
     rows: EIGHT,
     cols: 8,
     labelWidth: 48,
-    texture: 'kiemtien-attack.png',
+    texture: 'kiemtien-attack.webp',
   },
   {
     file: 'kiemtien-skill1.png',
@@ -104,7 +105,7 @@ const SHEETS = [
     cols: 7,
     labelWidth: 92,
     split: 'cells',
-    texture: 'kiemtien-skill1.png',
+    texture: 'kiemtien-skill1.webp',
   },
   // The ray. Its two vertical rows are eight poses on a clean grid — the beam
   // goes up or down, across the cut rather than along it, so nothing overlaps.
@@ -126,7 +127,7 @@ const SHEETS = [
     tailClip: 'raybloom',
     requireCharacter: true,
     anchorFromFirst: true,
-    texture: 'kiemtien-skill2.png',
+    texture: 'kiemtien-skill2.webp',
   },
   // One drawn pose per heading rather than a cycle: these read as the held
   // moment of an ultimate, so each becomes a single-frame clip.
@@ -137,7 +138,7 @@ const SHEETS = [
     cols: 2,
     rowMajor: ['up', 'left', 'down', 'right'],
     labelWidth: 0,
-    texture: 'kiemtien-skill3.png',
+    texture: 'kiemtien-skill3.webp',
   },
   {
     file: 'kiemtien-skill4.png',
@@ -146,7 +147,7 @@ const SHEETS = [
     cols: 2,
     rowMajor: ['up', 'down', 'left', 'right'],
     labelWidth: 0,
-    texture: 'kiemtien-skill4.png',
+    texture: 'kiemtien-skill4.webp',
   },
   // Sword-flight. Up and down are six frames each; the side cycle is twelve,
   // drawn across two rows the way the death is — the two rows are the same
@@ -163,7 +164,7 @@ const SHEETS = [
     rows: ['fly_up', 'fly_down', 'fly_side', 'fly_side', 'flyfx'],
     cols: [6, 6, 6, 6, 7],
     labelWidth: 0,
-    texture: 'kiemtien-fly.png',
+    texture: 'kiemtien-fly.webp',
   },
   // Hurt is one row of six. Death is twelve, drawn across two rows: she folds,
   // falls, and the sword-light burns off the ground where she lay.
@@ -178,7 +179,7 @@ const SHEETS = [
     cols: 6,
     labelWidth: 0,
     minBand: 80,
-    texture: 'kiemtien-hurt.png',
+    texture: 'kiemtien-hurt.webp',
   },
   // Mixed extras: some cells hold the character mid-cast, others a detached
   // impact with nobody in it. Cut by position and numbered, because nothing on
@@ -205,7 +206,7 @@ const SHEETS = [
     // its own. Measured rather than picked: these crystals sit at 225° on the
     // wheel and her blood palette at 352°, so +127° carries one onto the other.
     recolour: { from: 'rain_hit', to: 'rain_red', hue: 127 },
-    texture: 'kiemtien-fx.png',
+    texture: 'kiemtien-fx.webp',
   },
   // Huyết Kiếm Sát's climax, drawn at last: one enormous red blade standing in
   // the ground, shards still in the air around it and the floor split open
@@ -225,7 +226,7 @@ const SHEETS = [
     // plane it is spreading along.
     anchor: { x: 520, y: 1435 },
     labelWidth: 0,
-    texture: 'kiemtien-bloodsword.png',
+    texture: 'kiemtien-bloodsword.webp',
   },
 ];
 
@@ -858,7 +859,7 @@ function colsOf(sheet, row) {
   return Array.isArray(sheet.cols) ? sheet.cols[row] : sheet.cols;
 }
 
-function main() {
+async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   if (DUMP) mkdirSync(DUMP, { recursive: true });
 
@@ -883,7 +884,7 @@ function main() {
         });
       }
     }
-    emit(sheet.texture, plan, textures);
+    await emit(sheet.texture, plan, textures);
     if (DUMP) {
       for (const item of plan) {
         writeFileSync(join(DUMP, `${item.name}.png`), encodePNG(item.surface));
@@ -902,7 +903,7 @@ function main() {
         plan.push({ name: `idle_${dir}_${i}`, surface: neutral.surface, lift: IDLE_BOB[i] });
       }
     }
-    emit('kiemtien-idle.png', plan, textures);
+    await emit('kiemtien-idle.webp', plan, textures);
   }
 
   writeFileSync(
@@ -925,7 +926,7 @@ function main() {
   console.log(`atlas ${join(OUT_DIR, 'kiemtien.json')}  (${textures.length} sheets)`);
 }
 
-function emit(file, plan, textures) {
+async function emit(file, plan, textures) {
   // A row may have been given one floor for all its frames — see anchorFromFirst.
   const anchors = plan.map((item) => item.anchor ?? measureFeet(item.surface));
   const box = boxFor(
@@ -937,7 +938,7 @@ function emit(file, plan, textures) {
     return { name: item.name, surface: placed.surface, anchor: placed.anchor };
   });
   const packed = packFrames(entries);
-  writeFileSync(join(OUT_DIR, file), encodePNG(packed.surface));
+  writeFileSync(join(OUT_DIR, file), await encodeWebP(packed.surface));
   textures.push({
     image: file,
     format: 'RGBA8888',
@@ -951,4 +952,4 @@ function emit(file, plan, textures) {
   );
 }
 
-main();
+await main();

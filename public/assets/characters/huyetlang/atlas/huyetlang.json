@@ -1,7 +1,7 @@
 {
   "textures": [
     {
-      "image": "huyetlang-idle.png",
+      "image": "huyetlang-idle.webp",
       "format": "RGBA8888",
       "size": {
         "w": 376,
@@ -312,7 +312,7 @@
       ]
     },
     {
-      "image": "huyetlang-walk.png",
+      "image": "huyetlang-walk.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1876,
@@ -773,7 +773,7 @@
       ]
     },
     {
-      "image": "huyetlang-attack.png",
+      "image": "huyetlang-attack.webp",
       "format": "RGBA8888",
       "size": {
         "w": 362,
@@ -984,7 +984,7 @@
       ]
     },
     {
-      "image": "huyetlang-skill.png",
+      "image": "huyetlang-skill.webp",
       "format": "RGBA8888",
       "size": {
         "w": 550,
@@ -1145,7 +1145,7 @@
       ]
     },
     {
-      "image": "huyetlang-hurt.png",
+      "image": "huyetlang-hurt.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1196,
@@ -1356,7 +1356,7 @@
       ]
     },
     {
-      "image": "huyetlang-fx.png",
+      "image": "huyetlang-fx.webp",
       "format": "RGBA8888",
       "size": {
         "w": 182,
@@ -1392,7 +1392,7 @@
       ]
     },
     {
-      "image": "huyetlang-fx-magma.png",
+      "image": "huyetlang-fx-magma.webp",
       "format": "RGBA8888",
       "size": {
         "w": 176,

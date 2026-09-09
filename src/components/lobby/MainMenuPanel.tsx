@@ -1,6 +1,5 @@
 import type { AvatarRecord } from '../../net/avatarStore';
-import { classOf } from './classes';
-import type { CreationMode } from './CharacterCreationPanel';
+import { classOf, type CreationMode } from './classes';
 import type { LobbyView } from './HeaderBar';
 import { OrnateButton, Panel } from './parts';
 

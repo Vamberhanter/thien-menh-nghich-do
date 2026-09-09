@@ -13,6 +13,10 @@ import { join } from 'node:path';
 import { decodePNG } from './png-decode.mjs';
 import { encodePNG } from './png.mjs';
 
+// Not in the repo, and by the look of it never was — this builder has always
+// exited 1. `build-catalog-icons.mjs` draws the ten blades in the meantime and
+// skips any that already exist on disk, so dropping the real sheet in here and
+// running this takes precedence over the drawn ones with no further edits.
 const SHEET = 'File.png';
 /** The sheet this cell table was measured against. */
 const SHEET_SIZE = { width: 192, height: 160 };

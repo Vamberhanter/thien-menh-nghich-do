@@ -1,7 +1,7 @@
 {
   "textures": [
     {
-      "image": "boss1-idle.png",
+      "image": "boss1-idle.webp",
       "format": "RGBA8888",
       "size": {
         "w": 736,
@@ -112,7 +112,7 @@
       ]
     },
     {
-      "image": "boss1-walk.png",
+      "image": "boss1-walk.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1974,
@@ -923,7 +923,7 @@
       ]
     },
     {
-      "image": "boss1-attack.png",
+      "image": "boss1-attack.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1142,
@@ -1034,7 +1034,7 @@
       ]
     },
     {
-      "image": "boss1-cast.png",
+      "image": "boss1-cast.webp",
       "format": "RGBA8888",
       "size": {
         "w": 912,
@@ -1120,7 +1120,7 @@
       ]
     },
     {
-      "image": "boss1-nova.png",
+      "image": "boss1-nova.webp",
       "format": "RGBA8888",
       "size": {
         "w": 998,
@@ -1256,7 +1256,7 @@
       ]
     },
     {
-      "image": "boss1-hurt.png",
+      "image": "boss1-hurt.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1044,
@@ -1517,7 +1517,7 @@
       ]
     },
     {
-      "image": "boss1-fx.png",
+      "image": "boss1-fx.webp",
       "format": "RGBA8888",
       "size": {
         "w": 664,
@@ -1628,7 +1628,7 @@
       ]
     },
     {
-      "image": "boss1-fx-ground.png",
+      "image": "boss1-fx-ground.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1434,

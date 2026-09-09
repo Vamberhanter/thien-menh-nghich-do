@@ -151,8 +151,10 @@ function bakeFont(scene: Phaser.Scene): void {
         height: CELL_H,
         chars: GLYPHS,
         charsPerRow: GLYPHS.length,
-        offset: { x: 0, y: 0 },
-        spacing: { x: 0, y: 0 },
+        'offset.x': 0,
+        'offset.y': 0,
+        'spacing.x': 0,
+        'spacing.y': 0,
         lineSpacing: 0,
       }),
     );

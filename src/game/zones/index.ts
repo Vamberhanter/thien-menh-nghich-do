@@ -1,6 +1,7 @@
 import { HUYET_MA_COC } from './huyetMaCoc';
 import { LINH_DIEN } from './linhDien';
 import { NGOAI_MON } from './ngoaiMon';
+import { NGU_HANH_SON } from './nguHanhSon';
 import { RUNG_NGOAI_MON } from './rungNgoaiMon';
 import { THANH_PHONG_COC } from './thanhPhongCoc';
 import type { ZoneDef, ZoneId } from './types';
@@ -14,6 +15,7 @@ export type {
   GroundKind,
   MobKind,
   PlantDef,
+  MobSpawn,
   PlantKind,
   PortalDef,
   ZoneDef,
@@ -34,6 +36,7 @@ export const ZONES: Record<ZoneId, ZoneDef> = {
   'rung-ngoai-mon': RUNG_NGOAI_MON,
   'huyet-ma-coc': HUYET_MA_COC,
   'thanh-phong-coc': THANH_PHONG_COC,
+  'ngu-hanh-son': NGU_HANH_SON,
 };
 
 export const DEFAULT_ZONE: ZoneId = 'ngoai-mon';
@@ -44,6 +47,7 @@ export const ZONE_ORDER: readonly ZoneId[] = [
   'rung-ngoai-mon',
   'huyet-ma-coc',
   'thanh-phong-coc',
+  'ngu-hanh-son',
 ];
 
 export function zoneOf(id: string): ZoneDef {

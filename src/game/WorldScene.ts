@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { RENDER_SCALE } from './config/gameConfig';
+import { RENDER_SCALE } from './config/renderScale';
 import { Boss1, BOSS1_ACTIONS } from './entities/Boss1';
 import type { BossStrike } from './entities/Boss1';
 import {
@@ -13,6 +13,7 @@ import { BossEffects } from './systems/BossEffects';
 import { distanceToSegment } from './systems/Damageable';
 import type { Damageable, HitInfo } from './systems/Damageable';
 import { GameBus, GameEvent, emitStats } from './events';
+import type { DialogueCommandPayload } from './events';
 import type {
   AttackPayload,
   AvatarChosenPayload,
@@ -27,7 +28,6 @@ import {
   envArt,
   envKit,
   envKitFor,
-  groundTexture,
   nextEnvArt,
   repaintEnvironment,
   WorldResourceTexture,
@@ -36,13 +36,31 @@ import {
   farmGrowTexture,
   growthStage,
 } from './env';
-import type { EnvKit } from './env';
-import type { PropArt } from './env';
 import { NhuYenEffects } from './systems/NhuYenEffects';
 import { HuyetLangEffects } from './systems/HuyetLangEffects';
 import { MikuEffects } from './systems/MikuEffects';
 import { WukongEffects } from './systems/WukongEffects';
 import { WanKiemQuyTongEffect } from './systems/WanKiemQuyTongEffect';
+import { MapManager } from './systems/map/MapManager';
+import { MapEditor } from './systems/map/MapEditor';
+import { FixtureManager } from './systems/map/FixtureManager';
+import { TransitionManager } from './systems/map/TransitionManager';
+import { WorldMapManager } from './systems/map/WorldMapManager';
+import { TriggerManager, type TriggerDef, type TriggerPhase } from './systems/map/TriggerManager';
+import { SpawnManager } from './systems/spawn/SpawnManager';
+import {
+  chestId,
+  chestIsSpent,
+  createWorldState,
+  flagSet,
+  markBossDefeated,
+  markChestOpened,
+  markVisited,
+  setFlag,
+  triggerFlag,
+  type WorldState,
+} from './systems/WorldFlags';
+import { CameraManager } from './systems/CameraManager';
 import { WorldLights } from './systems/WorldLights';
 import { WukongClip, castScaleOf } from './animations/wukongAnimations';
 import {
@@ -136,7 +154,7 @@ import {
   DEFAULT_FARM_PLOTS,
   type FarmState,
 } from './systems/Farming';
-import { Mob, MOB_AI } from './entities/Mob';
+import { Mob } from './entities/Mob';
 import type { MobStrike } from './entities/Mob';
 import {
   BOSS_DROPS,
@@ -172,7 +190,9 @@ import {
 } from '../net/economy';
 import { grantLoot } from './systems/LootSystem';
 import { canEnterZone } from './systems/ZoneLoader';
-import { npcsInZone, type NpcDefinition } from './systems/NpcSystem';
+import { dialogueIdFor, npcsInZone, type NpcDefinition, type NpcRole } from './systems/NpcSystem';
+import { DialogueSystem, type DialogueEffect } from './systems/DialogueSystem';
+import { DIALOGUE_TREES } from './data/dialogue';
 
 const HIT_RADIUS = 64;
 /** Muted grey-blue so your own numbers stay readable in a four-player pile-on. */
@@ -351,12 +371,64 @@ const SWORD_BLOOM_SCALE = clipScaleOf(KiemTienClip.skill2('right'));
  */
 const FLY_DEPTH_BAND = 4000;
 
+/**
+ * How deep into a prop's footprint a walk across it is forgiven.
+ *
+ * Arcade separates Y before X and each axis only resolves when the bodies are
+ * closing on it. Walk due east and clip the last two pixels of a rock's base:
+ * there is no Y delta to push back with, so the Y pass finds nothing, the X
+ * pass finds a wide overlap, and a two-pixel graze stops the character dead on
+ * ground that looks empty. Below this many pixels the pair is waved through on
+ * the axis the character is not travelling along, so scenery is something you
+ * brush past rather than something you catch on.
+ *
+ * Five, because the footprints are 14-22px deep: a fifth of one is a scuff, and
+ * a character can never sink further than this plus one frame of travel (~7px
+ * at flight speed) before the overlap is too deep to forgive and blocks.
+ */
+const PROP_GRAZE = 5;
+
+/** Everything Arcade may hand a collision callback. */
+type ColliderTarget =
+  | Phaser.Physics.Arcade.Body
+  | Phaser.Physics.Arcade.StaticBody
+  | Phaser.Types.Physics.Arcade.GameObjectWithBody
+  | Phaser.Tilemaps.Tile;
+
+/** The Arcade body behind whatever a collision callback was handed. */
+function bodyOf(
+  target: ColliderTarget,
+): Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody | null {
+  const candidate = target as { body?: unknown; right?: unknown };
+  if (typeof candidate.right === 'number' && !('body' in candidate)) {
+    return target as Phaser.Physics.Arcade.Body;
+  }
+  const body = candidate.body;
+  return body && typeof (body as { right?: unknown }).right === 'number'
+    ? (body as Phaser.Physics.Arcade.Body)
+    : null;
+}
+
 /** How far time is slowed for the beat after a blow lands. */
 const HIT_STOP_SCALE = 0.35;
 const FX_LIFT = 34;
 const STONE_HP = 160;
 const BOLT_LIFT = 52;
 const RESPAWN_MS = 5000;
+/**
+ * NPC marker colours by role.
+ *
+ * TODO: REPLACE_WITH_REAL_ASSET — these stand in for art nobody has drawn yet,
+ * so the colour is the whole read: gold trades, violet sockets gems, green
+ * refines pills, blue has a quest.
+ */
+const NPC_TINT: Record<NpcRole, number> = {
+  merchant: 0xc9a24a,
+  gem: 0x9b6bd6,
+  alchemy: 0x6bcf8e,
+  quest: 0x6fd8ff,
+};
+
 const SHRINE_RADIUS = 80;
 /** Mobs will not chase or stand inside this circle around the respawn shrine. */
 const SHRINE_SAFE_RADIUS = 180;
@@ -367,7 +439,6 @@ const RESOURCE_RADIUS = 64;
 const FARM_PLOT_RADIUS = 56;
 const PLANT_RESPAWN_MS = 30000;
 const CHEST_RESPAWN_MS = 90000;
-const MOB_RESPAWN_MS = 12000;
 const ROSTER: readonly PlayerId[] = ['nhuyen', 'huyetlang', 'miku', 'wukong', 'kiemtien'];
 
 interface TrainingStone {
@@ -435,15 +506,6 @@ const CHEST_REWARD: Record<ChestTier, { stone: string; xp: number; label: string
   mythic: { stone: 'void-stone', xp: 36, label: 'rương thần thoại' },
 };
 
-interface MobPack {
-  index: number;
-  mob: Mob;
-  ai: EnemyAI;
-  respawnAt: number | null;
-  /** Heavenly tribulation wave — no zone respawn. */
-  tribulation?: boolean;
-}
-
 const BOSS_AI: AiProfile = {
   aggroRadius: 460,
   leashRadius: 760,
@@ -484,10 +546,15 @@ export class WorldScene extends Phaser.Scene {
   private numbers!: CombatNumbers;
   private bossFx!: BossEffects;
   private lighting!: WorldLights;
-  private props!: Phaser.Physics.Arcade.StaticGroup;
+  private maps!: MapManager;
+  private mapEditor!: MapEditor;
+  /** `mapEditor.active` as of last frame — see `tickKeys`'s camera follow/pan handoff. */
+  private mapEditorWasActive = false;
+  private fixtures!: FixtureManager;
+  private view!: CameraManager;
   private stones: TrainingStone[] = [];
   private targets: Damageable[] = [];
-  private packs: MobPack[] = [];
+  private spawns!: SpawnManager;
   private loot: LootPile[] = [];
   private resources: WorldResource[] = [];
   private farmPlots: FarmPlotNode[] = [];
@@ -499,24 +566,12 @@ export class WorldScene extends Phaser.Scene {
     sprite: Phaser.GameObjects.Sprite;
     label: Phaser.GameObjects.Text;
   }> = [];
-  private decals: Phaser.GameObjects.Image[] = [];
   private npcs: Array<{
     def: NpcDefinition;
     sprite: Phaser.GameObjects.Rectangle;
     label: Phaser.GameObjects.Text;
   }> = [];
-  private shrineSprite?: Phaser.GameObjects.Sprite;
-  private shrineLabel?: Phaser.GameObjects.Text;
-  private shrineRing?: Phaser.GameObjects.Graphics;
-  private storageSprite?: Phaser.GameObjects.Sprite;
-  private storageLabel?: Phaser.GameObjects.Text;
-  private waypointSprite?: Phaser.GameObjects.Sprite;
-  private waypointLabel?: Phaser.GameObjects.Text;
-  private waypointRing?: Phaser.GameObjects.Graphics;
-  private arenaRing?: Phaser.GameObjects.Graphics;
-  private arenaLabel?: Phaser.GameObjects.Text;
   private spawn: { zone: ZoneId; x: number; y: number } | null = null;
-  private ground?: Phaser.GameObjects.TileSprite;
   private boss?: Boss1;
   private bossAi?: EnemyAI;
   private playerCollider?: Phaser.Physics.Arcade.Collider;
@@ -528,6 +583,9 @@ export class WorldScene extends Phaser.Scene {
     warp: Phaser.Input.Keyboard.Key;
     envArt: Phaser.Input.Keyboard.Key;
     stats: Phaser.Input.Keyboard.Key;
+    mapEditor: Phaser.Input.Keyboard.Key;
+    editorDelete: Phaser.Input.Keyboard.Key;
+    editorEscape: Phaser.Input.Keyboard.Key;
     hurt?: Phaser.Input.Keyboard.Key;
     respawn?: Phaser.Input.Keyboard.Key;
     boss?: Phaser.Input.Keyboard.Key;
@@ -545,7 +603,28 @@ export class WorldScene extends Phaser.Scene {
   private net!: Multiplayer;
   private deathAt: number | null = null;
   private lastDeathSecond: number | null = null;
-  private crossing = false;
+  private crossings!: TransitionManager;
+  private world = new WorldMapManager();
+  /**
+   * What the world remembers between sessions — see `WorldFlags`.
+   *
+   * Starts fresh and is replaced by `restoreAvatar`; a run that never loads a
+   * save still has a valid one rather than an undefined to guard at every use.
+   */
+  private flags: WorldState = createWorldState();
+  private triggers!: TriggerManager;
+  private talk!: DialogueSystem;
+  /**
+   * Name of the part of the map the player is standing in, or null.
+   *
+   * Held rather than emitted. `tickLootPrompt` rewrites the prompt line every
+   * frame from what is within reach, so a region that emitted straight to the
+   * bus was overwritten on the very next frame and the label never appeared —
+   * measured, not guessed. It belongs at the bottom of that same priority
+   * list: a place name is what the line should say when there is nothing here
+   * to press F on.
+   */
+  private region: string | null = null;
   private lobbyApplied = false;
   private saveTimer = 0;
   private avatarId = '';
@@ -563,6 +642,14 @@ export class WorldScene extends Phaser.Scene {
   /** Lobby pick waiting to be applied on enter (id + kit + name). */
   private pendingAvatar: AvatarChosenPayload | null = null;
   private applyingAvatar = false;
+  /**
+   * False until a save has been read (or found not to exist).
+   *
+   * Nothing may be written before then. The scene boots with a fresh world and
+   * an empty bag, and any autosave that lands in the gap between boot and
+   * restore overwrites the player's actual save with those blanks.
+   */
+  private saveRead = false;
   private tribulation: TribulationState = idleTribulation();
   private tribulationHudTimer = 0;
 
@@ -581,6 +668,62 @@ export class WorldScene extends Phaser.Scene {
     this.numbers = new CombatNumbers(this);
     this.bossFx = new BossEffects(this);
     this.lighting = new WorldLights(this);
+    this.maps = new MapManager(this, this.lighting);
+    this.mapEditor = new MapEditor(this, this.maps);
+    this.fixtures = new FixtureManager(this, this.lighting);
+    // The dialogue machine walks the tree; every effect it names is carried out
+    // here, because a conversation that could reach the bag would be content
+    // with write access to the save.
+    this.talk = new DialogueSystem(
+      {
+        run: (effect) => this.runDialogueEffect(effect),
+        allows: (requirement) => this.dialogueAllows(requirement),
+      },
+      DIALOGUE_TREES,
+    );
+    this.triggers = new TriggerManager({
+      fire: (def, phase) => this.onTrigger(def, phase),
+      // The gate a map is not allowed to encode: a trigger that credits a
+      // quest is pointless before the quest exists, and one that announces a
+      // zone is noise on the tenth visit.
+      allow: (def) => {
+        if (def.data?.minLevel && this.progress.level < Number(def.data.minLevel)) return false;
+        // `once` used to mean once per map load, because there was nowhere to
+        // write it down. Now it means once.
+        if (def.repeat === 'once' && flagSet(this.flags, triggerFlag(this.zone.id, def.id))) {
+          return false;
+        }
+        return true;
+      },
+    });
+    this.crossings = new TransitionManager({
+      fadeOut: () => this.view.fadeOut(),
+      fadeIn: () => this.view.fadeIn(),
+      load: (to, at) => this.loadZone(to, at),
+      say: (message) => GameBus.emit(GameEvent.Notice, message),
+      persist: () => void this.persist(),
+    });
+    if (import.meta.env.DEV) {
+      // The portals are the only map data that points at other map data, so
+      // they are the only part that can be silently wrong. Said once at boot
+      // rather than discovered by walking into it.
+      for (const problem of this.world.problems()) console.warn('world map: ' + problem);
+    }
+    this.view = new CameraManager(this);
+    // The spawner decides *whether* to make a mob; this scene still decides
+    // what a made mob is attached to. Everything it cannot answer for itself
+    // it asks back through these.
+    this.spawns = new SpawnManager(this, {
+      create: (kind, x, y, hpScale) => this.buildMob(kind, x, y, hpScale),
+      nearestPrey: (from) => this.nearestPrey(from),
+      contain: (mob) => this.keepMobOutOfShrine(mob),
+      forget: (mob) => {
+        this.targets = this.targets.filter((t) => t !== mob);
+      },
+      hosting: () => this.hosting,
+      focus: () => (this.player ? this.player.hitPoint() : null),
+      level: () => this.progress.level,
+    });
     this.avatarId = peekSession()?.profile.id ?? newPlayerId();
 
     const joined = peekSession()?.profile.character ?? loadSavedJoin().character;
@@ -613,6 +756,7 @@ export class WorldScene extends Phaser.Scene {
     GameBus.on(GameEvent.FarmSelectSeed, this.onFarmSelectSeed, this);
     GameBus.on(GameEvent.StorageCommand, this.onStorageCommand, this);
     GameBus.on(GameEvent.WarpCommand, this.onWarpCommand, this);
+    GameBus.on(GameEvent.DialogueCommand, this.onDialogueCommand, this);
     GameBus.on(GameEvent.AlchemyCommand, this.onAlchemyCommand, this);
     GameBus.on(GameEvent.NetWorld, this.onWorldEvent, this);
     GameBus.on(GameEvent.NetHost, this.onHostChanged, this);
@@ -642,9 +786,10 @@ export class WorldScene extends Phaser.Scene {
     this.tickDeath(time);
     if (!isInputGated()) {
       this.applyLobbyPick();
-      this.tickMobs(time, delta);
+      this.spawns.tick(time, delta);
       this.tickBoss(time, delta);
       this.tickPortals();
+      this.triggers.tick(this.player.alive ? this.player.hitPoint() : null);
     }
     this.tickResources(time);
     this.tickFarm(time);
@@ -665,49 +810,33 @@ export class WorldScene extends Phaser.Scene {
 
   /* --------------------------------------------------------------- zone */
 
-  private loadZone(id: ZoneId, at?: Vector2Like, first = false): void {
+  /**
+   * Builds a map. Not to be called to *change* map — that is
+   * `TransitionManager`, which owns the fade and the re-entry guard.
+   */
+  private loadZone(id: ZoneId, at?: Vector2Like, first = false): ZoneDef {
     if (this.tribulation.phase === 'active') this.failTribulation('zone');
     this.clearZone();
-    this.zone = zoneOf(id);
+    // Ground, clutter, props and the world bounds — everything whose unload is
+    // just a destroy. What lives on top of it is placed below, because each of
+    // those has a system to tell.
+    this.zone = this.maps.load(id);
     setCurrentZone(this.zone.id);
-    this.physics.world.setBounds(0, 0, this.zone.width, this.zone.height);
-
     const kit = envKitFor(this.zone.ground);
-    this.ground = this.add
-      .tileSprite(0, 0, this.zone.width, this.zone.height, groundTexture(kit, this.zone.ground))
-      .setOrigin(0, 0)
-      .setDepth(-1000);
 
-    /*
-     * Lighting goes on per zone, before anything else is placed, so every
-     * sprite made below can be handed the pipeline as it is created rather
-     * than swept up afterwards. `ambient` defaults to white, which leaves a
-     * zone looking exactly as it did unlit — lights then only ever add.
-     */
-    this.lighting.enable(this.zone.ambient ?? 0xffffff);
-    this.lighting.light(this.ground);
-
-    this.props = this.physics.add.staticGroup();
-    this.scatterDecals(kit);
-    for (const [x, y] of this.zone.trees) this.addProp(kit.tree, x, y);
-    for (const [x, y] of this.zone.rocks) this.addProp(kit.rock, x, y);
-
-    this.placeShrine();
-    this.placeStorageChest();
-    this.placeWaypoint();
-    this.placeNpcs();
-    this.placeArena();
+    this.placeFixtures();
     this.placeFarm();
     this.placeResources();
 
     for (const [x, y] of this.zone.stones) {
-      const sprite = this.addProp(kit.stone, x, y);
+      const sprite = this.maps.addSolid(kit.stone, x, y);
       const stone: TrainingStone = { sprite, hp: STONE_HP, frost: new FrostMark() };
       this.stones.push(stone);
       this.targets.push(this.stoneTarget(stone));
     }
 
-    this.zone.mobs.forEach((spawn, index) => this.spawnMob(spawn.kind, spawn.x, spawn.y, index));
+    this.spawns.load(this.zone.mobs);
+    this.triggers.load(this.zone.triggers);
     if (this.zone.boss) this.ensureBossAtlas(this.zone.boss.x, this.zone.boss.y);
 
     for (const def of this.zone.portals) {
@@ -740,32 +869,20 @@ export class WorldScene extends Phaser.Scene {
       this.hookColliders();
     }
 
-    this.cameras.main.setBounds(0, 0, this.zone.width, this.zone.height);
-    /*
-     * The canvas is sized in device pixels, so the camera is zoomed by the same
-     * factor to put the visible world back where it was. Bounds and every
-     * position in this file stay in world units — the zoom is the only place
-     * the two ever meet.
-     */
-    this.cameras.main.setZoom(RENDER_SCALE);
-    this.cameras.main.setRoundPixels(Number.isInteger(RENDER_SCALE));
-    this.cameras.main.startFollow(
-      this.player.sprite,
-      // The same answer as `setRoundPixels` above, which this argument was
-      // overwriting with `true`: at a half-step zoom the camera snapping its
-      // scroll to whole pixels makes a smooth follow arrive in 1px jerks.
-      Number.isInteger(RENDER_SCALE),
-      0.12,
-      0.12,
-    );
+    this.view.bindTo(this.zone.width, this.zone.height);
+    this.view.follow(this.player.sprite);
     GameBus.emit(GameEvent.ZoneChanged, { id: this.zone.id, name: this.zone.name });
     peekSession()?.followZone(this.zone.id);
     this.hosting = this.net ? this.net.hosting : !peekSession() || Boolean(peekSession()?.isHost);
     if (!this.spawn) this.spawn = { zone: this.zone.id, x: this.zone.shrine.x, y: this.zone.shrine.y };
+    // Recorded, not saved: this runs on the first zone load, which is before
+    // the save has been read. The next write of any kind carries it.
+    markVisited(this.flags, this.zone.id);
     this.syncZoneReach();
     this.emitProgress();
     this.emitRpgPanels();
     void this.hydrateZone();
+    return this.zone;
   }
 
   private syncZoneReach(): void {
@@ -774,34 +891,6 @@ export class WorldScene extends Phaser.Scene {
     if (result.ok && result.changedQuestIds.length) {
       GameBus.emit(GameEvent.Notice, 'Tiến độ nhiệm vụ đã cập nhật');
       this.emitQuests();
-    }
-  }
-
-  private placeNpcs(): void {
-    for (const def of npcsInZone(this.zone.id)) {
-      const tint =
-        def.role === 'merchant'
-          ? 0xc9a24a
-          : def.role === 'gem'
-            ? 0x9b6bd6
-            : def.role === 'alchemy'
-              ? 0x6bcf8e
-              : 0x6fd8ff;
-      const sprite = this.add
-        .rectangle(def.x, def.y - 22, 28, 44, tint, 0.9)
-        .setStrokeStyle(2, 0xe9f3ff, 0.7)
-        .setDepth(def.y);
-      const label = this.add
-        .text(def.x, def.y - 54, def.name, {
-          fontFamily: 'monospace',
-          fontSize: '10px',
-          color: '#e9f3ff',
-          stroke: '#05070d',
-          strokeThickness: 3,
-        })
-        .setOrigin(0.5, 1)
-        .setDepth(def.y + 1);
-      this.npcs.push({ def, sprite, label });
     }
   }
 
@@ -818,7 +907,22 @@ export class WorldScene extends Phaser.Scene {
     return nearest?.def ?? null;
   }
 
+  /**
+   * Opens the NPC's conversation, or the panel they always opened.
+   *
+   * The fallback is not a courtesy — it is what lets a new NPC ship before
+   * anyone has written their words, and what keeps the seven working if a tree
+   * is renamed. `start` returning false is the only signal needed.
+   */
   private interactNpc(npc: NpcDefinition): void {
+    if (this.talk.start(dialogueIdFor(npc))) {
+      this.emitDialogue();
+      return;
+    }
+    this.openNpcPanel(npc);
+  }
+
+  private openNpcPanel(npc: NpcDefinition): void {
     this.applyQuestEvent('talk', npc.id);
     if (npc.role === 'merchant') {
       this.emitShop();
@@ -836,97 +940,8 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private placeShrine(): void {
-    const { x, y } = this.zone.shrine;
-    this.shrineSprite = this.add
-      .sprite(x, y, WorldResourceTexture.RespawnShrine)
-      .setOrigin(0.5, 1)
-      .setDepth(y)
-      .setDisplaySize(119, 180);
-    this.shrineRing = this.add.graphics().setDepth(y - 2);
-    this.lighting.light(this.shrineSprite);
-    // A huyết mạch is the one thing on the map that is *supposed* to glow, and
-    // until now it glowed only in its own pixels. This is what makes it a
-    // landmark you can see from across a dark zone.
-    this.lighting.standing(x, y - 20, 260, 0x8fd8ff, 1.3);
-    this.shrineRing.lineStyle(2, 0x6fd8ff, 0.7);
-    this.shrineRing.strokeEllipse(x, y - 4, 96, 36);
-    this.shrineRing.lineStyle(1, 0x9fe8ff, 0.35);
-    this.shrineRing.strokeEllipse(x, y - 4, 116, 46);
-    this.shrineLabel = this.add
-      .text(x, y - 184, 'Trụ hồi sinh', {
-        fontFamily: 'monospace',
-        fontSize: '11px',
-        color: '#9fe8ff',
-        stroke: '#05070d',
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(y + 2);
-    this.tweens.add({
-      targets: [this.shrineRing, this.shrineLabel],
-      alpha: { from: 0.45, to: 1 },
-      duration: 900,
-      yoyo: true,
-      repeat: -1,
-    });
-  }
-
   private storageAnchor(): Vector2Like {
     return { x: this.zone.shrine.x - 118, y: this.zone.shrine.y + 28 };
-  }
-
-  private placeStorageChest(): void {
-    const { x, y } = this.storageAnchor();
-    this.add
-      .ellipse(x, y - 2, 54, 18, 0x05070d, 0.4)
-      .setDepth(y - 1);
-    this.storageSprite = this.add
-      .sprite(x, y, WorldResourceTexture.ChestLegendary)
-      .setOrigin(0.5, 1)
-      .setDepth(y)
-      .setDisplaySize(58, 46);
-    this.storageLabel = this.add
-      .text(x, y - 54, 'Rương trữ đồ', {
-        fontFamily: 'monospace',
-        fontSize: '10px',
-        color: '#f0d090',
-        stroke: '#05070d',
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(y + 2);
-  }
-
-  private placeWaypoint(): void {
-    const { x, y } = this.zone.waypoint;
-    this.waypointSprite = this.add
-      .sprite(x, y, WorldResourceTexture.WarpShrine)
-      .setOrigin(0.5, 1)
-      .setDepth(y)
-      .setDisplaySize(107, 160);
-    this.waypointRing = this.add.graphics().setDepth(y - 2);
-    this.waypointRing.lineStyle(2, 0xb46cff, 0.75);
-    this.waypointRing.strokeEllipse(x, y - 3, 90, 32);
-    this.waypointRing.lineStyle(1, 0xe0b4ff, 0.4);
-    this.waypointRing.strokeEllipse(x, y - 3, 110, 42);
-    this.waypointLabel = this.add
-      .text(x, y - 164, 'Trụ dịch chuyển', {
-        fontFamily: 'monospace',
-        fontSize: '11px',
-        color: '#deb5ff',
-        stroke: '#05070d',
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(y + 2);
-    this.tweens.add({
-      targets: [this.waypointRing, this.waypointLabel],
-      alpha: { from: 0.5, to: 1 },
-      duration: 1050,
-      yoyo: true,
-      repeat: -1,
-    });
   }
 
   /**
@@ -934,6 +949,223 @@ export class WorldScene extends Phaser.Scene {
    * one does not make another player's copy disappear. That avoids one player
    * exhausting a whole zone for everyone else.
    */
+  /**
+   * The map's landmarks, declared.
+   *
+   * These were five methods of `add.sprite` / `.graphics` / `.text` /
+   * `tweens.add`, each keeping its own pair of fields to destroy later — ten
+   * fields and ten lines of teardown for one shape written six ways. What is
+   * left below is the part that is genuinely per-landmark: where it stands,
+   * what it is called, and how loudly it announces itself.
+   */
+  /**
+   * Carries out one thing a line asked for.
+   *
+   * Every arm here is a call the scene already made from somewhere else — the
+   * panels from `openNpcPanel`, the credit from `applyQuestEvent`, the flag
+   * from the trigger path. Dialogue does not add powers, it just gets to ask.
+   */
+  private runDialogueEffect(effect: DialogueEffect): void {
+    switch (effect.kind) {
+      case 'panel':
+        this.openPanel(effect.panel);
+        return;
+      case 'credit':
+        this.applyQuestEvent('talk', effect.target);
+        return;
+      /*
+       * Both go through `onQuestCommand`, the handler the quest log already
+       * uses, rather than calling `quests.start`/`quests.claim` here.
+       *
+       * That is not tidiness. Claiming a reward is not one call: it persists
+       * first, asks the server for the reward, and rolls the quest state back
+       * if the server refuses. A second implementation of that in a dialogue
+       * arm would be a second chance to hand out a reward the server never
+       * agreed to.
+       */
+      case 'offer':
+        void this.onQuestCommand({ action: 'accept', id: effect.questId, quiet: true });
+        return;
+      case 'claim':
+        void this.onQuestCommand({ action: 'complete', id: effect.questId, quiet: true });
+        return;
+      case 'flag':
+        setFlag(this.flags, effect.name);
+        void this.persist();
+        return;
+    }
+  }
+
+  private openPanel(panel: 'shop' | 'quests' | 'bag' | 'alchemy' | 'storage'): void {
+    switch (panel) {
+      case 'shop':
+        this.emitShop();
+        GameBus.emit(GameEvent.ShopToggle);
+        return;
+      case 'quests':
+        this.emitQuests();
+        GameBus.emit(GameEvent.QuestToggle);
+        return;
+      case 'bag':
+        this.emitInventory();
+        GameBus.emit(GameEvent.InventoryToggle);
+        return;
+      case 'alchemy':
+        this.emitInventory();
+        this.emitProgress();
+        GameBus.emit(GameEvent.AlchemyToggle, { forceOpen: true });
+        return;
+      case 'storage':
+        this.openStorage();
+        return;
+    }
+  }
+
+  /**
+   * Answers a choice's `requires`.
+   *
+   * Named conditions rather than expressions, so a dialogue file never carries
+   * gameplay. Unknown names are refused, not allowed — a typo should hide a
+   * reply rather than silently grant it.
+   */
+  private dialogueAllows(requirement: string): boolean {
+    const [kind, value] = requirement.split(':');
+    if (kind === 'level') return this.progress.level >= Number(value);
+    if (kind === 'flag') return flagSet(this.flags, value ?? '');
+    if (kind === 'quest') {
+      return this.quests.snapshot().quests[value ?? '']?.status === 'claimed';
+    }
+    if (import.meta.env.DEV) console.warn(`dialogue requires: khong biet "${requirement}"`);
+    return false;
+  }
+
+  private emitDialogue(): void {
+    GameBus.emit(GameEvent.Dialogue, this.talk.view());
+  }
+
+  private onDialogueCommand(payload: DialogueCommandPayload): void {
+    if (!payload?.action) return;
+    if (payload.action === 'close') this.talk.end();
+    else if (payload.action === 'advance') this.talk.advance();
+    else if (payload.action === 'choose' && payload.index !== undefined) {
+      this.talk.choose(payload.index);
+    }
+    this.emitDialogue();
+  }
+
+  private placeFixtures(): void {
+    const shrine = this.zone.shrine;
+    this.fixtures.place({
+      id: 'shrine',
+      x: shrine.x,
+      y: shrine.y,
+      body: { kind: 'sprite', texture: WorldResourceTexture.RespawnShrine, width: 119, height: 180 },
+      markings: [
+        { kind: 'ellipse', rx: 96, ry: 36, lift: 4, colour: 0x6fd8ff, alpha: 0.7, width: 2 },
+        { kind: 'ellipse', rx: 116, ry: 46, lift: 4, colour: 0x9fe8ff, alpha: 0.35, width: 1 },
+      ],
+      label: { text: 'Trụ hồi sinh', lift: 184, colour: '#9fe8ff' },
+      pulse: { ms: 900, from: 0.45 },
+      // A huyết mạch is the one thing on the map that is *supposed* to glow,
+      // and for a long time it glowed only in its own pixels. This is what
+      // makes it a landmark you can see from across a dark zone.
+      light: { lift: 20, radius: 260, colour: 0x8fd8ff, intensity: 1.3 },
+    });
+
+    const storage = this.storageAnchor();
+    this.fixtures.place({
+      id: 'storage',
+      x: storage.x,
+      y: storage.y,
+      body: { kind: 'sprite', texture: WorldResourceTexture.ChestLegendary, width: 58, height: 46 },
+      shadow: { rx: 54, ry: 18 },
+      label: { text: 'Rương trữ đồ', lift: 54, colour: '#f0d090', size: '10px' },
+    });
+
+    const waypoint = this.zone.waypoint;
+    this.fixtures.place({
+      id: 'waypoint',
+      x: waypoint.x,
+      y: waypoint.y,
+      body: { kind: 'sprite', texture: WorldResourceTexture.WarpShrine, width: 107, height: 160 },
+      markings: [
+        { kind: 'ellipse', rx: 90, ry: 32, lift: 3, colour: 0xb46cff, alpha: 0.75, width: 2 },
+        { kind: 'ellipse', rx: 110, ry: 42, lift: 3, colour: 0xe0b4ff, alpha: 0.4, width: 1 },
+      ],
+      label: { text: 'Trụ dịch chuyển', lift: 164, colour: '#deb5ff' },
+      pulse: { ms: 1050, from: 0.5 },
+    });
+
+    for (const def of npcsInZone(this.zone.id)) {
+      const fixture = this.fixtures.place({
+        id: `npc:${def.id}`,
+        x: def.x,
+        y: def.y,
+        // TODO: REPLACE_WITH_REAL_ASSET — no NPC art is staged, so the role's
+        // colour is the only thing telling them apart.
+        body: {
+          kind: 'block',
+          width: 28,
+          height: 44,
+          colour: NPC_TINT[def.role],
+          alpha: 0.9,
+          stroke: 0xe9f3ff,
+        },
+        label: { text: def.name, lift: 54, colour: '#e9f3ff', size: '10px' },
+      });
+      this.npcs.push({ def, sprite: fixture.block!, label: fixture.label! });
+    }
+
+    const arena = this.zone.arena;
+    if (arena) {
+      this.fixtures.place({
+        id: 'arena',
+        x: arena.x,
+        y: arena.y,
+        body: { kind: 'none' },
+        // Under everything that stands on it, so a character crossing the floor
+        // is drawn over it rather than sorted against its centre.
+        depth: -900,
+        markings: [
+          { kind: 'disc', radius: arena.radius, colour: 0x3a1014, alpha: 0.38 },
+          { kind: 'circle', radius: arena.radius, colour: 0x6a1c22, alpha: 0.55, width: 10 },
+          { kind: 'circle', radius: arena.radius - 18, colour: 0xc43a3a, alpha: 0.7, width: 3 },
+          { kind: 'circle', radius: arena.radius * 0.42, colour: 0xe07070, alpha: 0.35, width: 1 },
+        ],
+        label: {
+          text: arena.label ?? 'Khu vực boss',
+          lift: arena.radius + 18,
+          colour: '#f0b0b0',
+          size: '16px',
+          strokeWidth: 4,
+          strokeColour: '#1a0608',
+        },
+        pulse: { ms: 1200, from: 0.55, targets: 'label' },
+      });
+    }
+  }
+
+  /**
+   * Hides the chests the save says are still on their respawn clock.
+   *
+   * Split from `placeResources` because it runs twice for the first zone of a
+   * session: once as the zone is built, and once after the save arrives.
+   */
+  private syncResourceState(): void {
+    const now = Date.now();
+    for (const resource of this.resources) {
+      if (resource.kind !== 'chest') continue;
+      const id = chestId(this.zone.id, resource.def.x, resource.def.y);
+      if (!chestIsSpent(this.flags, id, now, CHEST_RESPAWN_MS)) continue;
+      resource.sprite.setActive(false).setVisible(false);
+      resource.shadow.setVisible(false);
+      // Wall-clock in, scene-clock out: the save records `Date.now()` because
+      // the scene's own clock restarts at zero on every load.
+      resource.readyAt =
+        this.time.now + (CHEST_RESPAWN_MS - (now - this.flags.openedChests[id]));
+    }
+  }
+
   private placeResources(): void {
     for (const def of this.zone.plants) {
       const sprite = this.add
@@ -954,6 +1186,15 @@ export class WorldScene extends Phaser.Scene {
         .setDepth(def.y);
       this.resources.push({ kind: 'chest', def, sprite, shadow, readyAt: 0 });
     }
+    /*
+     * A chest looted before the reload comes back shut.
+     *
+     * The respawn deadline used to live only on the live object, so quitting
+     * reset it and every chest on the map was full again. The stamp is in the
+     * save now and the window is measured from it, which also means retuning
+     * `CHEST_RESPAWN_MS` applies to chests already in a save.
+     */
+    this.syncResourceState();
   }
 
   private placeFarm(): void {
@@ -1056,10 +1297,10 @@ export class WorldScene extends Phaser.Scene {
   private purgeDecalsOverFarm(): void {
     const bed = this.zone.farmBed;
     const road = this.zone.farmPath;
-    if ((!bed && !road) || this.decals.length === 0) return;
+    if (!bed && !road) return;
     const rim = 36;
     const bank = 28;
-    this.decals = this.decals.filter((sprite) => {
+    this.maps.clearDecals((sprite: Phaser.GameObjects.Image) => {
       const onBed =
         !!bed &&
         sprite.x >= bed.x - rim &&
@@ -1072,11 +1313,7 @@ export class WorldScene extends Phaser.Scene {
         sprite.x <= road.x + road.width + bank &&
         sprite.y >= road.y - 12 &&
         sprite.y <= road.y + road.height + 12;
-      if (onBed || onRoad) {
-        sprite.destroy();
-        return false;
-      }
-      return true;
+      return onBed || onRoad;
     });
   }
 
@@ -1211,38 +1448,6 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  private placeArena(): void {
-    const arena = this.zone.arena;
-    if (!arena) return;
-    const { x, y, radius } = arena;
-    this.arenaRing = this.add.graphics().setDepth(-900);
-    this.arenaRing.fillStyle(0x3a1014, 0.38);
-    this.arenaRing.fillCircle(x, y, radius);
-    this.arenaRing.lineStyle(10, 0x6a1c22, 0.55);
-    this.arenaRing.strokeCircle(x, y, radius);
-    this.arenaRing.lineStyle(3, 0xc43a3a, 0.7);
-    this.arenaRing.strokeCircle(x, y, radius - 18);
-    this.arenaRing.lineStyle(1, 0xe07070, 0.35);
-    this.arenaRing.strokeCircle(x, y, radius * 0.42);
-    this.arenaLabel = this.add
-      .text(x, y - radius - 18, arena.label ?? 'Khu vực boss', {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: '#f0b0b0',
-        stroke: '#1a0608',
-        strokeThickness: 4,
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(y + 4);
-    this.tweens.add({
-      targets: this.arenaLabel,
-      alpha: { from: 0.55, to: 1 },
-      duration: 1200,
-      yoyo: true,
-      repeat: -1,
-    });
-  }
-
   private spawnPoint(): { zone: ZoneId; x: number; y: number } {
     return this.spawn ?? { zone: this.zone.id, x: this.zone.shrine.x, y: this.zone.shrine.y };
   }
@@ -1370,37 +1575,35 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private async travelWarp(id: string): Promise<void> {
-    if (this.crossing || !this.player.alive) return;
-    if (!this.nearWaypoint()) {
-      GameBus.emit(GameEvent.Notice, 'Đến trụ dịch chuyển');
-      return;
-    }
+    if (!this.player.alive) return;
     const zone = id as ZoneId;
-    if (!this.warps.has(zone)) {
-      GameBus.emit(GameEvent.Notice, 'Chưa từng đến nơi này');
-      return;
-    }
     if (zone === this.zone.id) {
       this.closeWarp();
       return;
     }
     this.closeWarp();
-    this.crossing = true;
-    this.cameras.main.fadeOut(280, 6, 8, 15);
-    await new Promise<void>((resolve) => this.cameras.main.once('camerafadeoutcomplete', () => resolve()));
-    this.loadZone(zone, warpStand(zone));
-    this.applyQuestEvent('reach', zone);
-    this.cameras.main.fadeIn(280, 6, 8, 15);
-    this.crossing = false;
-    GameBus.emit(GameEvent.Notice, `Dịch chuyển · ${this.zone.name}`);
-    void this.persist();
+    await this.crossings.go({
+      to: zone,
+      at: warpStand(zone),
+      // The altar has its own two conditions and does not use the level gate:
+      // a zone you have already stood in stays reachable.
+      gate: () =>
+        !this.nearWaypoint()
+          ? 'Đến trụ dịch chuyển'
+          : !this.warps.has(zone)
+            ? 'Chưa từng đến nơi này'
+            : null,
+      arrive: (arrived) => this.applyQuestEvent('reach', arrived.id),
+      notice: (arrived) => `Dịch chuyển · ${arrived.name}`,
+    });
   }
 
   private clearZone(): void {
     // Last zone's craters are not this zone's ground.
     this.scars.clear();
-    for (const pack of this.packs) pack.mob.destroy();
-    this.packs = [];
+    this.spawns.clear();
+    this.triggers.clear();
+    this.region = null;
     this.boss?.destroy();
     this.boss = undefined;
     this.bossAi = undefined;
@@ -1431,35 +1634,14 @@ export class WorldScene extends Phaser.Scene {
       npc.label.destroy();
     }
     this.npcs = [];
+    // Shrine, storage, waypoint, arena and every NPC marker at once — they
+    // were ten fields whose destroys had to be remembered one by one.
+    this.fixtures.clear();
     this.stones = [];
     this.lighting?.destroy();
     this.targets = [];
     // Mob indices belong to the zone that produced them.
     this.hitEcho = [];
-    this.shrineSprite?.destroy();
-    this.shrineSprite = undefined;
-    this.shrineLabel?.destroy();
-    this.shrineLabel = undefined;
-    this.shrineRing?.destroy();
-    this.shrineRing = undefined;
-    this.storageSprite?.destroy();
-    this.storageSprite = undefined;
-    this.storageLabel?.destroy();
-    this.storageLabel = undefined;
-    this.waypointSprite?.destroy();
-    this.waypointSprite = undefined;
-    this.waypointLabel?.destroy();
-    this.waypointLabel = undefined;
-    this.waypointRing?.destroy();
-    this.waypointRing = undefined;
-    this.arenaRing?.destroy();
-    this.arenaRing = undefined;
-    this.arenaLabel?.destroy();
-    this.arenaLabel = undefined;
-    for (const decal of this.decals) decal.destroy();
-    this.decals = [];
-    this.ground?.destroy();
-    this.ground = undefined;
     try {
       this.playerCollider?.destroy();
     } catch {
@@ -1474,17 +1656,37 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     this.enemyColliders = [];
-    try {
-      this.props?.clear(true, true);
-    } catch {
-      // physics world already torn down
-    }
+    // Terrain, clutter and the solid group go together — MapManager built them
+    // and is the only thing that knows what it made.
+    this.maps.unload();
   }
 
   private async enterPortal(def: PortalDef): Promise<void> {
-    if (this.crossing) return;
+    await this.crossings.go({
+      to: def.to,
+      at: def.spawn,
+      gate: () => this.zoneGate(def.to),
+      arrive: (zone) => {
+        this.applyQuestEvent('reach', zone.id);
+        // Arriving at the training ground counts as meeting the two who stand
+        // in it — the quest chain opens on being told, not on being spoken to.
+        if (zone.id === 'ngoai-mon') {
+          this.applyQuestEvent('talk', 'truong-lao');
+          this.applyQuestEvent('talk', 'duoc-su');
+        }
+        if (zone.id === 'huyet-ma-coc') this.applyQuestEvent('talk', 'de-tu-bi-thuong');
+      },
+      notice: (zone) =>
+        zone.arena
+          ? `${zone.arena.label ?? 'Khu vực boss'} ở phía đông — Huyết Ma canh giữ`
+          : null,
+    });
+  }
+
+  /** Why this zone is shut, or null if it is open. */
+  private zoneGate(to: ZoneId): string | null {
     const questState = this.quests.snapshot();
-    const access = canEnterZone(def.to, {
+    const access = canEnterZone(to, {
       level: this.progress.level,
       finishedQuests: new Set(
         Object.entries(questState.quests)
@@ -1492,26 +1694,7 @@ export class WorldScene extends Phaser.Scene {
           .map(([id]) => id),
       ),
     });
-    if (!access.allowed) {
-      GameBus.emit(GameEvent.Notice, access.reason ?? 'Khu vực chưa mở');
-      return;
-    }
-    this.crossing = true;
-    this.cameras.main.fadeOut(280, 6, 8, 15);
-    await new Promise<void>((resolve) => this.cameras.main.once('camerafadeoutcomplete', () => resolve()));
-    this.loadZone(def.to, def.spawn);
-    this.applyQuestEvent('reach', def.to);
-    if (def.to === 'ngoai-mon') {
-      this.applyQuestEvent('talk', 'truong-lao');
-      this.applyQuestEvent('talk', 'duoc-su');
-    }
-    if (def.to === 'huyet-ma-coc') this.applyQuestEvent('talk', 'de-tu-bi-thuong');
-    this.cameras.main.fadeIn(280, 6, 8, 15);
-    this.crossing = false;
-    if (this.zone.arena) {
-      GameBus.emit(GameEvent.Notice, `${this.zone.arena.label ?? 'Khu vực boss'} ở phía đông — Huyết Ma canh giữ`);
-    }
-    void this.persist();
+    return access.allowed ? null : (access.reason ?? 'Khu vực chưa mở');
   }
 
   /* ------------------------------------------------------------ player */
@@ -1527,15 +1710,7 @@ export class WorldScene extends Phaser.Scene {
     this.lighting.light(this.player.sprite);
     this.syncCombatKit();
     this.hookColliders();
-    this.cameras.main.startFollow(
-      this.player.sprite,
-      // The same answer as `setRoundPixels` above, which this argument was
-      // overwriting with `true`: at a half-step zoom the camera snapping its
-      // scroll to whole pixels makes a smooth follow arrive in 1px jerks.
-      Number.isInteger(RENDER_SCALE),
-      0.12,
-      0.12,
-    );
+    this.view.follow(this.player.sprite);
     GameBus.emit(GameEvent.CharacterChanged, this.player.profile);
     this.emitProgress();
   }
@@ -1556,14 +1731,52 @@ export class WorldScene extends Phaser.Scene {
     this.player.sprite.y += y - foot.y;
   }
 
+  /**
+   * Lets a shallow clip of a prop's footprint pass — see `PROP_GRAZE`.
+   *
+   * Runs as Arcade's *process* callback, so returning false skips separation
+   * for the pair entirely rather than separating and then undoing it. Only the
+   * axis the body is barely moving along is forgiven: an approach straight into
+   * a rock has its overlap growing on the axis it is travelling, so it still
+   * stops where the rock is.
+   */
+  private grazesProp(
+    mover: ColliderTarget,
+    prop: ColliderTarget,
+  ): boolean {
+    // Arcade hands a process callback either the game object or the body,
+    // depending on what the pair was built from, so unwrap rather than assume.
+    const a = bodyOf(mover);
+    const b = bodyOf(prop);
+    if (!a || !b) return true;
+    const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+    const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+    if (overlapX <= 0 || overlapY <= 0) return true;
+    const vx = Math.abs(a.velocity.x);
+    const vy = Math.abs(a.velocity.y);
+    if (overlapY <= PROP_GRAZE && vy < vx) return false;
+    if (overlapX <= PROP_GRAZE && vx < vy) return false;
+    return true;
+  }
+
   private hookColliders(): void {
-    this.playerCollider = this.physics.add.collider(this.player.sprite, this.props);
+    this.playerCollider = this.physics.add.collider(
+      this.player.sprite,
+      this.maps.solids,
+      undefined,
+      this.grazesProp,
+      this,
+    );
     if (this.boss) {
       this.enemyColliders.push(this.physics.add.collider(this.player.sprite, this.boss));
     }
-    for (const pack of this.packs) {
+    for (const pack of this.spawns.packs) {
       this.enemyColliders.push(this.physics.add.collider(this.player.sprite, pack.mob));
-      this.enemyColliders.push(this.physics.add.collider(pack.mob, this.props));
+      // Mobs get the same forgiveness: one catching on a rock it is walking
+      // past does not look like physics, it looks like the chase broke.
+      this.enemyColliders.push(
+        this.physics.add.collider(pack.mob, this.maps.solids, undefined, this.grazesProp, this),
+      );
     }
   }
 
@@ -1622,13 +1835,15 @@ export class WorldScene extends Phaser.Scene {
 
   /* --------------------------------------------------------------- mobs */
 
-  private spawnMob(
-    kind: Mob['kind'],
-    x: number,
-    y: number,
-    index: number,
-    opts?: { tribulation?: boolean; hpScale?: number },
-  ): void {
+  /**
+   * Wires one mob into the scene and hands it back.
+   *
+   * Everything here is a connection to something else — the lighting pipeline,
+   * the hit effects, the prop and player colliders, the target list — which is
+   * exactly what `SpawnManager` is not allowed to know about. It does not
+   * decide that a mob should exist and does not remember that one does.
+   */
+  private buildMob(kind: Mob['kind'], x: number, y: number, hpScale?: number): Mob {
     const mob = new Mob(this, { x, y }, kind, {
       onStrike: (_mob, strike) => this.onMobStrike(strike),
       onDeath: (dead) => this.onMobDeath(dead),
@@ -1639,29 +1854,22 @@ export class WorldScene extends Phaser.Scene {
       },
     });
     this.lighting.light(mob);
-    if (opts?.hpScale && opts.hpScale > 1) {
-      mob.maxHp = Math.round(mob.maxHp * opts.hpScale);
+    if (hpScale && hpScale > 1) {
+      mob.maxHp = Math.round(mob.maxHp * hpScale);
       mob.hp = mob.maxHp;
     }
-    if (opts?.tribulation) mob.setTint(0xffe08a);
-    this.physics.add.collider(mob, this.props);
+    this.physics.add.collider(mob, this.maps.solids, undefined, this.grazesProp, this);
     if (this.player) {
       this.enemyColliders.push(this.physics.add.collider(this.player.sprite, mob));
     }
-    this.packs.push({
-      index,
-      mob,
-      ai: new EnemyAI(mob, MOB_AI[kind]),
-      respawnAt: null,
-      tribulation: opts?.tribulation,
-    });
     this.targets.push(mob);
+    return mob;
   }
 
   private onMobDeath(mob: Mob): void {
     if (!this.hosting) return;
     const foot = mob.hitPoint();
-    const pack = this.packs.find((p) => p.mob === mob);
+    const pack = this.spawns.packOf(mob);
     const isTrib = pack?.tribulation === true;
     if (!isTrib) {
       this.grantXp(MOB_XP[mob.kind], foot.x, foot.y, this.lastHit.get(mob));
@@ -1669,12 +1877,12 @@ export class WorldScene extends Phaser.Scene {
       const drops = rollDrops(MOB_DROPS[mob.kind]);
       if (drops.length) this.dropLoot(foot.x, foot.y, drops);
     }
+    // The reward is this scene's business; when — or whether — the map puts
+    // another one there is the spawner's.
+    this.spawns.scheduleRespawn(mob);
     if (pack) {
       if (isTrib) {
-        pack.respawnAt = null;
         this.onTribulationKill();
-      } else {
-        pack.respawnAt = this.time.now + MOB_RESPAWN_MS;
       }
     }
   }
@@ -1690,20 +1898,6 @@ export class WorldScene extends Phaser.Scene {
           : Phaser.Math.Distance.Between(end.x, end.y, prey.position.x, prey.position.y);
       if (distance > strike.radius + prey.radius) continue;
       this.inflict(prey, strike.damage, strike.aim);
-    }
-  }
-
-  private tickMobs(time: number, delta: number): void {
-    for (const pack of this.packs) {
-      if (this.hosting && pack.respawnAt !== null && time >= pack.respawnAt) {
-        pack.mob.respawn();
-        pack.ai.anchorHere();
-        pack.respawnAt = null;
-      }
-      pack.mob.tick(time, delta);
-      if (!this.hosting || !pack.mob.alive || pack.mob.frozen) continue;
-      pack.ai.update(time, delta, this.nearestPrey(pack.mob.hitPoint()));
-      this.keepMobOutOfShrine(pack.mob);
     }
   }
 
@@ -1754,6 +1948,10 @@ export class WorldScene extends Phaser.Scene {
         this.floatingNumber(x, y - 120, 0, 0xffd070, true, windLord ? 'PHONG MA HẠ' : 'HẠ GỤC');
         if (!this.hosting) return;
         this.applyQuestEvent('boss', windLord ? 'phong-ma-chu' : 'huyet-ma-coc-chu');
+        // Recorded, not yet acted on: whether a felled boss should still be
+        // gone on the next login is a design decision, so this writes the fact
+        // and `ensureBossAtlas` keeps spawning him until someone decides.
+        markBossDefeated(this.flags, `${this.zone.id}:boss`, Date.now());
         this.grantXp(BOSS_XP, x, y - 40, this.boss ? this.lastHit.get(this.boss) : undefined);
         const drops = rollDrops(windLord ? WIND_BOSS_DROPS : BOSS_DROPS);
         if (drops.length) this.dropLoot(x, y, drops);
@@ -1763,7 +1961,7 @@ export class WorldScene extends Phaser.Scene {
       boss.setTint(0xa8e6ff);
       boss.setScale(boss.scaleX * 1.05, boss.scaleY * 1.05);
     }
-    this.physics.add.collider(boss, this.props);
+    this.physics.add.collider(boss, this.maps.solids, undefined, this.grazesProp, this);
     this.lighting.light(boss);
     this.boss = boss;
     this.bossAi = new EnemyAI(boss, this.bossProfile());
@@ -1839,6 +2037,12 @@ export class WorldScene extends Phaser.Scene {
     }
     if (strike.kind === 'nova') {
       this.bossFx.novaRing(strike.x, strike.y, strike.radius);
+      // His slam is the heaviest thing in the game, so it throws the most.
+      this.scars.shatter(strike.x, strike.y, {
+        scale: strike.radius / 190,
+        burst: strike.radius / 130,
+        ember: 0xff8a50,
+      });
       if (!this.hosting) return;
       for (const prey of this.preyList()) {
         if (!prey.alive) continue;
@@ -1908,10 +2112,17 @@ export class WorldScene extends Phaser.Scene {
     this.lastDeathSecond = null;
     GameBus.emit(GameEvent.DeathCountdown, { seconds: null });
     const point = this.spawnPoint();
+    const stand = { x: point.x, y: point.y + 36 };
     if (point.zone !== this.zone.id) {
-      this.loadZone(point.zone, { x: point.x, y: point.y + 36 });
+      // Through the same door as the other two, so a death in one zone and a
+      // portal in another cannot end up half-crossed at once.
+      void this.crossings.go({ to: point.zone, at: stand }).then(() => {
+        this.player.respawn(stand.x, stand.y);
+        this.applyGrowth(true);
+      });
+      return;
     }
-    this.player.respawn(point.x, point.y + 36);
+    this.player.respawn(stand.x, stand.y);
     this.applyGrowth(true);
   }
 
@@ -1990,6 +2201,7 @@ export class WorldScene extends Phaser.Scene {
 
     const reward = CHEST_REWARD[resource.def.tier];
     resource.readyAt = this.time.now + CHEST_RESPAWN_MS;
+    markChestOpened(this.flags, chestId(this.zone.id, resource.def.x, resource.def.y), Date.now());
     resource.sprite.setActive(false).setVisible(false);
     resource.shadow.setVisible(false);
     this.dropLoot(resource.def.x, resource.def.y, [reward.stone]);
@@ -2066,7 +2278,9 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     if (this.warpOpen && !this.nearWaypoint()) this.closeWarp();
-    this.setLootPrompt(null);
+    // Lowest priority: anything interactable above wins, and the place name is
+    // what is left when nothing does.
+    this.setLootPrompt(this.region);
   }
 
   private nearestLoot(): { pile: LootPile; distance: number } | null {
@@ -2158,6 +2372,9 @@ export class WorldScene extends Phaser.Scene {
       warp: keyboard.addKey(K.T, false),
       envArt: keyboard.addKey(K.G, false),
       stats: keyboard.addKey(K.F3, false),
+      mapEditor: keyboard.addKey(K.F2, false),
+      editorDelete: keyboard.addKey(K.DELETE, false),
+      editorEscape: keyboard.addKey(K.ESC, false),
     };
     if (import.meta.env.DEV) {
       this.keys.hurt = keyboard.addKey(K.H, false);
@@ -2174,6 +2391,24 @@ export class WorldScene extends Phaser.Scene {
       GameBus.emit(GameEvent.InventoryToggle);
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.stats)) this.frameStats.toggle();
+    if (Phaser.Input.Keyboard.JustDown(this.keys.mapEditor)) this.mapEditor.toggle();
+    // Compared every frame rather than only right after the key that opened
+    // it — the editor also closes from its own "Đóng" button (an
+    // `EditorCommand` over `GameBus`, not a key this scene sees), and that
+    // path used to leave the camera stuck wherever a pan had left it,
+    // never handed back to `follow` at all.
+    if (this.mapEditor.active !== this.mapEditorWasActive) {
+      this.mapEditorWasActive = this.mapEditor.active;
+      // Editing wants a camera free to drag anywhere — following the player
+      // would fight every pan the moment they take a step. Handed back the
+      // instant the editor closes rather than left to a zone change to fix.
+      if (this.mapEditor.active) this.view.stopFollow();
+      else this.view.follow(this.player.sprite);
+    }
+    if (this.mapEditor.active) {
+      if (Phaser.Input.Keyboard.JustDown(this.keys.editorDelete)) this.mapEditor.handleKey('delete');
+      if (Phaser.Input.Keyboard.JustDown(this.keys.editorEscape)) this.mapEditor.handleKey('escape');
+    }
     if (Phaser.Input.Keyboard.JustDown(this.keys.pick) || consumePad('pick')) this.pickLoot();
     if (Phaser.Input.Keyboard.JustDown(this.keys.warp) || consumePad('warp')) this.toggleWarp();
     if (Phaser.Input.Keyboard.JustDown(this.keys.envArt) || consumePad('envArt')) this.swapEnvArt();
@@ -2302,8 +2537,53 @@ export class WorldScene extends Phaser.Scene {
     void this.persist();
   }
 
+  /**
+   * What a trigger's event means — the only place that decides.
+   *
+   * A map declares `event: 'quest'` and a `questId`; it does not know that
+   * quests exist as a system, which is what keeps the zone files data. Adding
+   * a new kind of trigger is a case here, not a change to the map format.
+   */
+  private onTrigger(def: TriggerDef, phase: TriggerPhase): void {
+    if (phase === 'exit') {
+      // Only clear it if it is still ours: walking out of a wide region while
+      // already inside a narrower one must not blank the narrower one's name.
+      if (def.event === 'region' && this.region === String(def.data?.text ?? '')) {
+        this.region = null;
+      }
+      return;
+    }
+    if (def.repeat === 'once') {
+      setFlag(this.flags, triggerFlag(this.zone.id, def.id));
+      void this.persist();
+    }
+    switch (def.event) {
+      case 'quest':
+        // `reach` is the same credit a portal gives, so a quest can be advanced
+        // by walking to a place inside a zone rather than only into one.
+        if (def.data?.questTarget) this.applyQuestEvent('reach', String(def.data.questTarget));
+        break;
+      case 'notice':
+        if (def.data?.text) GameBus.emit(GameEvent.Notice, String(def.data.text));
+        break;
+      case 'region':
+        // A named part of a map — a road, a bridge, a clearing. It goes to the
+        // prompt line rather than to a notice, because it is where you *are*
+        // and not something that happened.
+        if (def.data?.text) this.region = String(def.data.text);
+        break;
+      case 'arena':
+        // The hook the boss fight will hang off — for now it announces, and it
+        // is here so the trigger that fires it already exists and is tested.
+        GameBus.emit(GameEvent.Notice, String(def.data?.text ?? 'Khu vực boss'));
+        break;
+      default:
+        if (import.meta.env.DEV) console.warn(`trigger "${def.id}": event khong biet "${def.event}"`);
+    }
+  }
+
   private tickPortals(): void {
-    if (this.crossing || !this.player.alive) return;
+    if (this.crossings.busy || !this.player.alive) return;
     const foot = this.player.hitPoint();
     for (const { def } of this.portals) {
       if (Phaser.Math.Distance.Between(foot.x, foot.y, def.x, def.y) <= PORTAL_RADIUS) {
@@ -2317,6 +2597,9 @@ export class WorldScene extends Phaser.Scene {
 
   private async restoreAvatar(): Promise<void> {
     const saved = await loadAvatar(this.avatarId);
+    // Either way the read has happened, so writing is allowed from here — a
+    // brand new character has nothing to lose.
+    this.saveRead = true;
     if (!saved) {
       this.emitInventory();
       this.emitProgress();
@@ -2356,6 +2639,16 @@ export class WorldScene extends Phaser.Scene {
       this.replacePlayer(wanted);
     }
     if (saved.warps?.length) this.warps = new Set(saved.warps);
+    // Before the zone below: `placeResources` reads these to decide which
+    // chests come back shut, so restoring after it would leave the first map
+    // of a session full of chests the player had already looted.
+    this.flags = saved.world ?? createWorldState();
+    // The first zone of a session is built before the save is read, so its
+    // chests were placed against an empty world. Re-applied here rather than
+    // rebuilding the zone: a rebuild would re-scatter the ground clutter and
+    // respawn the mobs for nothing. The `loadZone` below covers the case where
+    // the save is in a *different* zone, which is why this comes first.
+    this.syncResourceState();
     if (saved.zone !== this.zone.id) {
       this.loadZone(saved.zone, { x: saved.x, y: saved.y });
     } else {
@@ -2375,6 +2668,11 @@ export class WorldScene extends Phaser.Scene {
       );
     }
     emitStats(this.player.stats);
+    // Last, and here rather than in `loadZone`: the zone that loads before a
+    // save is read marks its visit against the empty world this scene starts
+    // with, and the restore above then replaces that whole object. So the
+    // first zone of every session was never recorded.
+    markVisited(this.flags, this.zone.id);
     this.emitInventory();
     this.emitProgress();
     this.emitRpgPanels();
@@ -2389,6 +2687,10 @@ export class WorldScene extends Phaser.Scene {
     // While the lobby owns the screen, skip autosave so picking another avatar
     // cannot write the previous run's level onto the newly selected id.
     // Also skip while a load is in flight (progress may still be the old run).
+    // `force` deliberately does *not* override `saveRead`: the forced writes
+  // are the page-hide flush and the zone crossing, and both would rather lose
+  // one run's progress than overwrite a save nobody has read yet.
+    if (!this.saveRead) return Promise.resolve();
     if (!force && (isInputGated() || this.applyingAvatar)) return Promise.resolve();
     const foot = this.player.hitPoint();
     return saveAvatar(
@@ -2415,6 +2717,7 @@ export class WorldScene extends Phaser.Scene {
         y: foot.y,
         spawn: this.spawnPoint(),
         warps: [...this.warps],
+        world: this.flags,
         roomId: peekSession()?.world,
       }),
       keepalive,
@@ -2682,14 +2985,9 @@ export class WorldScene extends Phaser.Scene {
       remaining: plan.count,
       label: plan.label,
     };
-    const baseIndex = 9000;
-    for (let i = 0; i < plan.count; i += 1) {
-      const kind = plan.mobKinds[i % plan.mobKinds.length]!;
-      const angle = (Math.PI * 2 * i) / plan.count;
-      const x = Phaser.Math.Clamp(foot.x + Math.cos(angle) * 140, 80, this.zone.width - 80);
-      const y = Phaser.Math.Clamp(foot.y + Math.sin(angle) * 110, 80, this.zone.height - 80);
-      this.spawnMob(kind, x, y, baseIndex + i, { tribulation: true, hpScale: 1.45 });
-    }
+    // 1.45: a wave mob has to be worth the 45s clock, and two of the five
+    // kits clear an un-scaled one before the timer is a third gone.
+    this.spawns.summonWave(plan.mobKinds, foot, plan.count, 1.45);
     this.floatingNumber(foot.x, foot.y - 80, 0, 0xffe08a, true, 'THIÊN KIẾP');
     GameBus.emit(GameEvent.Notice, `${plan.label} · tiêu diệt sóng yêu trong 45s`);
     this.emitTribulationHud();
@@ -2750,16 +3048,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private clearTribulationMobs(): void {
-    const keep: MobPack[] = [];
-    for (const pack of this.packs) {
-      if (!pack.tribulation) {
-        keep.push(pack);
-        continue;
-      }
-      this.targets = this.targets.filter((t) => t !== pack.mob);
-      pack.mob.destroy();
-    }
-    this.packs = keep;
+    this.spawns.clearWave();
   }
 
   private tickTribulation(time: number, delta: number): void {
@@ -2791,12 +3080,27 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  private async onQuestCommand(payload: { action?: string; id?: string }): Promise<void> {
+  /**
+   * The quest log's commands, and the dialogue's.
+   *
+   * `quiet` exists for the dialogue path. Pressing "accept" in the log and
+   * being refused deserves to be told why; *hearing an NPC's line* and being
+   * refused does not — an elder who mentions a quest the player cannot take
+   * yet is a normal speech, and a red toast on it reads as a bug. The work is
+   * identical either way, which is the point of it being one method: claiming
+   * a reward persists, asks the server, and rolls the quest state back if the
+   * server refuses, and none of that should exist twice.
+   */
+  private async onQuestCommand(payload: {
+    action?: string;
+    id?: string;
+    quiet?: boolean;
+  }): Promise<void> {
     if (!payload?.id || !payload.action) return;
     if (payload.action === 'accept') {
       const result = this.quests.start(payload.id, this.progress.level);
       if (!result.ok) {
-        GameBus.emit(GameEvent.Notice, 'Chưa đủ điều kiện nhận nhiệm vụ');
+        if (!payload.quiet) GameBus.emit(GameEvent.Notice, 'Chưa đủ điều kiện nhận nhiệm vụ');
         return;
       }
       const reach = this.quests.creditReach(this.zone.id, this.progress.level);
@@ -2810,7 +3114,7 @@ export class WorldScene extends Phaser.Scene {
       const beforeClaim = this.quests.snapshot();
       const result = this.quests.claim(payload.id, this.progress.level);
       if (!result.ok || !result.reward) {
-        GameBus.emit(GameEvent.Notice, 'Mục tiêu nhiệm vụ chưa hoàn thành');
+        if (!payload.quiet) GameBus.emit(GameEvent.Notice, 'Mục tiêu nhiệm vụ chưa hoàn thành');
         return;
       }
       let reward = result.reward;
@@ -3309,7 +3613,7 @@ export class WorldScene extends Phaser.Scene {
       zone: this.zone.id,
       host: this.selfId(),
       t: this.time.now,
-      mobs: this.packs.map((pack) => ({
+      mobs: this.spawns.packs.map((pack) => ({
         i: pack.index,
         x: Math.round(pack.mob.x),
         y: Math.round(pack.mob.y),
@@ -3339,7 +3643,7 @@ export class WorldScene extends Phaser.Scene {
   private applySnap(snap: WorldSnap): void {
     if (this.hosting || snap.zone !== this.zone.id) return;
     for (const row of snap.mobs) {
-      const pack = this.packs.find((p) => p.index === row.i);
+      const pack = this.spawns.packs.find((p) => p.index === row.i);
       pack?.mob.syncFromHost(row.x, row.y, row.hp, row.a === 1);
     }
     if (this.boss && snap.boss) {
@@ -3426,7 +3730,7 @@ export class WorldScene extends Phaser.Scene {
 
   /** Freshly promoted: drop the old host's targets and drive the mobs ourselves. */
   private takeOverSim(): void {
-    for (const pack of this.packs) pack.mob.releaseNet();
+    for (const pack of this.spawns.packs) pack.mob.releaseNet();
     this.boss?.releaseNet();
   }
 
@@ -3460,80 +3764,6 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /* -------------------------------------------------------------- scenery */
-
-  private addProp(art: PropArt, x: number, y: number): Phaser.Physics.Arcade.Sprite {
-    const sprite = this.props.create(x, y, art.texture) as Phaser.Physics.Arcade.Sprite;
-    this.lighting.light(sprite);
-    sprite.setOrigin(0.5, art.originY).setDepth(y);
-    const box = art.box;
-    if (box) {
-      const body = sprite.body as Phaser.Physics.Arcade.StaticBody;
-      body.setSize(box.width, box.height);
-      body.position.set(x - box.width / 2, y + box.offsetY);
-      body.updateCenter();
-    }
-    return sprite;
-  }
-
-  /**
-   * Ground clutter for kits that ship decals. Seeded off the zone id so the
-   * layout is stable across repaints — otherwise comparing two magnifications
-   * would also be comparing two different forests.
-   */
-  private scatterDecals(kit: EnvKit): void {
-    const decals = kit.decals;
-    if (decals.length === 0) return;
-
-    const rng = new Phaser.Math.RandomDataGenerator([this.zone.id]);
-    const total = decals.reduce((sum, d) => sum + d.weight, 0);
-    const pick = () => {
-      let roll = rng.frac() * total;
-      for (const decal of decals) {
-        roll -= decal.weight;
-        if (roll <= 0) return decal;
-      }
-      return decals[decals.length - 1];
-    };
-
-    const clear = (x: number, y: number) => {
-      const { shrine, arena, portals, farmBed } = this.zone;
-      if (Phaser.Math.Distance.Between(x, y, shrine.x, shrine.y) < SHRINE_SAFE_RADIUS) return false;
-      if (arena && Phaser.Math.Distance.Between(x, y, arena.x, arena.y) < arena.radius + 40) return false;
-      if (!portals.every((p) => Phaser.Math.Distance.Between(x, y, p.x, p.y) > 140)) return false;
-      if (farmBed) {
-        const pad = 40;
-        if (
-          x >= farmBed.x - pad &&
-          x <= farmBed.x + farmBed.width + pad &&
-          y >= farmBed.y - pad &&
-          y <= farmBed.y + farmBed.height + pad
-        ) {
-          return false;
-        }
-      }
-      const farmPath = this.zone.farmPath;
-      if (farmPath) {
-        const pad = 36;
-        if (
-          x >= farmPath.x - pad &&
-          x <= farmPath.x + farmPath.width + pad &&
-          y >= farmPath.y - 16 &&
-          y <= farmPath.y + farmPath.height + 16
-        ) {
-          return false;
-        }
-      }
-      return true;
-    };
-
-    const count = Math.round((this.zone.width * this.zone.height) / 26000);
-    for (let i = 0; i < count; i++) {
-      const x = Math.round(rng.between(40, this.zone.width - 40));
-      const y = Math.round(rng.between(40, this.zone.height - 40));
-      if (!clear(x, y)) continue;
-      this.decals.push(this.add.image(x, y, pick().texture).setOrigin(0.5, 1).setDepth(y - 1));
-    }
-  }
 
   private stoneTarget(stone: TrainingStone): Damageable {
     return {
@@ -3811,6 +4041,8 @@ export class WorldScene extends Phaser.Scene {
     this.magmaFx.magmaPillar(payload.x, payload.y, 1, 0.007);
     this.lighting.flash(payload.x, payload.y, 320, 0xffa040, 2.4, 460);
     this.magmaFx.magmaNova(payload.x, payload.y);
+    // Tam Thủ Hống comes up through the floor; the floor gives way.
+    this.scars.shatter(payload.x, payload.y, { scale: 1.1, burst: 1.25, ember: 0xffa040 });
     const base = Math.atan2(payload.aim.y, payload.aim.x);
     for (let i = 0; i < MAGMA_ARRAY_POINTS; i++) {
       const angle = base + (i / MAGMA_ARRAY_POINTS) * Math.PI * 2;
@@ -4059,6 +4291,8 @@ export class WorldScene extends Phaser.Scene {
    */
   private castQiWrath(payload: SkillPayload): void {
     this.qiFx.scorch(payload.x, payload.y, 1.9);
+    // Phần Thiên Ma Diễm breaks open around his own feet.
+    this.scars.shatter(payload.x, payload.y, { scale: 1.2, burst: 1.4, ember: 0xff5ad0 });
     this.qiFx.shake(0.012, 260);
     this.lighting.flash(payload.x, payload.y, 520, 0xff5ad0, 3, 620);
     this.discQi(payload, QI_WRATH_RADIUS, 0xff4ad0);
@@ -4210,7 +4444,7 @@ export class WorldScene extends Phaser.Scene {
     // On the frame the giant sword lands, not at the end of the show — the
     // class is asked when that is rather than the number being repeated here.
     this.time.delayedCall(this.wanKiemFx.impactDelay(), () => {
-      this.scars.mark(focus.x, focus.y, { scale: 1.25, ember: 0x8fd0ff });
+      this.scars.shatter(focus.x, focus.y, { scale: 1.25, burst: 1.5, ember: 0x8fd0ff });
       this.lighting.flash(focus.x, focus.y, 620, 0xbfe4ff, 3.2, 720);
       this.qiFx.shake(0.014, 260);
       this.juiceHitStop(90);
@@ -4309,7 +4543,7 @@ export class WorldScene extends Phaser.Scene {
       ease: 'Quad.easeIn',
       onComplete: () => {
         this.bloodGround(x, y);
-        this.scars.mark(x, y, { scale: 1.15, ember: 0xff4a6a });
+        this.scars.shatter(x, y, { scale: 1.15, burst: 1.35, ember: 0xff4a6a });
         this.lighting.flash(x, y, 680, 0xff3a5c, 3.6, 820);
         this.qiFx.shake(0.022, 300);
         this.juiceHitStop(110);
@@ -4573,7 +4807,7 @@ export class WorldScene extends Phaser.Scene {
       this.hitEcho.push({ k: 'b', i: 0, d: dealt, hp: Math.round(this.boss.stats.hp), by });
       return;
     }
-    const pack = this.packs.find((p) => p.mob === target);
+    const pack = this.spawns.packs.find((p) => p.mob === target);
     if (pack) {
       this.hitEcho.push({ k: 'm', i: pack.index, d: dealt, hp: Math.round(pack.mob.hp), by });
     }
@@ -4591,7 +4825,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private takeHit(row: NetHitRow): void {
-    const target = row.k === 'b' ? this.boss : this.packs.find((p) => p.index === row.i)?.mob;
+    const target = row.k === 'b' ? this.boss : this.spawns.packs.find((p) => p.index === row.i)?.mob;
     if (!target) return;
     // The thrower already drew its own number when it predicted the swing.
     if (row.by !== this.selfId()) this.showDamage(target, row.d, ALLY_DAMAGE_TINT, row.by);
@@ -4718,7 +4952,7 @@ export class WorldScene extends Phaser.Scene {
    * different game — one somebody would have to decide to build.
    */
   private *aimTargets(): Generator<AimTarget> {
-    for (const pack of this.packs) yield pack.mob;
+    for (const pack of this.spawns.packs) yield pack.mob;
     if (this.boss) yield this.boss;
   }
 
@@ -4738,6 +4972,7 @@ export class WorldScene extends Phaser.Scene {
     GameBus.off(GameEvent.InventoryCommand, this.onHudInventory, this);
     GameBus.off(GameEvent.CharacterBuildCommand, this.onCharacterBuild, this);
     GameBus.off(GameEvent.QuestCommand, this.onQuestCommand, this);
+    GameBus.off(GameEvent.DialogueCommand, this.onDialogueCommand, this);
     GameBus.off(GameEvent.ShopCommand, this.onShopCommand, this);
     GameBus.off(GameEvent.FarmCommand, this.onFarmCommand, this);
     GameBus.off(GameEvent.FarmSelectSeed, this.onFarmSelectSeed, this);

@@ -462,12 +462,24 @@ export class Miku extends Phaser.Physics.Arcade.Sprite {
    *
    * Arcade places a body at `gameObject.position + offset - displayOrigin`, and
    * the displayed origin comes from the frame's baked pivot. Adding it back
-   * means the box lands at (x - w/2, y - h) whatever size the frame is.
+   * means the box lands at (x - w/2, y - h/2) whatever size the frame is.
+   *
+   * The box is centred on the feet, not hung behind them. It used to sit at
+   * (x - w/2, y - h) — the whole footprint *behind* the foot line — and every
+   * prop's box is the bottom band of its art, so the two together made a solid
+   * strip that reached BODY_HEIGHT further downhill than anything drawn there.
+   * Measured against a manaseed rock (base row y, box 18 tall): walking along
+   * a lane up to 12px in front of the rock was blocked, and free only from
+   * 14px. Worse than a wall, it was a *silent* one — Arcade separates Y first,
+   * but a purely horizontal walk has no Y delta to reverse, so the graze could
+   * not be pushed out on Y and fell through to X, which reads as the character
+   * jamming on empty grass. Centred, the strip straddles the base it belongs
+   * to and the same lane clears at 8px.
    */
   private syncBody(): void {
     const body = this.body as Phaser.Physics.Arcade.Body | null;
     if (!body) return;
-    body.setOffset(this.displayOriginX - BODY_WIDTH / 2, this.displayOriginY - BODY_HEIGHT);
+    body.setOffset(this.displayOriginX - BODY_WIDTH / 2, this.displayOriginY - BODY_HEIGHT / 2);
   }
 
   private playState(next: CharacterState, clip: ClipRef, force = false): void {

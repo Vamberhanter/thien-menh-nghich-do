@@ -1,4 +1,5 @@
 import type { SkillClass } from './SkillSystem';
+import { kitKeyLabels } from '../input/bindings';
 import { SKILL_CATALOG, SKILL_TREES } from './SkillSystem';
 import type { SkillDefinition } from './CombatSystem';
 import {
@@ -133,11 +134,19 @@ function kitOrder(bind: KitBinding): readonly string[] {
   return [...bind.slots, bind.ultimate, ...(bind.tail ?? [])];
 }
 
+/**
+ * The key a tree node's skill is cast with, for the skill panel.
+ *
+ * Reads `bindings.ts` rather than `KIT_BINDINGS.keys`, which was a fourth copy
+ * of the same mapping — the others being `PROFILE.skills`, the HUD's own key
+ * row, and each controller's inline `consumePad` calls. Four copies of one
+ * table is four chances to disagree, and they did.
+ */
 export function kitBindHint(skillId: string, classId: SkillClass): string | null {
   const bind = KIT_BINDINGS[classId];
   const slot = kitOrder(bind).indexOf(skillId);
   if (slot < 0) return null;
-  return bind.keys[slot] ?? null;
+  return kitKeyLabels(classId)[slot] ?? null;
 }
 
 function scaleDef(base: SkillDefinition, treeId: string, rank: number): SkillDefinition {

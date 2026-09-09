@@ -90,6 +90,10 @@ export const GameEvent = {
   LootPrompt: 'loot-prompt',
   /** Entered a named zone. */
   ZoneChanged: 'zone-changed',
+  /** A conversation opened, advanced, or closed. `null` closes it. */
+  Dialogue: 'dialogue-state',
+  /** The player pressed continue, or picked reply `index`. */
+  DialogueCommand: 'dialogue-command',
   /** A toast the HUD should show (shrine-only swap, full bag, …). */
   Notice: 'game-notice',
   /** Cloud save just finished. */
@@ -102,7 +106,19 @@ export const GameEvent = {
   WarpCommand: 'warp-command',
   /** Player / peers / landmarks for the HUD minimap. */
   Minimap: 'minimap-update',
+  /** Map editor mode changed — active flag, tool, counts, current selection. */
+  EditorState: 'editor-state',
+  /** HUD asked the editor to arm a tool, act on the selection, or export. */
+  EditorCommand: 'editor-command',
 } as const;
+
+/** The current moment of a conversation, or `null` when none is open. */
+export type DialoguePayload = import('./systems/DialogueSystem').DialogueView;
+
+export interface DialogueCommandPayload {
+  action: 'advance' | 'choose' | 'close';
+  index?: number;
+}
 
 export interface WarpStatePayload {
   open: boolean;
@@ -342,6 +358,76 @@ export interface MinimapPayload {
 
 export interface LootPromptPayload {
   label: string | null;
+}
+
+/** One placed thing's own fields, shown in the editor's inspector when selected. */
+export type EditorSelectionKind = 'prop' | 'mob' | 'chest' | 'portal' | 'trigger';
+
+export interface EditorSelectionPayload {
+  id: number;
+  kind: EditorSelectionKind;
+  x: number;
+  y: number;
+  /** Kind-specific fields — a mob's `kind`/`maxCount`, a portal's `to`/`label`, etc. */
+  data: Record<string, string | number>;
+}
+
+export interface EditorStatePayload {
+  active: boolean;
+  /** Label of the currently armed palette tool, or `null` if none. */
+  tool: string | null;
+  counts: { props: number; mobs: number; chests: number; portals: number; triggers: number };
+  selection: EditorSelectionPayload | null;
+  /** A right-click hit something — where to float the "Xoá" button, in CSS px. */
+  contextMenu: { x: number; y: number } | null;
+  /** Present only right after an `export` command — the generated code. */
+  exportText?: string;
+  /** A save/load in flight — the panel disables the map actions while true. */
+  busy: boolean;
+  /** Last save/load result, shown until the next one replaces it. */
+  notice: string | null;
+}
+
+export interface EditorCommandPayload {
+  action:
+    | 'arm-prop'
+    | 'arm-ground'
+    | 'arm-mob'
+    | 'arm-chest'
+    | 'arm-portal'
+    | 'arm-trigger'
+    | 'disarm'
+    | 'delete-selected'
+    /** Removes everything added this session; leaves the map's own props alone. */
+    | 'clear'
+    /** Removes everything, the map's own props included — until export, this only affects the running preview. */
+    | 'clear-all'
+    | 'export'
+    | 'update-selected'
+    | 'close'
+    /** Blank canvas, swapped in as a local preview — see `MapEditor.newMap`. */
+    | 'new-map'
+    /** Saves the current map's full state to Supabase, keyed by its id. */
+    | 'save-map'
+    /** Loads a previously-saved map by id, swapped in the same way `new-map` is. */
+    | 'open-map';
+  /** For `arm-prop`: the exact atlas frame to place — the palette resolves this itself now rather than handing back an id `MapEditor` looks up. */
+  texture?: string;
+  frame?: string;
+  solidW?: number;
+  solidH?: number;
+  ground?: 'grass' | 'dirt' | 'stone' | 'road' | 'erase-road';
+  mobKind?: string;
+  chestTier?: string;
+  /** For `update-selected`: the field being changed and its new value. */
+  field?: string;
+  value?: string | number;
+  /** For `new-map`. */
+  mapName?: string;
+  mapCols?: number;
+  mapRows?: number;
+  /** For `open-map`: the id it was saved under. */
+  mapId?: string;
 }
 
 export function emitStats(stats: CharacterStats): void {

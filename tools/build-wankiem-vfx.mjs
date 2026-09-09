@@ -36,7 +36,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Surface } from './pixel.mjs';
-import { encodePNG } from './png.mjs';
+import { encodeWebP } from './image-io.mjs';
 import { decodePNG } from './png-decode.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -151,7 +151,7 @@ function bounds(surface, floor = 24) {
   return maxX < 0 ? null : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }
 
-function main() {
+async function main() {
   const img = decodePNG(SRC);
   const cw = img.width / COLS;
   if (!Number.isInteger(cw)) throw new Error(`${img.width}px does not divide into ${COLS} columns`);
@@ -173,7 +173,7 @@ function main() {
       const name = NAMES[slice.row * COLS + col];
       const cell = copyCell(img, x0, slice.y0, cw, slice.h);
       const b = bounds(cell);
-      writeFileSync(join(OUT_DIR, `${name}.png`), encodePNG(cell));
+      writeFileSync(join(OUT_DIR, `${name}.webp`), await encodeWebP(cell));
       const edge = b && (b.x === 0 || b.y === 0 || b.x + b.w === cw || b.y + b.h === slice.h);
       const origin = originOf(cell);
       origins.set(name, origin);
@@ -195,4 +195,4 @@ function main() {
   }
 }
 
-main();
+await main();

@@ -1,3 +1,4 @@
+import { NGU_HANH_SON_ENTRY } from './nguHanhSon';
 import type { ZoneDef } from './types';
 
 const W = 2400;
@@ -72,6 +73,24 @@ export const NGOAI_MON: ZoneDef = {
       to: 'linh-dien',
       spawn: { x: 1200, y: 220 },
       label: 'Linh Điền',
+    },
+    /*
+     * The road to Ngũ Hành Sơn, west out of the training ground.
+     *
+     * Added because `WorldMapManager.problems()` refused the new map without
+     * it: a zone with a portal out and none in is a one-way drop, and a test
+     * map nobody can walk to is a test nobody runs.
+     *
+     * The landing point comes from that map's own `playerSpawn` marker rather
+     * than from a pair of numbers copied here — the two drifted apart once
+     * already, when the entrance gate moved up a row and this side did not.
+     */
+    {
+      x: 200,
+      y: 900,
+      to: 'ngu-hanh-son',
+      spawn: NGU_HANH_SON_ENTRY,
+      label: 'Ngũ Hành Sơn',
     },
   ],
 };

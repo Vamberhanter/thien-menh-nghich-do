@@ -1,11 +1,14 @@
 import type { DropChance } from '../systems/Inventory';
+import type { TriggerDef } from '../systems/map/TriggerManager';
 
 export type ZoneId =
   | 'ngoai-mon'
   | 'linh-dien'
   | 'rung-ngoai-mon'
   | 'huyet-ma-coc'
-  | 'thanh-phong-coc';
+  | 'thanh-phong-coc'
+  /** The first map drawn on a tile grid — see `nguHanhSon.ts`. */
+  | 'ngu-hanh-son';
 
 export type MobKind =
   | 'toad'
@@ -65,10 +68,32 @@ export interface PortalDef {
   label: string;
 }
 
+/**
+ * One spawn *point*, not one mob.
+ *
+ * Every field past the position is optional and defaults to what the five
+ * existing zones already did — one mob, exactly on the spot, on the shared
+ * respawn clock — so a zone written before these existed keeps behaving the
+ * same. Fill them in to turn a point into a nest.
+ */
 export interface MobSpawn {
   kind: MobKind;
   x: number;
   y: number;
+  /** How many of this kind live off this point at once. Default 1. */
+  maxCount?: number;
+  /** Placed randomly within this many px of (x, y). Default 0 — exact. */
+  radius?: number;
+  /** ms before a kill is replaced. Default MOB_RESPAWN_MS. */
+  respawnMs?: number;
+  /**
+   * Held back until the player reaches this level.
+   *
+   * The zone gate in `ZoneLoader` is all-or-nothing — it decides whether the
+   * map opens at all. This is per nest, for a map that should get harder as
+   * the player does rather than one that is shut.
+   */
+  minLevel?: number;
 }
 
 export interface ZoneDef {
@@ -112,6 +137,14 @@ export interface ZoneDef {
   /** Open court the boss owns — drawn as a ring, kept clear of props. */
   arena?: { x: number; y: number; radius: number; label?: string };
   portals: PortalDef[];
+  /**
+   * Areas that notice the player walking into them.
+   *
+   * Data only — a trigger names *what happened*, never what to do about it.
+   * `WorldScene.onTrigger` is the one place that decides what an event means,
+   * so a map can never carry gameplay. See `TriggerManager`.
+   */
+  triggers?: TriggerDef[];
 }
 
 export const MOB_XP: Record<MobKind, number> = {

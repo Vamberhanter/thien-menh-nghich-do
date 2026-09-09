@@ -5,9 +5,9 @@
 // The generated sprites stay out of git with the other staged game art. Run:
 //   npm run env:resources
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { decodePNG } from './png-decode.mjs';
-import { encodePNG } from './png.mjs';
+import { encodeWebP } from './image-io.mjs';
 
 const SOURCE_DIR = join('source-art', 'gameplay');
 const OUT_DIR = join('public', 'assets', 'resources');
@@ -62,9 +62,13 @@ function trim(image, padding = 2) {
   });
 }
 
-function write(name, image) {
+// Names carry the sub-folder the runtime asks for — the loader's paths are
+// literal (see worldResourceArt.ts), so this writes where they already point
+// rather than flat, and creates the folder on the way.
+async function write(name, image) {
   const path = join(OUT_DIR, name);
-  writeFileSync(path, encodePNG(image));
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, await encodeWebP(image));
   console.log(`${path}  ${image.width}x${image.height}`);
 }
 
@@ -78,7 +82,7 @@ for (let col = 0; col < STONE_NAMES.length; col++) {
   const x0 = Math.floor((col * stones.width) / 5);
   const x1 = Math.floor(((col + 1) * stones.width) / 5);
   const sprite = trim(keyDark(crop(stones, { x: x0, y: 420, width: x1 - x0, height: 262 }), 2, 28));
-  write(`stone-${STONE_NAMES[col]}.png`, sprite);
+  await write(`stones/stone-${STONE_NAMES[col]}.webp`, sprite);
 }
 
 // The third chest in each rarity row. Keeping the same upgrade step makes the
@@ -93,17 +97,17 @@ const CHEST_ROWS = [
 ];
 for (const row of CHEST_ROWS) {
   const sprite = trim(keyDark(crop(chests, { x: 440, y: row.y, width: 175, height: 115 }), 34, 72));
-  write(`chest-${row.name}.png`, sprite);
+  await write(`chests/chest-${row.name}.webp`, sprite);
 }
 
 // Large variants from the waypoint sheet. Runtime display heights normalize
 // them beside the 110px characters, so source detail remains available.
 const waypoints = decodePNG(join(SOURCE_DIR, 'waypoints.png'));
-write(
-  'respawn-shrine.png',
+await write(
+  'shrines/respawn-shrine.webp',
   trim(keyDark(crop(waypoints, { x: 0, y: 0, width: 330, height: 480 }), 2, 30)),
 );
-write(
-  'warp-shrine.png',
+await write(
+  'shrines/warp-shrine.webp',
   trim(keyDark(crop(waypoints, { x: 510, y: 0, width: 320, height: 480 }), 2, 30)),
 );

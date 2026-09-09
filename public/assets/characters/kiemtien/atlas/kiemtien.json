@@ -1,7 +1,7 @@
 {
   "textures": [
     {
-      "image": "kiemtien-walk.png",
+      "image": "kiemtien-walk.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1210,
@@ -812,7 +812,7 @@
       ]
     },
     {
-      "image": "kiemtien-attack.png",
+      "image": "kiemtien-attack.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1208,
@@ -2423,7 +2423,7 @@
       ]
     },
     {
-      "image": "kiemtien-skill1.png",
+      "image": "kiemtien-skill1.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1498,
@@ -3134,7 +3134,7 @@
       ]
     },
     {
-      "image": "kiemtien-skill2.png",
+      "image": "kiemtien-skill2.webp",
       "format": "RGBA8888",
       "size": {
         "w": 916,
@@ -3770,7 +3770,7 @@
       ]
     },
     {
-      "image": "kiemtien-skill3.png",
+      "image": "kiemtien-skill3.webp",
       "format": "RGBA8888",
       "size": {
         "w": 720,
@@ -3881,7 +3881,7 @@
       ]
     },
     {
-      "image": "kiemtien-skill4.png",
+      "image": "kiemtien-skill4.webp",
       "format": "RGBA8888",
       "size": {
         "w": 684,
@@ -3992,7 +3992,7 @@
       ]
     },
     {
-      "image": "kiemtien-fly.png",
+      "image": "kiemtien-fly.webp",
       "format": "RGBA8888",
       "size": {
         "w": 890,
@@ -4778,7 +4778,7 @@
       ]
     },
     {
-      "image": "kiemtien-hurt.png",
+      "image": "kiemtien-hurt.webp",
       "format": "RGBA8888",
       "size": {
         "w": 794,
@@ -5239,7 +5239,7 @@
       ]
     },
     {
-      "image": "kiemtien-fx.png",
+      "image": "kiemtien-fx.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1134,
@@ -5675,7 +5675,7 @@
       ]
     },
     {
-      "image": "kiemtien-bloodsword.png",
+      "image": "kiemtien-bloodsword.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1004,
@@ -5711,7 +5711,7 @@
       ]
     },
     {
-      "image": "kiemtien-idle.png",
+      "image": "kiemtien-idle.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1142,

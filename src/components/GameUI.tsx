@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { GameBus, GameEvent } from '../game/events';
+import type { DialogueCommandPayload, DialoguePayload } from '../game/events';
+import { setUiTyping } from '../net/bind';
+import { kitKeyLabels } from '../game/input/bindings';
 import type {
   CharacterBuildPayload,
   CharacterChangedPayload,
@@ -45,15 +48,6 @@ const STATE_LABEL: Record<CharacterState, string> = {
   dead: 'Tử vong',
 };
 
-const SKILL_KEYS: Record<string, readonly string[]> = {
-  [NHU_YEN_PROFILE.id]: ['K', 'L', 'Space'],
-  [HUYET_LANG_PROFILE.id]: ['K', 'L', 'Space'],
-  [MIKU_PROFILE.id]: ['K', 'L', 'Space'],
-  // five, not three — he is the only kit carrying a third and fourth technique
-  [WUKONG_PROFILE.id]: ['K', 'L', 'U', 'O', 'Space'],
-  // the other four-technique kit, same row
-  [KIEM_TIEN_PROFILE.id]: ['K', 'L', 'U', 'O', 'Space'],
-};
 
 const HINTS: Record<string, string> = {
   [NHU_YEN_PROFILE.id]:
@@ -140,6 +134,80 @@ function markStyle(x: number, y: number, width: number, height: number) {
   };
 }
 
+/**
+ * The conversation box.
+ *
+ * Keyboard first, because the game is: Space or Enter continues, 1-9 picks a
+ * reply, Escape leaves. The mouse works too, but a player mid-fight has their
+ * hands on the keys and should not have to find a button.
+ *
+ * It draws over the world rather than pausing it — `isUiTyping` is what stops
+ * the character walking while a reply is being chosen, the same gate the chat
+ * field uses.
+ */
+function DialogueBox({ view }: { view: DialoguePayload }) {
+  const send = (payload: DialogueCommandPayload) =>
+    GameBus.emit(GameEvent.DialogueCommand, payload);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        send({ action: 'close' });
+        return;
+      }
+      if (view.continues && (event.key === ' ' || event.key === 'Enter')) {
+        event.preventDefault();
+        send({ action: 'advance' });
+        return;
+      }
+      const digit = Number(event.key);
+      // 1-based on screen, 0-based on the wire — the index is into the choices
+      // the box actually drew, which is what the machine expects.
+      if (digit >= 1 && digit <= view.choices.length) {
+        send({ action: 'choose', index: digit - 1 });
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [view]);
+
+  return (
+    <div className="dialogue" role="dialog" aria-label={view.speaker}>
+      <div className="dialogue__panel">
+        <div className="dialogue__speaker">{view.speaker}</div>
+        <p className="dialogue__text">{view.text}</p>
+        {view.continues ? (
+          <button type="button" className="dialogue__next" onClick={() => send({ action: 'advance' })}>
+            Space · tiếp
+          </button>
+        ) : (
+          <div className="dialogue__choices">
+            {view.choices.map((choice: DialoguePayload['choices'][number]) => (
+              <button
+                type="button"
+                key={choice.index}
+                className="dialogue__choice"
+                onClick={() => send({ action: 'choose', index: choice.index })}
+              >
+                <em>{choice.index + 1}</em>
+                <span>{choice.text}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <button
+          type="button"
+          className="dialogue__close"
+          onClick={() => send({ action: 'close' })}
+          aria-label="Đóng đối thoại"
+        >
+          Esc
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Minimap({ map }: { map: MinimapPayload }) {
   return (
     <div className="minimap" style={{ width: MAP_SIZE, height: MAP_SIZE }}>
@@ -223,6 +291,7 @@ export function GameUI() {
   const [loot, setLoot] = useState<string | null>(null);
   const [cloud, setCloud] = useState<PersistPayload | null>(null);
   const [minimap, setMinimap] = useState<MinimapPayload | null>(null);
+  const [dialogue, setDialogue] = useState<DialoguePayload | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuIndex, setMenuIndex] = useState(0);
   const menuIndexRef = useRef(0);
@@ -377,6 +446,19 @@ export function GameUI() {
     const onLoot = ({ label }: { label: string | null }) => setLoot(label);
     const onCool = (payload: CooldownPayload) => setCooldowns(payload.skills);
     const onZone = (payload: ZonePayload) => setZone(payload.name);
+    /*
+     * A conversation holds the keyboard.
+     *
+     * `setUiTyping` is the gate the chat field already uses, and it is the
+     * right one: without it the movement keys keep walking the character
+     * around while a reply is being read, and pressing "1" to answer would
+     * also be pressing nothing useful in the world. Cleared on close, which is
+     * the `null` payload.
+     */
+    const onDialogue = (payload: DialoguePayload | null) => {
+      setDialogue(payload ?? null);
+      setUiTyping(Boolean(payload));
+    };
     const onMinimap = (payload: MinimapPayload) => {
       if (payload?.width) setMinimap(payload);
     };
@@ -409,6 +491,7 @@ export function GameUI() {
     GameBus.on(GameEvent.Notice, onNotice);
     GameBus.on(GameEvent.Persist, setCloud);
     GameBus.on(GameEvent.Minimap, onMinimap);
+    GameBus.on(GameEvent.Dialogue, onDialogue);
     GameBus.on(GameEvent.QuestState, setQuests);
     GameBus.on(GameEvent.NetSession, onSession);
     GameBus.on(GameEvent.CharacterBuild, onBuild);
@@ -428,6 +511,7 @@ export function GameUI() {
       GameBus.off(GameEvent.Notice, onNotice);
       GameBus.off(GameEvent.Persist, setCloud);
       GameBus.off(GameEvent.Minimap, onMinimap);
+      GameBus.off(GameEvent.Dialogue, onDialogue);
       GameBus.off(GameEvent.QuestState, setQuests);
       GameBus.off(GameEvent.NetSession, onSession);
       GameBus.off(GameEvent.CharacterBuild, onBuild);
@@ -469,7 +553,9 @@ export function GameUI() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const keys = SKILL_KEYS[character.id] ?? [];
+  // From the binding table, not a copy of it. The HUD used to keep its own
+  // list of letters, and it disagreed with what the buttons fired.
+  const keys = kitKeyLabels(character.id);
 
   if (!inGame) return null;
 
@@ -559,6 +645,7 @@ export function GameUI() {
       </div>
 
       {minimap ? <Minimap map={minimap} /> : null}
+      {dialogue ? <DialogueBox view={dialogue} /> : null}
 
       {quests.tracked.length ? (
         <aside className="quest-tracker">

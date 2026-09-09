@@ -6,6 +6,13 @@ export type PadAction =
   | 'skill1'
   | 'skill2'
   | 'skill3'
+  /**
+   * The fifth, which the pad has always drawn for the two five-skill kits and
+   * nothing has ever listened for: `TouchPad` renders one button per entry in
+   * `PROFILE.skills` and emits `skill${i}`, so Tôn Ngộ Không and Kiếm Tiên
+   * both had a button emitting an action outside this union.
+   */
+  | 'skill4'
   | 'bag'
   | 'pick'
   | 'envArt'

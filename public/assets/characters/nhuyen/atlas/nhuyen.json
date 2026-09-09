@@ -1,7 +1,7 @@
 {
   "textures": [
     {
-      "image": "nhuyen-idle.png",
+      "image": "nhuyen-idle.webp",
       "format": "RGBA8888",
       "size": {
         "w": 1228,
@@ -412,7 +412,7 @@
       ]
     },
     {
-      "image": "nhuyen-walk.png",
+      "image": "nhuyen-walk.webp",
       "format": "RGBA8888",
       "size": {
         "w": 622,
@@ -1123,7 +1123,7 @@
       ]
     },
     {
-      "image": "nhuyen-attack.png",
+      "image": "nhuyen-attack.webp",
       "format": "RGBA8888",
       "size": {
         "w": 420,
@@ -1484,7 +1484,7 @@
       ]
     },
     {
-      "image": "nhuyen-skill.png",
+      "image": "nhuyen-skill.webp",
       "format": "RGBA8888",
       "size": {
         "w": 440,
@@ -1645,7 +1645,7 @@
       ]
     },
     {
-      "image": "nhuyen-hurt.png",
+      "image": "nhuyen-hurt.webp",
       "format": "RGBA8888",
       "size": {
         "w": 310,
@@ -2006,7 +2006,7 @@
       ]
     },
     {
-      "image": "nhuyen-fx.png",
+      "image": "nhuyen-fx.webp",
       "format": "RGBA8888",
       "size": {
         "w": 200,
@@ -2067,7 +2067,7 @@
       ]
     },
     {
-      "image": "nhuyen-fx-ice.png",
+      "image": "nhuyen-fx-ice.webp",
       "format": "RGBA8888",
       "size": {
         "w": 238,

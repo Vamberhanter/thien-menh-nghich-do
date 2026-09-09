@@ -17,7 +17,7 @@ const MS = (role: string) => kitKey('manaseed', role);
  */
 export const MANA_SEED_SOURCE = 'manaseed-summer';
 export const MANA_SEED_SOURCE_URL = gameAssetUrl(
-  'environment/manaseed/seasonal-sample-summer.png',
+  'assets/environment/manaseed/seasonal-sample-summer.png',
 );
 
 /** The sheet this slice table was measured against. */

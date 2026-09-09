@@ -435,10 +435,25 @@ export class Boss1 extends Phaser.Physics.Arcade.Sprite implements AiActor, Dama
     this.facing = directionFromVector(direction, this.facing);
   }
 
+  /**
+   * Puts the collision box under his feet for the frame on display.
+   *
+   * The box is centred on the feet, not hung behind them. It used to sit at
+   * (x - w/2, y - h) — the whole footprint *behind* the foot line — and every
+   * prop's box is the bottom band of its art, so the two together made a solid
+   * strip that reached BODY_HEIGHT further downhill than anything drawn there.
+   * Measured against a manaseed rock (base row y, box 18 tall): walking along
+   * a lane up to 12px in front of the rock was blocked, and free only from
+   * 14px. Worse than a wall, it was a *silent* one — Arcade separates Y first,
+   * but a purely horizontal walk has no Y delta to reverse, so the graze could
+   * not be pushed out on Y and fell through to X, which reads as the character
+   * jamming on empty grass. Centred, the strip straddles the base it belongs
+   * to and the same lane clears at 8px.
+   */
   private syncBody(): void {
     const body = this.body as Phaser.Physics.Arcade.Body | null;
     if (!body) return;
-    body.setOffset(this.displayOriginX - BODY_WIDTH / 2, this.displayOriginY - BODY_HEIGHT);
+    body.setOffset(this.displayOriginX - BODY_WIDTH / 2, this.displayOriginY - BODY_HEIGHT / 2);
   }
 
   private playState(next: BossState, clip: ClipRef, force = false): void {
