@@ -829,7 +829,11 @@ export class MapEditor {
       return;
     }
     this.setBusy(true, `Đang lưu "${draft.name}"...`);
-    await saveMapDraft(draft.id, draft);
+    const error = await saveMapDraft(draft.id, draft);
+    if (error) {
+      this.setBusy(false, `Lưu thất bại: ${error}`);
+      return;
+    }
     this.setBusy(false, `Đã lưu map "${draft.name}" (id: "${draft.id}"). Mở lại bằng đúng id này.`);
   }
 
