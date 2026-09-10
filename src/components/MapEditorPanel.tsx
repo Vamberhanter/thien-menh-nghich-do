@@ -121,39 +121,73 @@ export function MapEditorPanel() {
   // explicit position once the title bar has actually been dragged.
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
   const dragFrom = useRef<{ pointerX: number; pointerY: number; panelX: number; panelY: number } | null>(null);
 
-  const onTitlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    const panel = panelRef.current;
-    if (!panel) return;
-    const rect = panel.getBoundingClientRect();
-    // `left`/`top` position against the nearest positioned ancestor, not the
-    // viewport — `getBoundingClientRect` only ever gives the latter. Off by
-    // whatever that ancestor's own top-left sits at otherwise, since the
-    // very first drag starts from the panel's CSS-centred (`left: 50%` +
-    // `transform`) position rather than an already-explicit `left`/`top`.
-    const parentRect = (panel.offsetParent as HTMLElement | null)?.getBoundingClientRect();
-    const panelX = rect.left - (parentRect?.left ?? 0);
-    const panelY = rect.top - (parentRect?.top ?? 0);
-    dragFrom.current = { pointerX: event.clientX, pointerY: event.clientY, panelX, panelY };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
+  // Native listeners on `window`, not React's synthetic `onPointerMove` on
+  // the title element itself with `setPointerCapture` — capture is exactly
+  // the kind of thing that quietly no-ops in some mobile WebViews, and a
+  // finger that ever drifts off the (small) title text then stops sending
+  // this component anything at all. Tracking on `window` needs no capture:
+  // wherever the finger is once down, these still fire.
+  useEffect(() => {
+    const handle = titleRef.current;
+    if (!handle) return undefined;
 
-  const onTitlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const from = dragFrom.current;
-    if (!from) return;
-    const width = panelRef.current?.offsetWidth ?? 0;
-    // Clamped so a drag can never lose the panel entirely off-screen — at
-    // least a sliver (40px) of it always stays reachable to drag back.
-    const x = Math.min(Math.max(from.panelX + (event.clientX - from.pointerX), 40 - width), window.innerWidth - 40);
-    const y = Math.min(Math.max(from.panelY + (event.clientY - from.pointerY), 0), window.innerHeight - 40);
-    setDragPos({ x, y });
-  };
+    const onDown = (event: PointerEvent) => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      // Without this, the browser's own touch scrolling/refresh gesture can
+      // win the race against the drag on a touchscreen even with
+      // `touch-action: none` in CSS — the two together are what it takes.
+      event.preventDefault();
+      const rect = panel.getBoundingClientRect();
+      // `left`/`top` position against the nearest positioned ancestor, not
+      // the viewport — `getBoundingClientRect` only ever gives the latter.
+      // Off by whatever that ancestor's own top-left sits at otherwise,
+      // since the very first drag starts from the panel's CSS-centred
+      // (`left: 50%` + `transform`) position rather than an already-
+      // explicit `left`/`top`.
+      const parentRect = (panel.offsetParent as HTMLElement | null)?.getBoundingClientRect();
+      dragFrom.current = {
+        pointerX: event.clientX,
+        pointerY: event.clientY,
+        panelX: rect.left - (parentRect?.left ?? 0),
+        panelY: rect.top - (parentRect?.top ?? 0),
+      };
+    };
 
-  const onTitlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    dragFrom.current = null;
-    event.currentTarget.releasePointerCapture(event.pointerId);
-  };
+    const onMove = (event: PointerEvent) => {
+      const from = dragFrom.current;
+      if (!from) return;
+      const width = panelRef.current?.offsetWidth ?? 0;
+      // Clamped so a drag can never lose the panel entirely off-screen —
+      // at least a sliver (40px) of it always stays reachable to drag back.
+      const x = Math.min(Math.max(from.panelX + (event.clientX - from.pointerX), 40 - width), window.innerWidth - 40);
+      const y = Math.min(Math.max(from.panelY + (event.clientY - from.pointerY), 0), window.innerHeight - 40);
+      setDragPos({ x, y });
+    };
+
+    const onUp = () => {
+      dragFrom.current = null;
+    };
+
+    handle.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      handle.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    // `state.active` — this component never actually unmounts when the
+    // panel closes, it just returns `null`, so an effect that only ran once
+    // at the component's own mount would attach to a title element that did
+    // not exist yet (the panel starts closed) and never get another chance.
+    // Re-running on every open/close re-attaches to the fresh title node.
+  }, [state.active]);
 
   const refreshSavedMaps = () => {
     setLoadingSavedMaps(true);
@@ -213,13 +247,7 @@ export function MapEditorPanel() {
       style={dragPos ? { left: dragPos.x, top: dragPos.y, transform: 'none' } : undefined}
     >
       <div className="map-editor__bar">
-        <div
-          className="map-editor__title map-editor__title--drag"
-          title="Kéo để di chuyển bảng"
-          onPointerDown={onTitlePointerDown}
-          onPointerMove={onTitlePointerMove}
-          onPointerUp={onTitlePointerUp}
-        >
+        <div ref={titleRef} className="map-editor__title map-editor__title--drag" title="Kéo để di chuyển bảng">
           Chế độ chỉnh sửa map · F2 đóng
           {state.tool ? <em> · đang cầm: {state.tool}</em> : null}
         </div>
