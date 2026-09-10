@@ -25,6 +25,11 @@ const SETS = {
   // Shared world effects, owned by no kit.
   fx: ['public/assets/fx/atlas'],
   environment: ['public/assets/environment/manaseed'],
+  // Ngũ Hành Sơn's ground tileset and prop sheets — plain `scene.load.image`
+  // calls in `nguHanhSonArt.ts`, not a multiatlas, so a Storage miss has no
+  // `onAtlasMiss` fallback to catch it (see the `vfx` note below). Missing
+  // here is exactly why the map loaded blank on every machine but this one.
+  nguhanhson: ['public/assets/environment/nguhanhson/atlas', 'public/assets/environment/nguhanhson2/atlas'],
   monsters: ['public/assets/monsters'],
   items: ['public/assets/items'],
   weapons: ['public/assets/weapons'],
