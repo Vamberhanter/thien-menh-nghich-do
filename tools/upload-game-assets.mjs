@@ -28,7 +28,10 @@ const SETS = {
   monsters: ['public/assets/monsters'],
   items: ['public/assets/items'],
   weapons: ['public/assets/weapons'],
-  resources: ['public/assets/resources'],
+  // `collect()` only reads a directory's direct children — listing the
+  // parent here silently uploaded nothing, since every file actually lives
+  // one level down in chests/shrines/stones.
+  resources: ['public/assets/resources/chests', 'public/assets/resources/shrines', 'public/assets/resources/stones'],
   /*
    * Vạn Kiếm Quy Tông's eight effect frames.
    *
