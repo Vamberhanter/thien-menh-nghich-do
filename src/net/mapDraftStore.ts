@@ -5,11 +5,13 @@ import { getSupabase } from './supabase';
  * the payload an opaque JSON blob neither side needs to know the shape of
  * beyond "whatever `MapEditor` last wrote there".
  */
-export async function saveMapDraft(id: string, data: unknown): Promise<void> {
+/** `null` on success — the message on failure, so a caller can actually tell the difference instead of assuming a write that never landed. */
+export async function saveMapDraft(id: string, data: unknown): Promise<string | null> {
   const { error } = await getSupabase()
     .from('map_drafts')
     .upsert({ id, data, updated_at: new Date().toISOString() }, { onConflict: 'id' });
   if (error) console.warn('[map-draft] save', error.message);
+  return error?.message ?? null;
 }
 
 export async function loadMapDraft<T = unknown>(id: string): Promise<T | null> {

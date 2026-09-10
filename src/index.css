@@ -1754,6 +1754,12 @@ html.is-touch .warp {
   padding: 6px 8px;
 }
 
+.map-editor__notice--error {
+  color: #ff8a8a;
+  background: #2a1010;
+  border-color: #6a2c2c;
+}
+
 .map-editor__map-list {
   list-style: none;
   margin: 0;

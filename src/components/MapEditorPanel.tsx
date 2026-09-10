@@ -226,11 +226,11 @@ export function MapEditorPanel() {
         chuột phải nhanh, không kéo, vẫn mở menu xoá như cũ.
       </p>
 
-      {state.notice && !showMapPanel && <p className="map-editor__notice">{state.notice}</p>}
+      {state.notice && !showMapPanel && <p className={`map-editor__notice${state.notice.includes('thất bại') ? ' map-editor__notice--error' : ''}`}>{state.notice}</p>}
 
       {showMapPanel && (
         <div className="map-editor__map-panel">
-          {state.notice && <p className="map-editor__notice">{state.notice}</p>}
+          {state.notice && <p className={`map-editor__notice${state.notice.includes('thất bại') ? ' map-editor__notice--error' : ''}`}>{state.notice}</p>}
 
           <div className="map-editor__map-section">
             <div className="map-editor__map-section-title">Tạo map mới</div>
