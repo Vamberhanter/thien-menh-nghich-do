@@ -1612,6 +1612,17 @@ html.is-touch .warp {
   color: #6fd8ff;
 }
 
+.map-editor__title--drag {
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+  padding: 2px 4px;
+}
+
+.map-editor__title--drag:hover {
+  background: rgba(111, 216, 255, 0.12);
+}
+
 .map-editor__title em {
   font-style: normal;
   color: #ffe066;
