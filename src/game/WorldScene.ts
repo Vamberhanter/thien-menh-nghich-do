@@ -43,6 +43,7 @@ import { WukongEffects } from './systems/WukongEffects';
 import { WanKiemQuyTongEffect } from './systems/WanKiemQuyTongEffect';
 import { MapManager } from './systems/map/MapManager';
 import { MapEditor } from './systems/map/MapEditor';
+import { WaterfallEffect } from './systems/WaterfallEffect';
 import { FixtureManager } from './systems/map/FixtureManager';
 import { TransitionManager } from './systems/map/TransitionManager';
 import { WorldMapManager } from './systems/map/WorldMapManager';
@@ -548,6 +549,7 @@ export class WorldScene extends Phaser.Scene {
   private lighting!: WorldLights;
   private maps!: MapManager;
   private mapEditor!: MapEditor;
+  private waterfalls!: WaterfallEffect;
   /** `mapEditor.active` as of last frame — see `tickKeys`'s camera follow/pan handoff. */
   private mapEditorWasActive = false;
   private fixtures!: FixtureManager;
@@ -670,6 +672,7 @@ export class WorldScene extends Phaser.Scene {
     this.lighting = new WorldLights(this);
     this.maps = new MapManager(this, this.lighting);
     this.mapEditor = new MapEditor(this, this.maps);
+    this.waterfalls = new WaterfallEffect(this);
     this.fixtures = new FixtureManager(this, this.lighting);
     // The dialogue machine walks the tree; every effect it names is carried out
     // here, because a conversation that could reach the bag would be content
@@ -798,6 +801,7 @@ export class WorldScene extends Phaser.Scene {
     this.tickTribulation(time, delta);
     this.tickKeys();
     this.tickWorld(delta);
+    this.waterfalls.update(delta);
     this.tickMinimap(delta);
     this.saveTimer += delta;
     if (this.saveTimer > 5000) {
@@ -822,6 +826,7 @@ export class WorldScene extends Phaser.Scene {
     // those has a system to tell.
     this.zone = this.maps.load(id);
     setCurrentZone(this.zone.id);
+    this.waterfalls.build(this.maps.editableProps ?? []);
     const kit = envKitFor(this.zone.ground);
 
     this.placeFixtures();
