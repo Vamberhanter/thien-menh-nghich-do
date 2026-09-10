@@ -36,24 +36,38 @@ const WATERFALLS: readonly WaterfallSpec[] = [
 
 const STREAK_TEXTURE_KEY = 'waterfall-streak';
 /** World px the streak texture scrolls per second. */
-const SCROLL_SPEED = 90;
+const SCROLL_SPEED = 130;
 
-/** A handful of soft, uneven vertical bands — built once, reused by every waterfall. */
+/**
+ * Dashes, not solid bars.
+ *
+ * A vertical bar that runs the full height of its own tile is identical at
+ * every scroll offset — scrolling it is real (`tilePositionY` genuinely
+ * moves every frame) but nothing about the *picture* ever changes, so it
+ * reads as a static bright patch instead of falling water. Broken into short
+ * segments with gaps between them, the same scroll visibly carries each
+ * dash downward before the next one arrives to replace it.
+ */
 function ensureStreakTexture(scene: Phaser.Scene): void {
   if (scene.textures.exists(STREAK_TEXTURE_KEY)) return;
   const width = 32;
-  const height = 64;
+  const height = 128;
   const g = scene.add.graphics();
-  const streaks: readonly { x: number; w: number; a: number }[] = [
-    { x: 2, w: 3, a: 0.5 },
-    { x: 8, w: 2, a: 0.32 },
-    { x: 13, w: 4, a: 0.6 },
-    { x: 20, w: 2, a: 0.3 },
-    { x: 25, w: 3, a: 0.48 },
+  const columns: readonly { x: number; w: number; a: number; dash: number; gap: number; phase: number }[] = [
+    { x: 2, w: 3, a: 0.55, dash: 16, gap: 10, phase: 0 },
+    { x: 8, w: 2, a: 0.35, dash: 10, gap: 14, phase: 6 },
+    { x: 13, w: 4, a: 0.65, dash: 20, gap: 8, phase: 14 },
+    { x: 20, w: 2, a: 0.32, dash: 12, gap: 12, phase: 20 },
+    { x: 25, w: 3, a: 0.5, dash: 18, gap: 9, phase: 3 },
   ];
-  for (const s of streaks) {
-    g.fillStyle(0xdff7ff, s.a);
-    g.fillRect(s.x, 0, s.w, height);
+  for (const c of columns) {
+    g.fillStyle(0xdff7ff, c.a);
+    const cycle = c.dash + c.gap;
+    // One extra cycle above and below: fillRect happily draws off-canvas,
+    // `generateTexture` clips to the frame, and covering that much slack
+    // means a dash mid-way through the seam at y=0/height always has its
+    // other half drawn by the corresponding out-of-range iteration.
+    for (let y = -c.phase - cycle; y < height + cycle; y += cycle) g.fillRect(c.x, y, c.w, c.dash);
   }
   g.generateTexture(STREAK_TEXTURE_KEY, width, height);
   g.destroy();
