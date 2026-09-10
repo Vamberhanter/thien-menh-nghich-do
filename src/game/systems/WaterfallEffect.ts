@@ -25,7 +25,7 @@ interface WaterfallSpec {
 
 const WATERFALLS: readonly WaterfallSpec[] = [
   // Rim cliff falls.
-  { texture: 'nhs2-cliff2', frame: 'cliff2_18', xFrac: 0.5, topFrac: 0.25, widthFrac: 0.4, heightFrac: 0.75 },
+  { texture: 'nhs2-cliff2', frame: 'cliff2_18', xFrac: 0.5, topFrac: 0.18, widthFrac: 0.4, heightFrac: 0.82 },
   { texture: 'nhs2-cliff2', frame: 'cliff2_4', xFrac: 0.76, topFrac: 0.12, widthFrac: 0.3, heightFrac: 0.88 },
   // Pond outflow.
   { texture: 'nhs2-lake', frame: 'lake_0', xFrac: 0.35, topFrac: 0.12, widthFrac: 0.28, heightFrac: 0.85 },
@@ -115,7 +115,10 @@ export class WaterfallEffect {
   update(delta: number): void {
     if (this.tiles.length === 0) return;
     const step = (SCROLL_SPEED * delta) / 1000;
-    for (const tile of this.tiles) tile.tilePositionY += step;
+    // Subtracting, not adding: `tilePositionY` is where the *sampling*
+    // window sits inside the texture, and moving that window down makes the
+    // visible pattern appear to slide up — the opposite of falling water.
+    for (const tile of this.tiles) tile.tilePositionY -= step;
   }
 
   destroy(): void {
