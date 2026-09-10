@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { GameBus, GameEvent } from '../game/events';
 import type { EditorCommandPayload, EditorStatePayload } from '../game/events';
 import {
@@ -117,6 +117,44 @@ export function MapEditorPanel() {
   const [savedMaps, setSavedMaps] = useState<readonly MapDraftSummary[]>([]);
   const [loadingSavedMaps, setLoadingSavedMaps] = useState(false);
 
+  // `null` means "let the CSS centre it" — the panel only switches to an
+  // explicit position once the title bar has actually been dragged.
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const dragFrom = useRef<{ pointerX: number; pointerY: number; panelX: number; panelY: number } | null>(null);
+
+  const onTitlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    // `left`/`top` position against the nearest positioned ancestor, not the
+    // viewport — `getBoundingClientRect` only ever gives the latter. Off by
+    // whatever that ancestor's own top-left sits at otherwise, since the
+    // very first drag starts from the panel's CSS-centred (`left: 50%` +
+    // `transform`) position rather than an already-explicit `left`/`top`.
+    const parentRect = (panel.offsetParent as HTMLElement | null)?.getBoundingClientRect();
+    const panelX = rect.left - (parentRect?.left ?? 0);
+    const panelY = rect.top - (parentRect?.top ?? 0);
+    dragFrom.current = { pointerX: event.clientX, pointerY: event.clientY, panelX, panelY };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onTitlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const from = dragFrom.current;
+    if (!from) return;
+    const width = panelRef.current?.offsetWidth ?? 0;
+    // Clamped so a drag can never lose the panel entirely off-screen — at
+    // least a sliver (40px) of it always stays reachable to drag back.
+    const x = Math.min(Math.max(from.panelX + (event.clientX - from.pointerX), 40 - width), window.innerWidth - 40);
+    const y = Math.min(Math.max(from.panelY + (event.clientY - from.pointerY), 0), window.innerHeight - 40);
+    setDragPos({ x, y });
+  };
+
+  const onTitlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    dragFrom.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
   const refreshSavedMaps = () => {
     setLoadingSavedMaps(true);
     listMapDrafts()
@@ -169,9 +207,19 @@ export function MapEditorPanel() {
 
   return (
     <>
-    <div className="map-editor">
+    <div
+      className="map-editor"
+      ref={panelRef}
+      style={dragPos ? { left: dragPos.x, top: dragPos.y, transform: 'none' } : undefined}
+    >
       <div className="map-editor__bar">
-        <div className="map-editor__title">
+        <div
+          className="map-editor__title map-editor__title--drag"
+          title="Kéo để di chuyển bảng"
+          onPointerDown={onTitlePointerDown}
+          onPointerMove={onTitlePointerMove}
+          onPointerUp={onTitlePointerUp}
+        >
           Chế độ chỉnh sửa map · F2 đóng
           {state.tool ? <em> · đang cầm: {state.tool}</em> : null}
         </div>
